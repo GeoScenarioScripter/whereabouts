@@ -157,6 +157,21 @@ fn enumerates_system_volume() {
         records.len()
     ));
 
+    // Name the records whose parent was not enumerated (system-volume metadata, no privacy
+    // concern on a CI runner), so the session note can explain them.
+    let known: std::collections::HashSet<u64> = records.iter().map(|r| r.frn).collect();
+    for r in records
+        .iter()
+        .filter(|r| r.parent_frn != root && !known.contains(&r.parent_frn))
+        .take(20)
+    {
+        report(&format!(
+            "orphan C: name={:?} frn={:#x} parent={:#x} attrs={:#x}",
+            r.name, r.frn, r.parent_frn, r.file_attributes
+        ));
+    }
+    drop(known);
+
     let links: Vec<(u64, u64)> = records.iter().map(|r| (r.frn, r.parent_frn)).collect();
     drop(records);
     let chain_started = Instant::now();
