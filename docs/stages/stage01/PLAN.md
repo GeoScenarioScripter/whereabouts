@@ -1,8 +1,8 @@
-# Stage 01 — M0: CLI Indexer Prototype
+[#17](https://github.com/GeoScenarioScripter/whereabouts/issues/17) | [#16](https://github.com/GeoScenarioScripter/whereabouts/issues/16) | [#15](https://github.com/GeoScenarioScripter/whereabouts/issues/15) | [#14](https://github.com/GeoScenarioScripter/whereabouts/issues/14) | [#13](https://github.com/GeoScenarioScripter/whereabouts/issues/13) | [#12](https://github.com/GeoScenarioScripter/whereabouts/issues/12) | [#11](https://github.com/GeoScenarioScripter/whereabouts/issues/11) | [#10](https://github.com/GeoScenarioScripter/whereabouts/issues/10) | [#9](https://github.com/GeoScenarioScripter/whereabouts/issues/9) | [#8](https://github.com/GeoScenarioScripter/whereabouts/issues/8) | [#7](https://github.com/GeoScenarioScripter/whereabouts/issues/7) | [#6](https://github.com/GeoScenarioScripter/whereabouts/issues/6) | [#5](https://github.com/GeoScenarioScripter/whereabouts/issues/5) | [#4](https://github.com/GeoScenarioScripter/whereabouts/issues/4) | [#3](https://github.com/GeoScenarioScripter/whereabouts/issues/3) | [#2](https://github.com/GeoScenarioScripter/whereabouts/issues/2) | [#1](https://github.com/GeoScenarioScripter/whereabouts/issues/1) | # Stage 01 — M0: CLI Indexer Prototype
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done. Next: wave 1.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Next: wave 1.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
