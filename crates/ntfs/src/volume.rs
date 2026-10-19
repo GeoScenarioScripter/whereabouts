@@ -4,6 +4,7 @@
 //! never issues `FSCTL_CREATE_USN_JOURNAL`/`FSCTL_DELETE_USN_JOURNAL` or any other write.
 
 use std::fmt;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
@@ -345,6 +346,10 @@ pub struct EnumStats {
     pub skipped: u64,
     /// Bytes of output returned by the kernel.
     pub bytes: u64,
+    /// Wall time spent inside `DeviceIoControl(FSCTL_ENUM_USN_DATA)` (the file system walking
+    /// the MFT, including disk I/O). The rest of the elapsed time is ours: parsing and whatever
+    /// the consumer does with the records.
+    pub kernel_time: Duration,
 }
 
 /// Streaming enumeration of a volume via `FSCTL_ENUM_USN_DATA`.
@@ -424,6 +429,7 @@ impl Enumerator<'_> {
             ));
             let out_len = std::mem::size_of_val(self.buf.as_slice());
             let mut returned = 0_u32;
+            let call_started = Instant::now();
             // SAFETY: METHOD_NEITHER control code: the kernel reads `input` (a live, 8-byte
             // aligned MFT_ENUM_DATA_V1 of the size passed) and writes at most `out_len` bytes
             // into `self.buf` (live, 8-byte aligned, exactly `out_len` bytes, not borrowed
@@ -440,6 +446,7 @@ impl Enumerator<'_> {
                     None,
                 )
             };
+            self.stats.kernel_time += call_started.elapsed();
             if let Err(e) = result {
                 self.done = true;
                 return match win32::code_from_hresult(e.code().0) {

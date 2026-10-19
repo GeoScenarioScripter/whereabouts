@@ -157,9 +157,11 @@ mod windows_main {
             }
         );
         println!(
-            "elapsed       {:.3} s ({:.0} records/s)",
+            "elapsed       {:.3} s ({:.0} records/s); in kernel {:.3} s, in user code {:.3} s",
             elapsed.as_secs_f64(),
-            count as f64 / elapsed.as_secs_f64().max(1e-9)
+            count as f64 / elapsed.as_secs_f64().max(1e-9),
+            stats.kernel_time.as_secs_f64(),
+            elapsed.saturating_sub(stats.kernel_time).as_secs_f64()
         );
         println!(
             "working set   before {:.1} MiB, after {:.1} MiB, peak {:.1} MiB",

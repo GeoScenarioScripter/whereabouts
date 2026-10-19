@@ -8,9 +8,12 @@
 #![allow(clippy::unwrap_used)]
 
 use std::io::Write as _;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use whereabouts_ntfs::{Error, ParentChainReport, Volume, process_memory, record, volume_info};
+use whereabouts_ntfs::{
+    EnumOptions, EnumStats, Error, ParentChainReport, RawRecord, Volume, process_memory, record,
+    volume_info,
+};
 
 /// Writes a measurement line straight to the process's stderr.
 ///
@@ -73,6 +76,56 @@ fn query_journal_on_system_volume() {
     }
 }
 
+fn mib(bytes: u64) -> f64 {
+    bytes as f64 / (1024.0 * 1024.0)
+}
+
+/// One line of measurements for an enumeration pass.
+fn report_pass(label: &str, stats: EnumStats, elapsed: Duration) {
+    let mem = process_memory().unwrap();
+    report(&format!(
+        "pass {label}: records={} skipped={} batches={} kernel_mib={:.1} elapsed_ms={} \
+         kernel_ms={} user_ms={} records_per_s={:.0} working_set_mib={:.1} peak_mib={:.1}",
+        stats.records,
+        stats.skipped,
+        stats.batches,
+        mib(stats.bytes),
+        elapsed.as_millis(),
+        stats.kernel_time.as_millis(),
+        elapsed.saturating_sub(stats.kernel_time).as_millis(),
+        stats.records as f64 / elapsed.as_secs_f64().max(1e-9),
+        mib(mem.working_set),
+        mib(mem.peak_working_set),
+    ));
+}
+
+/// Zero-copy pass that keeps nothing; returns (records, stats, elapsed).
+fn count_only(volume: &Volume, buffer_size: usize) -> (u64, EnumStats, Duration) {
+    let started = Instant::now();
+    let mut enumerator = volume.enumerate_with(EnumOptions {
+        buffer_size,
+        ..EnumOptions::default()
+    });
+    let mut records = 0_u64;
+    while let Some(batch) = enumerator.next_batch().unwrap() {
+        for rec in batch {
+            rec.unwrap();
+            records += 1;
+        }
+    }
+    let elapsed = started.elapsed();
+    let mut stats = enumerator.stats();
+    stats.records = records; // the batch interface leaves per-record counting to the caller
+    (records, stats, elapsed)
+}
+
+/// Enumerates `C:` three times in one test so the passes never overlap (parallel tests would
+/// compete for the same disk and distort the timings):
+///
+/// 1. *cold-ish, owned*: the iterator interface, collecting every `RawRecord` as an indexer
+///    would (the first read of the MFT in this process; the OS cache may already hold part of it);
+/// 2. *warm, count-only, 1 MiB buffer*: zero-copy batches, nothing kept — the API's own cost;
+/// 3. *warm, count-only, 64 KiB buffer*: sensitivity to the buffer size.
 #[test]
 #[ignore = "needs an elevated shell: opens the raw C: volume (read-only)"]
 fn enumerates_system_volume() {
@@ -83,54 +136,41 @@ fn enumerates_system_volume() {
         record::ROOT_RECORD_NUMBER,
         "root FRN {root:#x}"
     );
+    report(&format!(
+        "baseline: working_set_mib={:.1}",
+        mib(process_memory().unwrap().working_set)
+    ));
 
-    let mem_before = process_memory().unwrap();
+    // Pass 1: owned records.
     let started = Instant::now();
     let mut enumerator = volume.enumerate();
-    let mut links = Vec::new();
-    let mut dirs = 0_u64;
-    let mut name_bytes = 0_u64;
-    let mut non_utf8 = 0_u64;
-    for rec in enumerator.by_ref() {
-        let rec = rec.unwrap();
-        dirs += u64::from(rec.is_directory());
-        name_bytes += rec.name.len() as u64;
-        non_utf8 += u64::from(rec.name.as_str().is_none());
-        links.push((rec.frn, rec.parent_frn));
-    }
+    let records: Vec<RawRecord> = enumerator.by_ref().map(Result::unwrap).collect();
     let elapsed = started.elapsed();
     let stats = enumerator.stats();
-    let mem_after = process_memory().unwrap();
+    report_pass("1-owned-1MiB", stats, elapsed);
 
+    let dirs = records.iter().filter(|r| r.is_directory()).count();
+    let name_bytes: usize = records.iter().map(|r| r.name.len()).sum();
+    let non_utf8 = records.iter().filter(|r| r.name.as_str().is_none()).count();
+    report(&format!(
+        "records C: total={} dirs={dirs} name_wtf8_bytes={name_bytes} non_utf8_names={non_utf8}",
+        records.len()
+    ));
+
+    let links: Vec<(u64, u64)> = records.iter().map(|r| (r.frn, r.parent_frn)).collect();
+    drop(records);
     let chain_started = Instant::now();
     let chains = ParentChainReport::compute(&links, root);
-    let chain_elapsed = chain_started.elapsed();
-
-    report(&format!(
-        "enumerate C: records={} dirs={dirs} skipped={} batches={} kernel_bytes={} \
-         name_bytes={name_bytes} non_utf8_names={non_utf8} elapsed_ms={} records_per_s={:.0}",
-        stats.records,
-        stats.skipped,
-        stats.batches,
-        stats.bytes,
-        elapsed.as_millis(),
-        stats.records as f64 / elapsed.as_secs_f64().max(1e-9),
-    ));
-    report(&format!(
-        "memory C: working_set_before={} working_set_after={} peak_working_set={} (test binary, \
-         unoptimised, holds a Vec of (frn,parent) links)",
-        mem_before.working_set, mem_after.working_set, mem_after.peak_working_set
-    ));
     report(&format!(
         "chains C: root={root:#x} root_enumerated={} root_children={} resolved={} orphaned={} \
-         cyclic={} ratio={:.5} chain_ms={}",
+         cyclic={} ratio={:.6} chain_ms={}",
         chains.root_enumerated,
         chains.root_children,
         chains.resolved,
         chains.orphaned,
         chains.cyclic,
         chains.resolved_ratio(),
-        chain_elapsed.as_millis()
+        chain_started.elapsed().as_millis()
     ));
 
     assert_eq!(stats.records, links.len() as u64);
@@ -141,40 +181,22 @@ fn enumerates_system_volume() {
         stats.records
     );
     assert!(
-        chains.root_enumerated || chains.root_children > 0,
-        "root FRN {root:#x} neither enumerated nor referenced as a parent"
+        chains.root_children > 0,
+        "no record has the root {root:#x} as parent"
     );
-    assert!(chains.root_children > 0, "no record has the root as parent");
     assert!(chains.resolved_ratio() >= 0.999, "{chains:?}");
-}
 
-#[test]
-#[ignore = "needs an elevated shell: opens the raw C: volume (read-only)"]
-fn batch_and_iterator_interfaces_agree() {
-    let volume = Volume::open("C:").unwrap();
-    // A small buffer forces many kernel round-trips and exercises batch boundaries.
-    let opts = whereabouts_ntfs::EnumOptions {
-        buffer_size: 64 << 10,
-        ..Default::default()
-    };
-    let mut by_batch = 0_u64;
-    let mut enumerator = volume.enumerate_with(opts);
-    while let Some(batch) = enumerator.next_batch().unwrap() {
-        for rec in batch {
-            rec.unwrap();
-            by_batch += 1;
-        }
+    // Passes 2 and 3: zero-copy batches (also checks both interfaces agree).
+    let (warm, stats, elapsed) = count_only(&volume, 1 << 20);
+    report_pass("2-count-1MiB", stats, elapsed);
+    let (small, stats, elapsed) = count_only(&volume, 64 << 10);
+    report_pass("3-count-64KiB", stats, elapsed);
+    // The volume is live (the runner writes logs), so allow a small drift between passes.
+    for n in [warm, small] {
+        assert!(
+            n.abs_diff(links.len() as u64) * 1000 <= n,
+            "pass counts {n} vs {}",
+            links.len()
+        );
     }
-    let mut by_iter = 0_u64;
-    for rec in volume.enumerate_with(opts) {
-        rec.unwrap();
-        by_iter += 1;
-    }
-    report(&format!(
-        "interfaces C: batch_records={by_batch} iterator_records={by_iter} batches={}",
-        enumerator.stats().batches
-    ));
-    // The volume is live (the runner writes logs), so allow a small drift between the two passes.
-    let drift = by_batch.abs_diff(by_iter);
-    assert!(drift * 1000 <= by_batch, "batch={by_batch} iter={by_iter}");
 }
