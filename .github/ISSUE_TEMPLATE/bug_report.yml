@@ -1,0 +1,30 @@
+name: Bug report
+description: Something is wrong or a dataset is mis-indexed
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: dataset
+    attributes:
+      label: Dataset details (if a GIS file is involved)
+      description: Format, CRS (paste the .prj / gdalinfo output if you can), file size. Please do not attach confidential data.
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Whereabouts version / commit
+  - type: input
+    id: os
+    attributes:
+      label: Windows version and file system (NTFS / exFAT / ReFS)

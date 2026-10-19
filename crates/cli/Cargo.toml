@@ -1,0 +1,29 @@
+[package]
+name = "whereabouts-cli"
+description = "Whereabouts command-line interface (M0 prototype: index, inspect, query)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-core.workspace = true
+whereabouts-source.workspace = true
+whereabouts-ntfs.workspace = true
+whereabouts-nameindex.workspace = true
+whereabouts-datasets.workspace = true
+whereabouts-indexer.workspace = true
+whereabouts-readers.workspace = true
+whereabouts-crs.workspace = true
+whereabouts-catalog.workspace = true
+whereabouts-query.workspace = true
+
+[[bin]]
+name = "whereabouts"   # final CLI name is still TBD (D-02); keep in sync with docs if renamed
+path = "src/main.rs"

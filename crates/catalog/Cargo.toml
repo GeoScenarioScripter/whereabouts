@@ -1,0 +1,16 @@
+[package]
+name = "whereabouts-catalog"
+description = "SQLite (WAL) catalog of datasets, layers, CRS and R*Tree spatial index."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-core.workspace = true

@@ -1,0 +1,22 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Test corpus: byte-exact. Never normalize line endings in GIS sample files
+# (.prj/.geojson/.kml/.dxf text must match the GDAL golden output byte-for-byte).
+tests/corpus/data/** -text -diff
+tests/corpus/expected/** text eol=lf
+
+*.shp binary
+*.shx binary
+*.dbf binary
+*.gpkg binary
+*.tif binary
+*.tiff binary
+*.las binary
+*.laz binary
+*.fgb binary
+*.parquet binary
+*.pmtiles binary

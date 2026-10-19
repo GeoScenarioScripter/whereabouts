@@ -1,0 +1,18 @@
+[package]
+name = "whereabouts-query"
+description = "Query planning: name-index scan + catalog filters + spatial filter."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-core.workspace = true
+whereabouts-nameindex.workspace = true
+whereabouts-catalog.workspace = true

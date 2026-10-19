@@ -1,0 +1,29 @@
+# Rust build output
+/target/
+**/*.rs.bk
+
+# Local index / catalog databases produced by running the CLI against real volumes
+/.whereabouts/
+*.whereabouts.db
+*.whereabouts.db-wal
+*.whereabouts.db-shm
+
+# Large real-world test corpus (downloaded by script, never committed — see tests/corpus/README.md)
+/tests/corpus/external/
+
+# Claude Code: personal settings and session worktrees
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# Frontend (app/, later stages)
+node_modules/
+dist/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db

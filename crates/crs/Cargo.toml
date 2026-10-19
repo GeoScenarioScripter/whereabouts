@@ -1,0 +1,16 @@
+[package]
+name = "whereabouts-crs"
+description = "CRS parsing (ESRI WKT1, WKT1, WKT2, PROJJSON, GeoKeys), EPSG identification, bounds to WGS84."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-core.workspace = true

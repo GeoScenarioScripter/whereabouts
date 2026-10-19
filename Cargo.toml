@@ -1,0 +1,77 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/core",
+  "crates/source",
+  "crates/ntfs",
+  "crates/nameindex",
+  "crates/datasets",
+  "crates/readers",
+  "crates/crs",
+  "crates/catalog",
+  "crates/indexer",
+  "crates/query",
+  "crates/cli",
+  "tests/oracle",
+]
+default-members = ["crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/GeoScenarioScripter/whereabouts"
+homepage = "https://github.com/GeoScenarioScripter/whereabouts"
+authors = ["The Whereabouts contributors"]
+publish = false
+
+# Shared dependencies. Rule (see AGENTS.md): a dependency used by more than one crate is declared
+# here and referenced with `{ workspace = true }`; add new entries in alphabetical order within
+# their group to keep parallel-session merges trivial.
+[workspace.dependencies]
+# Internal crates
+whereabouts-catalog = { path = "crates/catalog" }
+whereabouts-core = { path = "crates/core" }
+whereabouts-crs = { path = "crates/crs" }
+whereabouts-datasets = { path = "crates/datasets" }
+whereabouts-indexer = { path = "crates/indexer" }
+whereabouts-nameindex = { path = "crates/nameindex" }
+whereabouts-ntfs = { path = "crates/ntfs" }
+whereabouts-query = { path = "crates/query" }
+whereabouts-readers = { path = "crates/readers" }
+whereabouts-source = { path = "crates/source" }
+
+# External crates (versions current as of 2026-10-19)
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+geo = "0.33.1"
+geo-types = "0.7.20"
+proj4rs = "0.2.1"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+windows = "0.62.2"
+
+# Dev-only
+tempfile = "3.27.0"
+
+[workspace.lints.rust]
+unsafe_code = "deny"           # only crates/ntfs may opt out, with `// SAFETY:` on every block
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"           # tests may `#[allow]` it locally
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"     # keeps symbols useful for benchmarks/profiling

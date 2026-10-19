@@ -1,0 +1,15 @@
+[package]
+name = "whereabouts-core"
+description = "Shared domain types: datasets, layers, bounds, CRS references, file identities, errors."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

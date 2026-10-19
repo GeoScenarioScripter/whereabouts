@@ -1,0 +1,23 @@
+[package]
+name = "whereabouts-indexer"
+description = "Indexing pipeline: source -> name index -> dataset grouper -> metadata extraction -> catalog."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-catalog.workspace = true
+whereabouts-core.workspace = true
+whereabouts-crs.workspace = true
+whereabouts-datasets.workspace = true
+whereabouts-nameindex.workspace = true
+whereabouts-ntfs.workspace = true
+whereabouts-readers.workspace = true
+whereabouts-source.workspace = true

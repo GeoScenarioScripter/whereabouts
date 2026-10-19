@@ -1,0 +1,18 @@
+[package]
+name = "whereabouts-oracle"
+description = "Dev/CI-only correctness harness: diffs native readers against committed GDAL golden output."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+whereabouts-core.workspace = true
+whereabouts-crs.workspace = true
+whereabouts-readers.workspace = true
