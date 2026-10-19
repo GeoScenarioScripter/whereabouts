@@ -340,7 +340,8 @@ impl EnumOptions {
 pub struct EnumStats {
     /// `DeviceIoControl` calls that returned data.
     pub batches: u64,
-    /// Records parsed successfully.
+    /// Records yielded by the `Iterator` interface. (The zero-copy [`Enumerator::next_batch`]
+    /// interface leaves per-record counting to the caller.)
     pub records: u64,
     /// Records skipped because of a record-local parse error (logged at `warn`).
     pub skipped: u64,
