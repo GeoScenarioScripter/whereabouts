@@ -12,8 +12,13 @@ use crate::{DatasetMetadata, ExtractionStatus, Format, MemberRole};
 /// A dataset resolved to paths, ready for a reader. Built by the indexer (from a [`Dataset`] and
 /// the name index) or by `whereabouts inspect` (from a path, without an index).
 ///
+/// Deliberately **not** serde-serialisable: it is an in-process reader input, and serialising
+/// `PathBuf` fails on paths that are not valid Unicode — exactly the names [`FileName`] keeps.
+/// Display paths with `Path::display()`.
+///
 /// [`Dataset`]: crate::Dataset
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// [`FileName`]: crate::FileName
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedDataset {
     /// The dataset's format; selects the reader.
     pub format: Format,
@@ -23,8 +28,8 @@ pub struct ResolvedDataset {
     pub sidecars: Vec<ResolvedMember>,
 }
 
-/// A non-anchor member file of a [`ResolvedDataset`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A non-anchor member file of a [`ResolvedDataset`] (not serialisable, for the same reason).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedMember {
     /// The member's role.
     pub role: MemberRole,
@@ -195,8 +200,9 @@ mod tests {
             ReadError::Unsupported("x".into()).status(),
             ExtractionStatus::Unsupported
         );
-        let json = serde_json::to_string(&ds).unwrap();
-        assert_eq!(serde_json::from_str::<ResolvedDataset>(&json).unwrap(), ds);
+        let limits = ReadLimits::default();
+        let json = serde_json::to_string(&limits).unwrap();
+        assert_eq!(serde_json::from_str::<ReadLimits>(&json).unwrap(), limits);
         let malformed = ReadError::Malformed {
             format: Format::Shapefile,
             reason: "bad".into(),

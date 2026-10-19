@@ -148,6 +148,14 @@ impl Wgs84Extent {
     /// Creates an extent from a GeoJSON-style `[west, south, east, north]` box: when
     /// `west > east` the box crosses the antimeridian and is split into
     /// `[west, south, 180, north]` and `[-180, south, east, north]`.
+    ///
+    /// # Precondition
+    /// `west > east` is **interpreted as an antimeridian crossing**, never as an error. Only an
+    /// antimeridian-aware producer may pass such a box: the WGS84 transform in `whereabouts-crs`
+    /// (session 2.4), or a query/UI box that explicitly wraps. An inverted box from bad data (e.g.
+    /// a corrupt header's min/max swapped) must be rejected before this point — validate it with
+    /// [`Bounds::new`] first — or it silently becomes a near-global extent. `south > north` is
+    /// always an error.
     pub fn from_west_south_east_north(
         west: f64,
         south: f64,
@@ -177,6 +185,13 @@ impl Wgs84Extent {
     /// `true` if any part intersects the given lon/lat box.
     pub fn intersects(&self, query: &Bounds) -> bool {
         self.parts.iter().any(|p| p.intersects(query))
+    }
+
+    /// `true` if any part of `self` intersects any part of `other`. Use this for query boxes
+    /// that may themselves cross the antimeridian (build them with
+    /// [`Wgs84Extent::from_west_south_east_north`]), so callers never re-implement the split.
+    pub fn intersects_extent(&self, other: &Wgs84Extent) -> bool {
+        other.parts.iter().any(|q| self.intersects(q))
     }
 }
 
@@ -264,6 +279,28 @@ mod tests {
         assert!(!e.intersects(&Bounds::new(0.0, -18.0, 1.0, -17.0).unwrap()));
         let json = serde_json::to_string(&e).unwrap();
         assert_eq!(serde_json::from_str::<Wgs84Extent>(&json).unwrap(), e);
+        // A query box that itself crosses the antimeridian (170°E .. 175°W).
+        let query = Wgs84Extent::from_west_south_east_north(170.0, -30.0, -175.0, -10.0).unwrap();
+        assert!(query.is_split());
+        assert!(e.intersects_extent(&query));
+        assert!(query.intersects_extent(&e));
+        let kermadec = Wgs84Extent::from_west_south_east_north(177.0, -32.0, 179.0, -29.0);
+        assert!(
+            kermadec.unwrap().intersects_extent(&query),
+            "meets the query's east part"
+        );
+        let tonga_west = Wgs84Extent::from_west_south_east_north(-179.0, -22.0, -177.0, -18.0);
+        assert!(
+            tonga_west.unwrap().intersects_extent(&query),
+            "meets the query's west part"
+        );
+        let samoa_west = Wgs84Extent::from_west_south_east_north(-173.0, -15.0, -171.0, -13.0);
+        assert!(
+            !samoa_west.unwrap().intersects_extent(&query),
+            "east of 175°W"
+        );
+        let africa = Wgs84Extent::from_west_south_east_north(-18.0, -35.0, 52.0, 37.0).unwrap();
+        assert!(!africa.intersects_extent(&query));
         let simple = Wgs84Extent::from_west_south_east_north(166.0, -47.0, 179.0, -34.0).unwrap();
         assert!(!simple.is_split());
     }

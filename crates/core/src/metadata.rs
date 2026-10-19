@@ -10,7 +10,12 @@ use crate::code::code_enum;
 use crate::{Bounds, CoreError, CrsDefinition, ExtractionStatus};
 
 code_enum! {
-    /// Base geometry type, using the ISO/OGC WKT names (as in `gpkg_geometry_columns`).
+    /// Base geometry type. The canonical code is the mixed-case ISO/OGC WKT name (`"MultiPolygon"`,
+    /// `"TIN"`), which `code()`, `from_code()`, `FromStr` and serde use exactly.
+    ///
+    /// Formats spell these names differently — GeoPackage's `gpkg_geometry_columns` stores them
+    /// upper case (`'MULTIPOLYGON'`, `'GEOMETRY'`) — so readers parse format-provided names with
+    /// [`GeometryKind::parse_lenient`].
     pub enum GeometryKind {
         /// Any geometry (unconstrained column, mixed types).
         Geometry => "Geometry",
@@ -48,6 +53,21 @@ code_enum! {
         Tin => "TIN",
         /// Triangle.
         Triangle => "Triangle",
+    }
+}
+
+impl GeometryKind {
+    /// Parses a geometry type name from a file, ignoring ASCII case (`"POINT"`, `"MultiPolygon"`,
+    /// `"tin"`). Use for format-provided names; canonical codes go through `from_code`.
+    ///
+    /// Case-insensitivity is specific to this enum: the other code enums hold codes that only
+    /// Whereabouts writes, so their strict parsing catches corruption instead of masking it.
+    pub fn parse_lenient(name: &str) -> Option<Self> {
+        let name = name.trim();
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|k| k.code().eq_ignore_ascii_case(name))
     }
 }
 
@@ -302,6 +322,46 @@ mod tests {
         }
         let json = serde_json::to_string(&GeometryType::xy(GeometryKind::Point)).unwrap();
         assert_eq!(json, "\"Point\"");
+    }
+
+    #[test]
+    fn geometry_kind_lenient_parsing_accepts_gpkg_names() {
+        // Names as stored in gpkg_geometry_columns.geometry_type_name.
+        let gpkg = [
+            ("GEOMETRY", GeometryKind::Geometry),
+            ("POINT", GeometryKind::Point),
+            ("LINESTRING", GeometryKind::LineString),
+            ("POLYGON", GeometryKind::Polygon),
+            ("MULTIPOINT", GeometryKind::MultiPoint),
+            ("MULTILINESTRING", GeometryKind::MultiLineString),
+            ("MULTIPOLYGON", GeometryKind::MultiPolygon),
+            ("GEOMETRYCOLLECTION", GeometryKind::GeometryCollection),
+            ("CIRCULARSTRING", GeometryKind::CircularString),
+            ("COMPOUNDCURVE", GeometryKind::CompoundCurve),
+            ("CURVEPOLYGON", GeometryKind::CurvePolygon),
+            ("MULTICURVE", GeometryKind::MultiCurve),
+            ("MULTISURFACE", GeometryKind::MultiSurface),
+            ("CURVE", GeometryKind::Curve),
+            ("SURFACE", GeometryKind::Surface),
+        ];
+        for (name, kind) in gpkg {
+            assert_eq!(GeometryKind::parse_lenient(name), Some(kind), "{name}");
+            // The canonical, strict parsers stay exact.
+            assert_eq!(GeometryKind::from_code(name), None, "{name}");
+        }
+        assert_eq!(GeometryKind::parse_lenient("tin"), Some(GeometryKind::Tin));
+        assert_eq!(
+            GeometryKind::parse_lenient(" Point "),
+            Some(GeometryKind::Point)
+        );
+        assert_eq!(GeometryKind::parse_lenient("POINTZ"), None);
+        assert_eq!(GeometryKind::parse_lenient(""), None);
+        for k in GeometryKind::ALL {
+            assert_eq!(
+                GeometryKind::parse_lenient(&k.code().to_uppercase()),
+                Some(*k)
+            );
+        }
     }
 
     #[test]

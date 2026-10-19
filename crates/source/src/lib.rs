@@ -164,21 +164,31 @@ impl fmt::Display for RescanReason {
 /// Only the source that produced it interprets `data` (NTFS: volume serial, journal ID, next
 /// USN). Persisted by the catalog (`volumes` table) and embedded in name-index snapshots via
 /// [`Checkpoint::to_bytes`].
+///
+/// Invariant: `data().len() <= MAX_DATA_LEN`, enforced by [`Checkpoint::new`],
+/// [`Checkpoint::from_bytes`] and deserialisation, so `to_bytes` and `from_bytes` are exact
+/// inverses.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "CheckpointRepr", into = "CheckpointRepr")]
 pub struct Checkpoint {
     version: u32,
     data: Vec<u8>,
 }
 
 impl Checkpoint {
-    /// Maximum payload size accepted by [`Checkpoint::from_bytes`].
+    /// Maximum payload size in bytes.
     pub const MAX_DATA_LEN: usize = 64 * 1024;
     const MAGIC: [u8; 4] = *b"WBCP";
     const HEADER_LEN: usize = 12;
 
     /// Creates a checkpoint with a source-defined payload format `version`.
-    pub fn new(version: u32, data: Vec<u8>) -> Self {
-        Checkpoint { version, data }
+    ///
+    /// Fails with [`CheckpointError::TooLarge`] if `data` exceeds [`Checkpoint::MAX_DATA_LEN`].
+    pub fn new(version: u32, data: Vec<u8>) -> Result<Self, CheckpointError> {
+        if data.len() > Self::MAX_DATA_LEN {
+            return Err(CheckpointError::TooLarge);
+        }
+        Ok(Checkpoint { version, data })
     }
 
     /// The payload format version chosen by the producing source.
@@ -196,7 +206,8 @@ impl Checkpoint {
         let mut out = Vec::with_capacity(Self::HEADER_LEN + self.data.len());
         out.extend_from_slice(&Self::MAGIC);
         out.extend_from_slice(&self.version.to_le_bytes());
-        let len = u32::try_from(self.data.len()).unwrap_or(u32::MAX);
+        // Lossless: the invariant caps the length at MAX_DATA_LEN (64 KiB), far below u32::MAX.
+        let len = self.data.len() as u32;
         out.extend_from_slice(&len.to_le_bytes());
         out.extend_from_slice(&self.data);
         out
@@ -223,15 +234,35 @@ impl Checkpoint {
         match payload.len().cmp(&len) {
             std::cmp::Ordering::Less => Err(CheckpointError::Truncated),
             std::cmp::Ordering::Greater => Err(CheckpointError::TrailingBytes),
-            std::cmp::Ordering::Equal => Ok(Checkpoint {
-                version,
-                data: payload.to_vec(),
-            }),
+            std::cmp::Ordering::Equal => Checkpoint::new(version, payload.to_vec()),
         }
     }
 }
 
-/// A stored checkpoint could not be decoded.
+#[derive(Serialize, Deserialize)]
+struct CheckpointRepr {
+    version: u32,
+    data: Vec<u8>,
+}
+
+impl TryFrom<CheckpointRepr> for Checkpoint {
+    type Error = CheckpointError;
+
+    fn try_from(r: CheckpointRepr) -> Result<Self, CheckpointError> {
+        Checkpoint::new(r.version, r.data)
+    }
+}
+
+impl From<Checkpoint> for CheckpointRepr {
+    fn from(c: Checkpoint) -> Self {
+        CheckpointRepr {
+            version: c.version,
+            data: c.data,
+        }
+    }
+}
+
+/// A checkpoint could not be built or decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum CheckpointError {
     /// Shorter than its header or declared length.
@@ -240,7 +271,7 @@ pub enum CheckpointError {
     /// Does not start with the checkpoint magic.
     #[error("not a checkpoint (bad magic)")]
     BadMagic,
-    /// Declared payload exceeds [`Checkpoint::MAX_DATA_LEN`].
+    /// Payload (given or declared) exceeds [`Checkpoint::MAX_DATA_LEN`].
     #[error("checkpoint payload too large")]
     TooLarge,
     /// Bytes after the declared payload.
@@ -278,7 +309,6 @@ mod tests {
             frn: Frn(frn),
             parent: Frn(parent),
             name: FileName::from(name),
-            is_dir: false,
             attrs: FileAttributes::default(),
         }
     }
@@ -303,7 +333,7 @@ mod tests {
         }
 
         fn enumerate(&mut self, sink: &mut dyn RecordSink) -> Result<Checkpoint, SourceError> {
-            let cp = Checkpoint::new(1, (self.log.len() as u64).to_le_bytes().to_vec());
+            let cp = Checkpoint::new(1, (self.log.len() as u64).to_le_bytes().to_vec()).unwrap();
             for f in &self.files {
                 if sink.accept(f.clone()).is_break() {
                     return Err(SourceError::Cancelled);
@@ -324,7 +354,8 @@ mod tests {
             };
             Ok(Changes::Batch(ChangeBatch {
                 events: events.to_vec(),
-                checkpoint: Checkpoint::new(1, (self.log.len() as u64).to_le_bytes().to_vec()),
+                checkpoint: Checkpoint::new(1, (self.log.len() as u64).to_le_bytes().to_vec())
+                    .unwrap(),
             }))
         }
     }
@@ -353,14 +384,14 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(
-            src.changes(&Checkpoint::new(1, vec![1])).unwrap(),
+            src.changes(&Checkpoint::new(1, vec![1]).unwrap()).unwrap(),
             Changes::FullRescanRequired(RescanReason::CheckpointMismatch)
         );
     }
 
     #[test]
     fn checkpoint_bytes_round_trip_and_validation() {
-        let cp = Checkpoint::new(3, vec![1, 2, 3, 4, 5]);
+        let cp = Checkpoint::new(3, vec![1, 2, 3, 4, 5]).unwrap();
         let bytes = cp.to_bytes();
         assert_eq!(&bytes[..4], b"WBCP");
         assert_eq!(Checkpoint::from_bytes(&bytes).unwrap(), cp);
@@ -388,10 +419,38 @@ mod tests {
             Err(CheckpointError::TooLarge)
         );
         // Every prefix of a valid encoding is rejected without panicking.
-        let enc = Checkpoint::new(7, vec![9; 40]).to_bytes();
+        let enc = Checkpoint::new(7, vec![9; 40]).unwrap().to_bytes();
         for i in 0..enc.len() {
             assert!(Checkpoint::from_bytes(&enc[..i]).is_err());
         }
+    }
+
+    #[test]
+    fn checkpoint_size_limit_holds_everywhere() {
+        let max = Checkpoint::MAX_DATA_LEN;
+        // At the limit: constructible, and bytes + serde round-trip exactly.
+        let at = Checkpoint::new(2, vec![0xAB; max]).unwrap();
+        assert_eq!(Checkpoint::from_bytes(&at.to_bytes()).unwrap(), at);
+        let json = serde_json::to_string(&at).unwrap();
+        assert_eq!(serde_json::from_str::<Checkpoint>(&json).unwrap(), at);
+        // One over: rejected by new(), from_bytes() and deserialisation.
+        assert_eq!(
+            Checkpoint::new(2, vec![0xAB; max + 1]),
+            Err(CheckpointError::TooLarge)
+        );
+        let mut over = at.to_bytes();
+        over.push(0xAB);
+        over[8..12].copy_from_slice(&u32::try_from(max + 1).unwrap().to_le_bytes());
+        assert_eq!(
+            Checkpoint::from_bytes(&over),
+            Err(CheckpointError::TooLarge)
+        );
+        let json = serde_json::to_string(&serde_json::json!({
+            "version": 2,
+            "data": vec![0xABu8; max + 1],
+        }))
+        .unwrap();
+        assert!(serde_json::from_str::<Checkpoint>(&json).is_err());
     }
 
     #[test]
@@ -408,7 +467,7 @@ mod tests {
         ];
         let batch = ChangeBatch {
             events,
-            checkpoint: Checkpoint::new(1, vec![0xFF; 24]),
+            checkpoint: Checkpoint::new(1, vec![0xFF; 24]).unwrap(),
         };
         let json = serde_json::to_string(&Changes::Batch(batch.clone())).unwrap();
         assert_eq!(

@@ -44,9 +44,13 @@ impl ExtractionStatus {
         }
     }
 
-    /// Rebuilds a status from [`Self::code`] and [`Self::detail`] (e.g. a catalog row). A missing
-    /// detail for `partial`/`error` becomes an empty reason; a detail on other codes is an error.
+    /// Rebuilds a status from [`Self::code`] and [`Self::detail`] (e.g. a catalog row).
+    ///
+    /// `None` and `Some("")` are interchangeable (SQL `NULL` vs `''`) for every code: a missing
+    /// detail for `partial`/`error` becomes an empty reason, and a non-empty detail on any other
+    /// code is an error.
     pub fn from_parts(code: &str, detail: Option<&str>) -> Result<Self, CoreError> {
+        let detail = detail.filter(|d| !d.is_empty());
         let reason = || detail.unwrap_or_default().to_owned();
         let status = match code {
             "pending" => ExtractionStatus::Pending,
@@ -139,6 +143,14 @@ mod tests {
         );
         assert!(ExtractionStatus::from_parts("ok", Some("x")).is_err());
         assert!(ExtractionStatus::from_parts("done", None).is_err());
+        // NULL and '' are interchangeable for every code.
+        for code in ["pending", "ok", "partial", "unsupported", "error"] {
+            assert_eq!(
+                ExtractionStatus::from_parts(code, Some("")).unwrap(),
+                ExtractionStatus::from_parts(code, None).unwrap(),
+                "{code}"
+            );
+        }
         assert_eq!(
             ExtractionStatus::from_parts("error", None).unwrap(),
             ExtractionStatus::Error(String::new())

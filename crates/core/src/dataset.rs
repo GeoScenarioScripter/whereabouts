@@ -96,18 +96,14 @@ impl Dataset {
                 )));
             }
         }
-        for (i, m) in members.iter().enumerate() {
-            if members
-                .get(..i)
-                .unwrap_or_default()
-                .iter()
-                .any(|o| o.frn == m.frn)
-            {
-                return Err(CoreError::InvalidDataset(format!(
-                    "duplicate member {}",
-                    m.frn
-                )));
-            }
+        // O(n log n): FGDB folders can have thousands of members.
+        let mut frns: Vec<Frn> = members.iter().map(|m| m.frn).collect();
+        frns.sort_unstable();
+        if let Some(dup) = frns.windows(2).find_map(|w| match w {
+            [a, b] if a == b => Some(*a),
+            _ => None,
+        }) {
+            return Err(CoreError::InvalidDataset(format!("duplicate member {dup}")));
         }
         Ok(Dataset {
             id,
@@ -155,12 +151,16 @@ impl Dataset {
             .map(|m| m.frn)
     }
 
-    /// `true` if `frn` is a member (any role).
+    /// `true` if `frn` is a member (any role). O(n).
     pub fn contains(&self, frn: Frn) -> bool {
         self.members.iter().any(|m| m.frn == frn)
     }
 
     /// Adds a sidecar. Fails for a second `Main` member or a duplicate FRN.
+    ///
+    /// Cost: O(n) per call (linear duplicate check; no side index, to keep `Dataset` plain data).
+    /// Fine for incremental sidecar changes; build large datasets (FGDB folders with thousands of
+    /// members) in one go with [`Dataset::new`], which is O(n log n).
     pub fn add_member(&mut self, member: Member) -> Result<(), CoreError> {
         if member.role == MemberRole::Main {
             return Err(CoreError::InvalidDataset(
@@ -282,6 +282,40 @@ mod tests {
             "duplicate frn"
         );
         assert!(Dataset::new(id(), k, f, vec![main, shx]).is_ok());
+    }
+
+    #[test]
+    fn large_folder_dataset_duplicate_detection() {
+        let gdb = DatasetId::new(VolumeId(1), Frn(1));
+        let mut members = vec![Member {
+            frn: Frn(1),
+            role: MemberRole::Main,
+        }];
+        members.extend((2..5_000).rev().map(|i| Member {
+            frn: Frn(i),
+            role: MemberRole::Internal,
+        }));
+        let ok = Dataset::new(
+            gdb,
+            DatasetKind::Container,
+            Format::FileGeodatabase,
+            members.clone(),
+        );
+        assert_eq!(ok.unwrap().members().len(), 4_999);
+        members.push(Member {
+            frn: Frn(2_500),
+            role: MemberRole::Internal,
+        });
+        let err = Dataset::new(
+            gdb,
+            DatasetKind::Container,
+            Format::FileGeodatabase,
+            members,
+        );
+        assert_eq!(
+            err.unwrap_err(),
+            CoreError::InvalidDataset(format!("duplicate member {}", Frn(2_500)))
+        );
     }
 
     #[test]

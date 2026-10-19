@@ -20,6 +20,9 @@ pub enum CoreError {
     /// A file name's byte representation is not well-formed WTF-8.
     #[error("invalid file name: {0}")]
     InvalidFileName(String),
+    /// A `DatasetRecord`/`LayerRecord` violates its documented invariants (see `validate`).
+    #[error("invalid record: {0}")]
+    InvalidRecord(String),
     /// An `ExtractionStatus` was decoded from an inconsistent code/detail pair.
     #[error("invalid extraction status: {0}")]
     InvalidStatus(String),

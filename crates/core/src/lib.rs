@@ -16,7 +16,8 @@
 //!   sidecar changes; the catalog keeps an integer surrogate plus a unique `(volume_id, anchor_frn)`.
 //! - [`LayerId`]` { dataset, ordinal }` — `ordinal` = index in [`DatasetMetadata::layers`].
 //!
-//! **Files** ([`mod@file`]) — [`FileRecord`]` { frn, parent, name: FileName, is_dir, attrs }`.
+//! **Files** ([`mod@file`]) — [`FileRecord`]` { frn, parent, name: FileName, attrs }`;
+//! `is_dir()` derives from `attrs`.
 //! [`FileName`] is lossless WTF-8 (UTF-16 names with lone surrogates survive); `as_str()` borrows
 //! for valid Unicode. [`FileAttributes`] are raw `FILE_ATTRIBUTE_*` bits.
 //!

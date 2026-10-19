@@ -20,10 +20,15 @@ pub struct FileRecord {
     pub parent: Frn,
     /// The entry's name within `parent` (a single path component, lossless).
     pub name: FileName,
-    /// `true` for directories. Authoritative (mirrors `FileAttributes::DIRECTORY`).
-    pub is_dir: bool,
-    /// Raw file attribute bits.
+    /// Raw file attribute bits; the single source of truth for "is a directory".
     pub attrs: FileAttributes,
+}
+
+impl FileRecord {
+    /// `true` for directories (`FileAttributes::DIRECTORY` is set).
+    pub const fn is_dir(&self) -> bool {
+        self.attrs.contains(FileAttributes::DIRECTORY)
+    }
 }
 
 /// Windows file attribute bits (`FILE_ATTRIBUTE_*`), kept as the raw `u32`.
@@ -406,12 +411,17 @@ mod tests {
             frn: Frn(0x0001_0000_0000_0123),
             parent: Frn(0x0005_0000_0000_0005),
             name: FileName::from("parcels.gpkg"),
-            is_dir: false,
             attrs: FileAttributes(FileAttributes::ARCHIVE | FileAttributes::HIDDEN),
         };
         let json = serde_json::to_string(&rec).unwrap();
         assert_eq!(serde_json::from_str::<FileRecord>(&json).unwrap(), rec);
         assert!(rec.attrs.contains(FileAttributes::HIDDEN));
-        assert!(!rec.attrs.contains(FileAttributes::DIRECTORY));
+        assert!(!rec.is_dir());
+        let gdb = FileRecord {
+            name: FileName::from("city.gdb"),
+            attrs: FileAttributes(FileAttributes::DIRECTORY),
+            ..rec
+        };
+        assert!(gdb.is_dir());
     }
 }
