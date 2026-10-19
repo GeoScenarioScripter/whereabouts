@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done. Next: wave 1.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Next: wave 1.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -250,23 +250,23 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | Session | Theme | Issue | Status | Note |
 |---|---|---|---|---|
 | 0 | Bootstrap: repo, tooling, docs, stage plan | — | ✅ done (2026-10-19) | [note](sessions/0-bootstrap.md) |
-| 1.1 | core-contracts | | ⏳ planned | |
-| 1.2 | oracle-corpus | | ⏳ planned | |
-| 1.3 | ntfs-enumeration | | ⏳ planned | |
-| 1.4 | crs-wkt-parsing | | ⏳ planned | |
-| 2.1 | nameindex | | ⏳ planned | |
-| 2.2 | ntfs-journal-source | | ⏳ planned | |
-| 2.3 | dataset-grouper | | ⏳ planned | |
-| 2.4 | crs-epsg-transform | | ⏳ planned | |
-| 2.5 | catalog | | ⏳ planned | |
-| 2.6 | reader-shapefile | | ⏳ planned | |
-| 3.1 | reader-geopackage | | ⏳ planned | |
-| 3.2 | reader-geotiff | | ⏳ planned | |
-| 3.3 | index-pipeline | | ⏳ planned | |
-| 4.1 | query-and-inspect-cli | | ⏳ planned | |
-| 4.2 | resilience | | ⏳ planned | |
-| 4.3 | benchmarks-and-coverage | | ⏳ planned | |
-| 5.1 | exit-verification | | ⏳ planned | |
+| 1.1 | core-contracts | #1 | ⏳ planned | |
+| 1.2 | oracle-corpus | #2 | ⏳ planned | |
+| 1.3 | ntfs-enumeration | #3 | ⏳ planned | |
+| 1.4 | crs-wkt-parsing | #4 | ⏳ planned | |
+| 2.1 | nameindex | #5 | ⏳ planned | |
+| 2.2 | ntfs-journal-source | #6 | ⏳ planned | |
+| 2.3 | dataset-grouper | #7 | ⏳ planned | |
+| 2.4 | crs-epsg-transform | #8 | ⏳ planned | |
+| 2.5 | catalog | #9 | ⏳ planned | |
+| 2.6 | reader-shapefile | #10 | ⏳ planned | |
+| 3.1 | reader-geopackage | #11 | ⏳ planned | |
+| 3.2 | reader-geotiff | #12 | ⏳ planned | |
+| 3.3 | index-pipeline | #13 | ⏳ planned | |
+| 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
+| 4.2 | resilience | #15 | ⏳ planned | |
+| 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |
+| 5.1 | exit-verification | #17 | ⏳ planned | |
 
 ## Stage retro
 
