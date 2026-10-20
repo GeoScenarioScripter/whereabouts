@@ -3,7 +3,8 @@
 //! Shaped after the CI runner's `C:` measured in stage01/1.3 (1.34M records, 15.5 % directories,
 //! 24.6-byte average WTF-8 name): a directory tree up to ~14 levels deep with sibling locality,
 //! names mixing words, numbers, camera/tile counters, hashes, GUIDs and WinSxS-style long names,
-//! a Windows-like extension mix with a sprinkling of GIS formats, and ~2 % non-ASCII names.
+//! a Windows-like extension mix with a sprinkling of GIS formats, and ~2 % non-ASCII names
+//! (synthetic average: ~24 bytes per name).
 //! Record numbers are dense and ascending (like MFT enumeration order); sequence numbers vary.
 //!
 //! Not part of the production API: it exists so benchmarks (here and in stage01/4.3) and
@@ -350,14 +351,14 @@ impl SynthVolume {
                 self.rng.below(5000),
                 self.hex(16)
             ),
-            3..=6 => self.hex(2),
+            3..=4 => self.hex(2),
             7..=9 => format!(
                 "v{}.{}.{}",
                 self.rng.below(20),
                 self.rng.below(10),
                 self.rng.below(100)
             ),
-            _ => self.words(2),
+            _ => self.words(4),
         }
     }
 
@@ -372,7 +373,7 @@ impl SynthVolume {
             12..=17 => format!("tile_{}_{}", self.rng.below(4096), self.rng.below(4096)),
             18..=21 => format!("part-{:05}", self.rng.below(100_000)),
             22..=31 => {
-                let len = [8, 16, 32, 38][self.rng.below(4)];
+                let len = [16, 32, 40, 40][self.rng.below(4)];
                 self.hex(len)
             }
             32..=35 => format!(
@@ -384,7 +385,7 @@ impl SynthVolume {
                 self.hex(12)
             )
             .to_uppercase(),
-            _ => self.words(3),
+            _ => self.words(5),
         }
     }
 

@@ -9,7 +9,8 @@
 //! - **Path mode**: the haystack is the folded path `\dir\…\name`. A per-query memo records, for
 //!   each directory, whether its path already contains the needle; an entry matches if its
 //!   parent's path does, or if the needle occurs in the last `len − 1` bytes of the parent's path
-//!   plus `\name` — so no full path is built unless a wildcard has to be checked.
+//!   plus `\name` — so no full path is built unless a wildcard has to be checked. A needle
+//!   without `\` can't span components, so then the entry's own name decides.
 //!
 //! Hits come back in a deterministic, unspecified order (ranking is the query layer's job);
 //! `total` always counts every match even when `limit` truncates `hits`.
@@ -222,6 +223,8 @@ const UNREACHABLE: u8 = 3;
 struct PathScan<'a> {
     /// Needle searched in path windows; `None` matches every reachable entry.
     finder: Option<Finder<'a>>,
+    /// The needle contains a separator, so a match may span path components.
+    spans: bool,
     memo: Vec<AtomicU8>,
 }
 
@@ -354,6 +357,7 @@ impl NameIndex {
         };
         let scan = PathScan {
             finder: (!needle.is_empty()).then(|| Finder::new(needle)),
+            spans: needle.contains(&SEPARATOR),
             memo: (0..self.frn.len())
                 .map(|_| AtomicU8::new(UNKNOWN))
                 .collect(),
@@ -429,6 +433,10 @@ impl NameIndex {
         let Some(finder) = &scan.finder else {
             return true;
         };
+        if !scan.spans {
+            // Without a `\` the needle can't cross a component boundary: the name alone decides.
+            return finder.find(self.folded_name(e as usize)).is_some();
+        }
         let keep = finder.needle().len().saturating_sub(1);
         bufs.window.clear();
         if let Link::Entry(p) = self.link(e) {

@@ -71,12 +71,11 @@ pub(crate) fn utf16le_to_wtf8(src: &[u8], out: &mut Vec<u8>) -> bool {
         return false;
     }
     out.reserve(src.len() / 2);
-    let units = src.chunks_exact(2).map(|c| {
-        u16::from_le_bytes([
-            c.first().copied().unwrap_or(0),
-            c.get(1).copied().unwrap_or(0),
-        ])
-    });
+    let units = src
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| u16::from_le_bytes(c));
     for unit in char::decode_utf16(units) {
         match unit {
             Ok(c) if c.is_ascii() => out.push(c as u8),

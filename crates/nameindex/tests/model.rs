@@ -67,7 +67,7 @@ enum Op {
 
 fn op() -> impl Strategy<Value = Op> {
     prop_oneof![
-        8 => (0..33_u8, 0..34_u8, name(), any::<bool>(), any::<bool>()).prop_map(
+        8 => (0..33_u8, prop_oneof![3 => Just(32_u8), 6 => 0..32_u8, 1 => Just(33_u8)], name(), any::<bool>(), any::<bool>()).prop_map(
             |(f, p, name, dir, utf16)| Op::Upsert { frn: if f == 32 { 255 } else { f }, parent: p, name, dir, utf16 }
         ),
         2 => (0..32_u8).prop_map(Op::Remove),
@@ -78,8 +78,13 @@ fn op() -> impl Strategy<Value = Op> {
 
 fn query() -> impl Strategy<Value = Query> {
     let text = prop::collection::vec(
-        prop::sample::select(&['a', 'B', '.', 'x', 'ß', 'σ', 'É', '日', ' ', '\\', '*', '?'][..]),
-        0..4,
+        // `\` is over-represented so path-mode needles often span a directory boundary.
+        prop::sample::select(
+            &[
+                'a', 'B', '.', 'x', 'ß', 'σ', 'É', '日', '\\', '\\', '\\', '*', '?',
+            ][..],
+        ),
+        0..5,
     )
     .prop_map(|cs| cs.into_iter().collect::<String>());
     let exts = prop::collection::vec(prop::sample::select(&["", "b", ".X", "a1", "日"][..]), 0..2);
@@ -173,7 +178,7 @@ proptest! {
     #[test]
     fn index_matches_naive_model(
         ops in prop::collection::vec(op(), 0..60),
-        queries in prop::collection::vec(query(), 1..12),
+        queries in prop::collection::vec(query(), 1..24),
     ) {
         let mut index = NameIndex::new(ROOT);
         let mut model = Model::new(ROOT);
