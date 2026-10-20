@@ -14,3 +14,24 @@ workspace = true
 
 [dependencies]
 whereabouts-core.workspace = true
+whereabouts-source.workspace = true
+crc32fast.workspace = true
+memchr.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# `test-fixtures` exposes `record::build` (synthetic USN enumeration buffers) for the #26
+# ingestion benchmark. Pure code: builds and runs on Linux.
+whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }
+criterion.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "search"
+harness = false
+
+[[bench]]
+name = "ingest"
+harness = false
