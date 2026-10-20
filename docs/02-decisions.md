@@ -37,6 +37,13 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-24 | Workspace layout, pinned toolchain, lints, CI matrix | Proposed |
 | D-25 | GDAL golden files are committed; GDAL needed only to regenerate them | Proposed |
 | D-26 | Workflow practices: contracts-first waves, write-scope ownership, GitHub-tracked status, verification levels V1–V4 | Proposed |
+| D-27 | Identities: `DatasetId` = (catalog-assigned `VolumeId`, anchor FRN); `LayerId` = dataset + reader-order ordinal | Proposed |
+| D-28 | File names are stored losslessly as WTF-8 | Proposed |
+| D-29 | `Source` change contract: `Changes::{Batch, FullRescanRequired}`, checkpoint taken before enumeration, idempotent replay | Proposed |
+| D-30 | Core data conventions: frozen enum string codes, `Timestamp` = i64 ns, `ReadLimits` 16 MiB / 2 s, validated records | Proposed |
+| D-31 | NTFS enumeration: V2 records, root FRN from the root handle, local fixed/removable drives only | Proposed |
+| D-32 | CRS parsing: crate-local model, EPSG/PROJ vocabulary, GDAL's WKT1 conventions, bounded input, lenient datum shifts | Proposed |
+| D-33 | Oracle comparison rules: tolerances, baseline, true-extent convention, pinned GDAL image, drift check on PRs | Proposed |
 
 ---
 
@@ -183,3 +190,78 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Status:** Proposed
 - **Decision:** Wave 1 of each stage freezes the stage's contracts; later changes are flagged "contract changes". Each session has a written **write scope**; parallel sessions own disjoint paths. Session status lives in GitHub (milestone per stage, issue per session); `PLAN.md` holds the specs and is updated by the orchestrator at wave close together with the decision/open-question/architecture docs. Every session reports a verification level (V1 unit, V2 integration/oracle, V3 elevated CI, V4 owner's real machine); stage exit needs V4 where the stage touches real systems. At most 4 concurrent sessions.
 - **Rationale:** Designed for a crate-structured Rust workspace and elevated Windows code; folds in lessons from the org's earlier stage/session work (bookkeeping conflicts, never-run live tests). Details in `08-development-workflow.md`.
+
+## D-27 — Dataset, layer and volume identities
+- **Status:** Proposed
+- **Context:** stage01/1.1 had to choose stable IDs before wave 2 builds the catalog, name index and grouper on them ([1.1 note](stages/stage01/sessions/1.1-core-contracts.md)).
+- **Decision:** `DatasetId` = (`VolumeId`, anchor FRN). `VolumeId` is a `u32` assigned by the catalog per registered source, matched by `SourceIdentity.key` (NTFS: volume GUID path). `LayerId` = (`DatasetId`, ordinal), where ordinal is the index in the reader's layer list; readers must order layers deterministically, and layers are replaced wholesale on re-extraction. The catalog keeps integer surrogate keys plus `UNIQUE(volume_id, anchor_frn)`.
+- **Rationale:** An anchor FRN survives renames, moves and sidecar churn, and a delete + recreate correctly gives a new dataset. A hash or packed `u64` risks collisions. NTFS serials collide on cloned disks and VHDs, and non-NTFS sources have none.
+- **Consequences:** 2.5 adds `anchor_frn` and `ordinal` columns. Hard-linked anchors collapse to one ID, which is the documented M0 hard-link limitation.
+
+## D-28 — Lossless WTF-8 file names
+- **Status:** Proposed
+- **Context:** NTFS names are UTF-16 and may contain unpaired surrogates. Proposed independently by stage01/1.1 (`FileName`) and 1.3 (`NtfsName`).
+- **Decision:** File names are stored as WTF-8: identical to UTF-8 for valid names, with unpaired surrogates kept. `as_str()` is zero-cost for valid names. Serde writes a string, or a UTF-16 array for invalid names.
+- **Rationale:** Every file stays openable and no two names collide, unlike lossy `String`. It's half the size of UTF-16 for ASCII, works on Linux unlike `OsString::from_wide`, and matches `OsStr::as_encoded_bytes` on Windows.
+- **Consequences:** the name-index string pool (2.1) stores WTF-8 bytes directly. Types that hold `PathBuf` must not offer serialisation that fails on such names (`ResolvedDataset` has no serde for this reason).
+
+## D-29 — `Source` change contract
+- **Status:** Proposed
+- **Context:** D-18 requires a `Source` trait. stage01/1.1 defined it ([1.1 note](stages/stage01/sessions/1.1-core-contracts.md)).
+- **Decision:** `Source { identity(), root(), enumerate(sink) -> Checkpoint, changes(&Checkpoint) -> Changes }`, synchronous and poll-based. `Changes` is either `Batch { events, checkpoint }` or `FullRescanRequired(reason)`; a rescan is not a `SourceEvent`. `enumerate` takes its checkpoint **before** enumerating, so replay covers the gap, and consumers apply events idempotently. `Deleted`/`Modified` carry the full `FileRecord`. `Checkpoint` is opaque versioned bytes (`WBCP` magic, ≤ 64 KiB, validated on construction and on decode).
+- **Rationale:** A rescan can then never be committed together with a checkpoint, and event consumers (name index, grouper) never see a non-event.
+- **Consequences:** this deviates from the stage01 spec wording (`SourceEvent::FullRescanRequired`), which is accepted here. 2.2 implements it for NTFS.
+
+## D-30 — Core data conventions
+- **Status:** Proposed
+- **Context:** stage01/1.1 ([note](stages/stage01/sessions/1.1-core-contracts.md)) and its review.
+- **Decision:**
+  - Every core enum has one frozen string code, used both as the catalog TEXT value and as the serde form. Codes are matched exactly, except `GeometryKind::parse_lenient`, which readers use for names read from files (GPKG writes them upper-case).
+  - `Timestamp` is i64 nanoseconds since the Unix epoch.
+  - `ReadLimits` defaults to 16 MiB and 2 s per dataset (starting values; 3.3 and 4.3 tune them).
+  - `DatasetRecord::validate()` / `LayerRecord::validate()` enforce the record invariants before persisting.
+  - An empty status detail equals none.
+- **Rationale:** One spelling everywhere avoids mapping tables. Geometry/raster/field type names follow OGC and GDAL spelling, which simplifies oracle comparison.
+- **Consequences:** codes can't change once released. 2.5 calls `validate()`.
+
+## D-31 — NTFS enumeration specifics
+- **Status:** Proposed
+- **Context:** stage01/1.3 ([note](stages/stage01/sessions/1.3-ntfs-enumeration.md)).
+- **Decision:**
+  - Request `USN_RECORD_V2` only (`MFT_ENUM_DATA_V1`, min = max = 2). V3 is still parsed and narrowed to 64 bits, or rejected.
+  - Take the root FRN from `GetFileInformationByHandle(X:\)`, because enumeration never returns the root.
+  - `Volume::open` accepts only drive letters of `DRIVE_FIXED`/`DRIVE_REMOVABLE` drives backed by a `\Device\` object. Network redirectors, `SUBST` aliases, optical and RAM disks get `NotLocal` (D-03).
+  - Never create a USN journal implicitly.
+- **Rationale:** NTFS file references are 64-bit, and V2 records are 16 bytes smaller. Explicit local-only checks keep D-03 enforceable.
+- **Consequences:** 2.1/2.2 seed the root entry. Mount points and GUID paths are #25; 128-bit file IDs (ReFS) are #24.
+
+## D-32 — CRS parsing model and conventions
+- **Status:** Proposed
+- **Context:** stage01/1.4 ([note](stages/stage01/sessions/1.4-crs-wkt-parsing.md)). Readers hand over raw text (`CrsDefinition`, D-30).
+- **Decision:**
+  - The parsed `Crs` model stays inside `whereabouts-crs`; 2.4 wires `CrsDefinition → Crs`.
+  - Methods use EPSG names and codes; parameters use PROJ semantics (`lat_0`, `lon_0`, `k_0`, `x_0`, …), with method-dependent renames done at parse time.
+  - WKT1 follows GDAL's conventions (prime meridian in degrees, angular parameters in the GEOGCS unit, GDAL's ESRI method refinements).
+  - Input limits: 256 KiB, nesting depth 32, 16,384 nodes. Non-UTF-8 input is decoded as Windows-1252.
+  - Every number in a successful parse is finite.
+  - Helmert scale is decided by its unit. With no unit: ppm in PROJJSON, and `1 + dS` in a WKT2 `ABRIDGEDTRANSFORMATION`, as ISO 19162 and PROJ write it.
+  - An unreadable `TOWGS84`/BOUNDCRS transformation drops the shift but keeps the CRS.
+  - Derived, temporal and parametric CRSs parse as `Unknown`.
+- **Rationale:** `core` stays free of CRS semantics. 2.4 can build `proj4rs` projections directly. Agreeing with GDAL's importer avoids spurious oracle mismatches.
+- **Consequences:** 2.4 decides axis order for WKT1/ESRI and compares angles modulo 360. EPSG and Esri attribution goes into `NOTICE` (#27).
+
+## D-33 — Oracle comparison rules
+- **Status:** Proposed
+- **Context:** D-08/D-25 use GDAL as the correctness oracle. stage01/1.2 built the corpus and harness ([note](stages/stage01/sessions/1.2-oracle-corpus.md)).
+- **Decision:**
+  - **Tolerances:** native extent `|Δ| ≤ max(1e-6, 1e-9·|v|)`. WGS84: each edge within 0.01°, longitude compared modulo 360, **and** longitude span within 0.02°. Raster resolution relative 1e-9 (goldens unrounded). Counts and EPSG exact.
+  - **Baseline:** status and layers 1.0; geometry type, feature count, native extent and raster 0.98 (exit criterion 4); EPSG and WGS84 0.0 until Q-14 sets targets.
+  - Adapters declare the checks they are held to.
+  - Corrupt cases, and cases GDAL refused, are compared on status only.
+  - Readers are compared against the **true** data extent, not the declared one.
+  - Layer name = file stem (SHP/GeoTIFF) or `table_name` (GPKG: every `gpkg_contents` row is a layer).
+  - EPSG in goldens is identified from the raw definition (authority → `AutoIdentifyEPSG` → `FindMatches` ≥ 70).
+  - GDAL is pinned to `ghcr.io/osgeo/gdal:ubuntu-small-3.13.3@sha256:64250faf…` (GDAL 3.13.3, PROJ 9.8.1). Bumping it is a reviewed diff.
+  - `oracle-golden.yml` also runs on PRs touching corpus scripts, data, goldens or the manifest, and fails on drift.
+- **Rationale:** 0.01° leaves room for proj4rs vs PROJ without grid shifts (D-09). The span check stops a collapsed box at ±180° matching the full globe. The true-extent convention measures what users need, not what files claim.
+- **Consequences:** stale GPKG bounds need the R-tree fallback (3.1); PixelIsPoint needs a half-pixel shift (3.2). Changing corpus scripts needs Docker or the workflow artifact. 4.3 raises the EPSG/WGS84 rates once Q-14 is set.

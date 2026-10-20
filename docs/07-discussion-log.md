@@ -70,6 +70,23 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 11 — stage01 wave 1: contracts, spikes, oracle (2026-10-19)
+- **What ran:** four parallel sessions: 1.1 core-contracts (#21), 1.2 oracle-corpus (#22), 1.3 ntfs-enumeration (#20) and 1.4 crs-wkt-parsing (#23). Each PR got a code review and one round of fixes before merging. The reviews found real bugs:
+  - 1.1: a checkpoint that could not round-trip, case-sensitive GPKG geometry names, and no way to express a query box crossing the antimeridian.
+  - 1.3: enumeration could end early on header-only replies with a USN filter, and network/SUBST drives passed the NTFS check.
+  - 1.2: a ±180° span blind spot, and resolution rounding vs the tolerance.
+  - 1.4: unit-factor overflow, and a Helmert scale heuristic.
+- **Conclusions:** decisions D-27…D-33 recorded as Proposed (identities, WTF-8 names, `Source` change contract, core conventions, NTFS enumeration specifics, CRS parsing conventions, oracle rules).
+  - One review instruction was overruled with evidence: 1.4 showed that ISO 19162/PROJ write `ABRIDGEDTRANSFORMATION` scale as `1 + dS`, so a unitless value there is not ppm (D-32).
+- **Process lessons:**
+  - `Closes #n` doesn't fire on merges into `develop` (it isn't the default branch), so the orchestrator closes session issues at wave close.
+  - The scratchpad is shared between sessions, so PR-body drafts need session-specific names; two sessions collided on `pr-body.md`.
+  - A forked `/code-review` checked the PR out in the main checkout, so only one PR review runs at a time.
+  - `AGENTS.md` now allows printing in tests/examples/benches and read-only enumeration of the system volume in elevated tests.
+- **Open:** Q-16 waits on the owner's V4 `enum_volume` run. Gate G1 is next. Follow-ups #24–#29.
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).

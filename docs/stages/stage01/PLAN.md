@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Next: wave 1.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Next: gate G1 (owner go/no-go), then wave 2.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -81,7 +81,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 
 ### Watch points (shared files within a wave)
 
-- **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2.
+- **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
 - **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer, 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6.
 - **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`.
 - **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
@@ -143,6 +143,15 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Out of scope:** EPSG identification, coordinate transforms (2.4), GeoKeys (3.2).
 
 ### Wave 2 — components on frozen contracts
+
+**Wave 1 hand-offs (added at wave 1 close, 2026-10-19).** These are part of each spec below. Read the named notes. Decisions D-27…D-33 apply.
+- **All:** contracts are in `whereabouts-core`/`whereabouts-source` (API summary in the 1.1 note). `FileRecord::is_dir()` is a method derived from `attrs`. File names are WTF-8 (`FileName`, D-28). `Source::changes` returns `Changes::{Batch, FullRescanRequired}` (D-29). Test fixtures from `whereabouts-ntfs` are behind its `test-fixtures` feature (dev-dependency only).
+- **2.1:** seed the root entry from `Volume::root_frn()`, since enumeration never returns the root (D-31). Expect a few orphans under `$Extend` and keep the orphan guard. `Enumerator::next_batch()` gives zero-copy ingestion. Measure whether a borrowed `FileRecord` view in `RecordSink` is worth it (#26).
+- **2.2:** reuse `record::RecordIter` (`resume`/`position`) and `record::enum_step` for journal reads. Add `ERROR_JOURNAL_ENTRY_DELETED` to `error::win32`. `JournalInfo` already holds the checkpoint fields. `Checkpoint::new` is fallible (≤ 64 KiB). Reject or skip volumes that return 128-bit file IDs (ReFS, `FILE_ID_128`), which don't fit `Frn(u64)` (#24). Only drive letters are supported; mount points and volume-GUID paths are #25.
+- **2.4:** add the EPSG and Esri fixture attribution to the root `NOTICE` (#27). Decide WKT1/ESRI axis order (`AxisOrder::Unspecified`; GDAL assumes east/north for file data). Compare angular parameters modulo 360 (ESRI writes the EPSG:3375 azimuth as −36.97°). Extend the datum alias table if name matching needs it. G2 input is the goldens' `crs.raw` + `extent` + `epsg`/`wgs84_extent`, under 1.2's tolerances (D-33).
+- **2.5:** add the schema delta proposed in the 1.1 note: `datasets.anchor_frn` with `UNIQUE(volume_id, anchor_frn)`, `layers.ordinal`, `crs.authority`/`crs.auth_code`, `crs.status`, `def_kind` `'epsg'`, `rasters.geotransform` and an overview count; a `volumes` table holding `SourceIdentity` + checkpoint bytes. Call `DatasetRecord::validate()` before persisting. Record the delta for `03-architecture.md` §4.
+- **2.6 / 3.1 / 3.2:** one `Adapter` line each in `tests/oracle/src/adapters.rs`. Readers are scored against the **true** extent (D-33): an empty SHP reports no extent, 3.1 needs the R-tree fallback for stale `gpkg_contents` bounds, and 3.2 shifts PixelIsPoint by half a pixel. Use `GeometryKind::parse_lenient` for geometry names read from files (GPKG stores them upper-case).
+- **4.1:** use `Wgs84Extent::intersects_extent` for query boxes that cross the antimeridian.
 
 #### 2.1 — nameindex
 - **Reads:** `03-architecture.md` §3.4; D-10; 1.1 note.
@@ -250,10 +259,10 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | Session | Theme | Issue | Status | Note |
 |---|---|---|---|---|
 | 0 | Bootstrap: repo, tooling, docs, stage plan | — | ✅ done (2026-10-19) | [note](sessions/0-bootstrap.md) |
-| 1.1 | core-contracts | #1 | ⏳ planned | |
-| 1.2 | oracle-corpus | #2 | ⏳ planned | |
-| 1.3 | ntfs-enumeration | #3 | ⏳ planned | |
-| 1.4 | crs-wkt-parsing | #4 | ⏳ planned | |
+| 1.1 | core-contracts | #1 | ✅ done (2026-10-19, V1, PR #21) | [note](sessions/1.1-core-contracts.md) |
+| 1.2 | oracle-corpus | #2 | ✅ done (2026-10-19, V2, PR #22) | [note](sessions/1.2-oracle-corpus.md) |
+| 1.3 | ntfs-enumeration | #3 | ✅ done (2026-10-19, V3, PR #20; V4 run pending with owner) | [note](sessions/1.3-ntfs-enumeration.md) |
+| 1.4 | crs-wkt-parsing | #4 | ✅ done (2026-10-19, V1, PR #23) | [note](sessions/1.4-crs-wkt-parsing.md) |
 | 2.1 | nameindex | #5 | ⏳ planned | |
 | 2.2 | ntfs-journal-source | #6 | ⏳ planned | |
 | 2.3 | dataset-grouper | #7 | ⏳ planned | |
