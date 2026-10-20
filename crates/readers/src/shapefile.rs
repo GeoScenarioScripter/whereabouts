@@ -5,8 +5,8 @@
 //! | Member | Bytes | Facts |
 //! |---|---|---|
 //! | `.shp` | 100 (main header) | shape type → geometry type + Z/M, bbox, declared file length |
-//! | `.shx` | 100 (same header) | shape count = (file length − 100) / 8, the fallback feature count |
-//! | `.dbf` | 32 + 32 per field (≤ 1,024 fields) | record count (the feature count), fields, LDID |
+//! | `.shx` | 100 (same header) | shape count = (file length − 100) / 8: the feature count, as in GDAL |
+//! | `.dbf` | 32 + 32 per field (≤ 1,024 fields) | record count (the fallback feature count), fields, LDID |
 //! | `.cpg` | ≤ 64 | DBF encoding label (wins over the LDID) |
 //! | `.prj` | ≤ 16 KiB | raw CRS definition, ESRI vs OGC WKT1 detected (`crate::prj`) |
 //!
@@ -17,10 +17,10 @@
 //!   code, an unknown shape type or a declared length beyond the end of the file (truncated
 //!   records) is [`ReadError::Malformed`]. GDAL refuses those files too.
 //! - Problems in the other members degrade the result to `partial` with a reason, keeping
-//!   whatever is still known (a corrupt `.dbf` loses the fields, and the count falls back to the
-//!   `.shx`).
-//! - The extent is the header bbox, except that a shapefile without records reports none (its
-//!   header bbox is all zeros), per the true-extent convention (D-33).
+//!   whatever is still known (a corrupt `.dbf` loses the fields; a missing `.shx` leaves the
+//!   `.dbf` count). Count disagreements between the members are `partial` too.
+//! - The extent is the header bbox, except that a `.shp` without records (declared length 100)
+//!   reports none: its header bbox is all zeros (true-extent convention, D-33).
 
 use std::path::Path;
 
@@ -91,15 +91,19 @@ fn read_shapefile(ds: &ResolvedDataset, budget: &Budget) -> Result<DatasetMetada
         geometry_type(header.shape_type, header.m_range).map_err(|r| malformed(shp_path, &r))?;
     let mut partial = Vec::new();
 
-    let shx_count = ds.sidecar(MemberRole::Shx).and_then(|p| {
-        read_shx_count(p, budget)
+    let shx_count = match ds.sidecar(MemberRole::Shx) {
+        None => {
+            partial.push("no .shx member: feature count taken from the .dbf".to_owned());
+            None
+        }
+        Some(p) => read_shx_count(p, budget)
             .map_err(|r| partial.push(r.into_reason(p)))
-            .ok()
-    });
+            .ok(),
+    };
 
     let cpg = ds
         .sidecar(MemberRole::Cpg)
-        .and_then(|p| dbf::read_cpg(p, budget));
+        .and_then(|p| dbf::read_cpg(p, budget).map_err(|r| partial.push(r)).ok());
     let (dbf_count, fields) = match ds.sidecar(MemberRole::Dbf) {
         None => {
             partial.push("no .dbf member: attribute fields unknown".to_owned());
@@ -107,8 +111,9 @@ fn read_shapefile(ds: &ResolvedDataset, budget: &Budget) -> Result<DatasetMetada
         }
         Some(p) => match dbf::read_header(p, budget, Format::Shapefile) {
             Ok(h) => {
-                let fields = h.field_infos(cpg.as_deref());
+                let (fields, problems) = h.field_infos(cpg.as_deref());
                 partial.extend(h.problems);
+                partial.extend(problems);
                 (h.record_count, fields)
             }
             Err(e) => {
@@ -118,20 +123,32 @@ fn read_shapefile(ds: &ResolvedDataset, budget: &Budget) -> Result<DatasetMetada
         },
     };
 
-    let feature_count = match (dbf_count, shx_count) {
-        (Some(d), Some(s)) if d != s => {
-            partial.push(format!(".dbf has {d} records but .shx indexes {s} shapes"));
-            Some(d)
+    // Like GDAL: the .shx (one entry per shape) is the count, the .dbf the fallback.
+    let feature_count = match (shx_count, dbf_count) {
+        (Some(s), Some(d)) if s != d => {
+            partial.push(format!(".shx indexes {s} shapes but .dbf has {d} records"));
+            Some(s)
         }
-        (Some(d), _) => Some(d),
-        (None, Some(s)) => Some(s),
+        (Some(s), _) => Some(s),
+        (None, Some(d)) => Some(d),
         (None, None) => {
-            partial.push("feature count unknown: no readable .dbf or .shx".to_owned());
+            partial.push("feature count unknown: no readable .shx or .dbf".to_owned());
             None
         }
     };
 
-    let has_records = header.file_len > HEADER_LEN as u64 && feature_count != Some(0);
+    // Whether there are records is decided by the .shp alone, so a sidecar can never erase a
+    // valid bbox (or invent one for an empty file, whose header bbox is all zeros).
+    let has_records = header.file_len > HEADER_LEN as u64;
+    match feature_count {
+        Some(n) if n > 0 && !has_records => {
+            partial.push(format!(".shp has no records but the feature count is {n}"))
+        }
+        Some(0) if has_records => {
+            partial.push(".shp has records but the feature count is 0".to_owned());
+        }
+        _ => {}
+    }
     let native_bounds = if geometry_type.is_some() && has_records {
         let [min_x, min_y, max_x, max_y] = header.bbox;
         match Bounds::new(min_x, min_y, max_x, max_y) {
@@ -578,12 +595,16 @@ mod tests {
     }
 
     #[test]
-    fn count_falls_back_and_disagreement_is_partial() {
-        // No .shx: the .dbf count is enough.
+    fn count_prefers_the_shx_and_flags_gaps() {
+        // No .shx: the .dbf count, flagged partial like a missing .dbf.
         let mut files = Files::polygons(4);
         files.shx = None;
         let md = files.read().unwrap();
-        assert_eq!(md.status(), ExtractionStatus::Ok);
+        assert!(
+            md.partial.iter().any(|p| p.contains("no .shx member")),
+            "{:?}",
+            md.partial
+        );
         assert_eq!(only_layer(&md).feature_count, Some(4));
 
         // No .dbf: count from the .shx, fields unknown.
@@ -594,7 +615,7 @@ mod tests {
         assert_eq!(only_layer(&md).feature_count, Some(4));
         assert!(only_layer(&md).fields.is_empty());
 
-        // Neither: count unknown.
+        // Neither: count unknown, extent still from the .shp.
         files.shx = None;
         let md = files.read().unwrap();
         assert!(
@@ -605,12 +626,82 @@ mod tests {
         assert_eq!(only_layer(&md).feature_count, None);
         assert!(only_layer(&md).native_bounds.is_some());
 
-        // Disagreement: the .dbf count is reported, flagged partial.
+        // Disagreement: the .shx count is reported (as GDAL does), flagged partial.
         let mut files = Files::polygons(4);
         files.shx = Some(main_header(5, BBOX, [0.0; 2], 100 + 8 * 3));
         let md = files.read().unwrap();
-        assert!(md.partial.iter().any(|p| p.contains("indexes 3 shapes")));
-        assert_eq!(only_layer(&md).feature_count, Some(4));
+        assert!(
+            md.partial
+                .iter()
+                .any(|p| p.contains("indexes 3 shapes but .dbf has 4 records"))
+        );
+        assert_eq!(only_layer(&md).feature_count, Some(3));
+    }
+
+    #[test]
+    fn records_are_decided_by_the_shp_alone() {
+        // A .dbf (and .shx) claiming 0 records can't erase the bbox of a .shp that has records.
+        let mut files = Files::polygons(0);
+        files.shp = Some(main_header(5, BBOX, [0.0; 2], 236));
+        let md = files.read().unwrap();
+        assert!(
+            md.partial
+                .iter()
+                .any(|p| p.contains("has records but the feature count is 0")),
+            "{:?}",
+            md.partial
+        );
+        let b = only_layer(&md).native_bounds.unwrap();
+        assert_eq!([b.min_x(), b.min_y(), b.max_x(), b.max_y()], BBOX);
+
+        // The reverse: an empty .shp gets no extent even if the sidecars count features.
+        let mut files = Files::polygons(2);
+        files.shp = Some(main_header(5, BBOX, [0.0; 2], 100));
+        let md = files.read().unwrap();
+        assert!(
+            md.partial
+                .iter()
+                .any(|p| p.contains("no records but the feature count is 2")),
+            "{:?}",
+            md.partial
+        );
+        assert_eq!(only_layer(&md).native_bounds, None);
+        assert_eq!(only_layer(&md).feature_count, Some(2));
+    }
+
+    #[test]
+    fn dbf_of_unknown_version_drops_fields_only() {
+        let mut files = Files::polygons(3);
+        if let Some(dbf) = files.dbf.as_mut() {
+            dbf[0] = 0x04;
+        }
+        let md = files.read().unwrap();
+        assert!(
+            md.partial.iter().any(|p| p.contains("version byte 0x04")),
+            "{:?}",
+            md.partial
+        );
+        let l = only_layer(&md);
+        assert!(l.fields.is_empty());
+        assert_eq!(l.feature_count, Some(3));
+        assert!(l.native_bounds.is_some());
+    }
+
+    #[test]
+    fn unreadable_cpg_is_partial() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ds = Files::polygons(1).write(dir.path(), "c");
+        for m in &mut ds.sidecars {
+            if m.role == MemberRole::Cpg {
+                m.path = dir.path().join("missing.cpg");
+            }
+        }
+        let md = ShapefileReader.read(&ds, &ReadLimits::default()).unwrap();
+        assert!(
+            md.partial.iter().any(|p| p.contains(".cpg ignored")),
+            "{:?}",
+            md.partial
+        );
     }
 
     #[test]
