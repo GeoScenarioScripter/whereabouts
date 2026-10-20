@@ -33,6 +33,8 @@
 //!
 //! Hard links: one name per FRN (the last one reported), as documented for M0.
 
+#![warn(missing_docs)]
+
 mod error;
 mod fold;
 mod frnmap;
