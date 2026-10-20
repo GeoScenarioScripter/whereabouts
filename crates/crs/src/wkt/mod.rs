@@ -131,7 +131,7 @@ fn authority(node: &Node) -> Option<Authority> {
     let code = match a.args.get(1)? {
         Value::Text(s) | Value::Word(s) => s.clone(),
         Value::Number { raw, .. } => raw.clone(),
-        Value::Node(_) => return None,
+        Value::Node(_) | Value::Literal(_) => return None,
     };
     Some(Authority { name, code })
 }

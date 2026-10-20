@@ -10,7 +10,7 @@
 
 use super::tree::Node;
 use super::{authority, axes, ellipsoid, req_name, req_number, unit_child};
-use crate::names::{ParamClass, ParamName, ProjectionMethod, harmonize_params, refine_method};
+use crate::names::{ParamName, ProjectionMethod, harmonize_params, refine_method};
 use crate::{
     AxisOrder, BaseCrs, Crs, CrsError, CrsKind, Datum, Dialect, Parameter, PrimeMeridian,
     Projection, Unit, UnitKind,
@@ -76,20 +76,18 @@ fn geodetic_datum(cs: &Node) -> Result<Datum, CrsError> {
     })
 }
 
-/// `TOWGS84[dx,dy,dz]` or `TOWGS84[dx,dy,dz,rx,ry,rz,ds]`. Other arities are ignored (not an
-/// error: the CRS is still usable without the shift).
+/// `TOWGS84[dx,dy,dz]` or `TOWGS84[dx,dy,dz,rx,ry,rz,ds]`. Anything else — another arity or
+/// any non-numeric argument — gives `None` (not an error: the CRS is still usable without the
+/// shift). Values are never shifted into the wrong slots.
 fn towgs84(node: &Node) -> Option<[f64; 7]> {
-    let values: Vec<f64> = (0..node.args.len())
-        .filter_map(|i| node.number(i))
-        .collect();
-    let mut out = [0.0; 7];
-    match values.len() {
-        3 | 7 => {
-            out[..values.len()].copy_from_slice(&values);
-            Some(out)
-        }
-        _ => None,
+    if !matches!(node.args.len(), 3 | 7) {
+        return None;
     }
+    let mut out = [0.0; 7];
+    for (i, slot) in out.iter_mut().take(node.args.len()).enumerate() {
+        *slot = node.number(i)?;
+    }
+    Some(out)
 }
 
 fn projcs(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
@@ -109,19 +107,17 @@ fn projcs(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
         .map(|p| {
             let original_name = req_name(p)?;
             let name = ParamName::from_name(&original_name);
-            let unit = match name.class() {
-                ParamClass::Angular => Some(angular_unit.clone()),
-                ParamClass::Linear => linear_unit.clone(),
-                ParamClass::Scale => Some(Unit::unity()),
-                ParamClass::Unknown => None,
-            };
-            Ok(Parameter {
+            let unit = name
+                .class()
+                .default_unit(&angular_unit, linear_unit.as_ref());
+            Parameter {
                 name,
                 value: req_number(p, 1, "parameter value")?,
                 original_name,
                 unit,
                 authority: authority(p),
-            })
+            }
+            .validated()
         })
         .collect::<Result<Vec<_>, CrsError>>()?;
 
@@ -192,21 +188,10 @@ fn simple_datum(node: &Node) -> Result<Datum, CrsError> {
     })
 }
 
-const CRS_KEYWORDS: &[&str] = &[
-    "GEOGCS",
-    "PROJCS",
-    "GEOCCS",
-    "VERT_CS",
-    "VERTCS",
-    "COMPD_CS",
-    "LOCAL_CS",
-    "FITTED_CS",
-];
-
 fn compd_cs(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
     let mut crs = Crs::empty(CrsKind::Compound, dialect, req_name(node)?);
     crs.components = node
-        .children_named(CRS_KEYWORDS)
+        .children_named(super::WKT1_ROOTS)
         .map(|c| self::crs(c, dialect))
         .collect::<Result<Vec<_>, _>>()?;
     if crs.components.is_empty() {
@@ -249,6 +234,29 @@ mod tests {
         assert!((lat0.degrees().unwrap() - 46.8).abs() < 1e-9);
         let pm = &crs.datum.as_ref().unwrap().prime_meridian;
         assert!((pm.longitude - 2.337_229_166_666_667).abs() < 1e-12);
+    }
+
+    #[test]
+    fn malformed_towgs84_is_dropped_whole() {
+        let with = |towgs84: &str| {
+            parse_wkt(&format!(
+                r#"GEOGCS["x",DATUM["d",SPHEROID["s",6378137,298.257],{towgs84}],UNIT["degree",0.0174532925199433]]"#
+            ))
+            .unwrap()
+            .datum
+            .unwrap()
+            .to_wgs84
+        };
+        assert_eq!(
+            with("TOWGS84[1,2,3]"),
+            Some([1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0])
+        );
+        // A non-numeric argument must not shift later values into earlier slots.
+        assert_eq!(with(r#"TOWGS84[1,"x",3,4,5,6,7]"#), None);
+        assert_eq!(with("TOWGS84[1,2,3,NORTH]"), None);
+        // Wrong arity.
+        assert_eq!(with("TOWGS84[1,2,3,4,5,6]"), None);
+        assert_eq!(with("TOWGS84[]"), None);
     }
 
     #[test]

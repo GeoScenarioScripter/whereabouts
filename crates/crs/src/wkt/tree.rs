@@ -36,6 +36,9 @@ pub(crate) enum Value {
     },
     /// An unquoted word that is not followed by a bracket (`NORTH`, `ellipsoidal`, …).
     Word(String),
+    /// An unquoted ISO 8601 date/time (`2013-01-01`, `1980-01-06T00:00:00.0Z`). It only appears
+    /// in usage/temporal metadata, which the interpreters skip.
+    Literal(String),
 }
 
 impl Node {
@@ -263,10 +266,12 @@ impl Parser<'_> {
         }
     }
 
+    /// A number, or an unquoted ISO 8601 date/time literal (`2013-01-01`,
+    /// `1980-01-06T00:00:00.0Z`, as in `TIMEEXTENT[…]` / `TIMEORIGIN[…]`).
     fn number(&mut self) -> Result<Value, CrsError> {
         let start = self.pos;
         while let Some(b) = self.peek() {
-            if b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.' | b'e' | b'E') {
+            if b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.' | b':') {
                 self.pos += 1;
             } else {
                 break;
@@ -278,9 +283,24 @@ impl Parser<'_> {
                 value,
                 raw: raw.to_owned(),
             }),
+            Err(_) if is_date_time(raw) => Ok(Value::Literal(raw.to_owned())),
             _ => Err(CrsError::syntax(start, format!("invalid number `{raw}`"))),
         }
     }
+}
+
+/// ISO 8601 calendar date, optionally with a time: `YYYY-MM[-DD][Thh[:mm[:ss[.f]]][Z|±hh[:mm]]]`.
+/// Checked loosely (shape, not ranges): it is only ever skipped.
+fn is_date_time(s: &str) -> bool {
+    let b = s.as_bytes();
+    let date_ok = b.len() >= 7
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit);
+    date_ok
+        && b[7..]
+            .iter()
+            .all(|c| c.is_ascii_digit() || matches!(c, b'-' | b':' | b'.' | b'+' | b'T' | b'Z'))
 }
 
 #[cfg(test)]
@@ -300,6 +320,27 @@ mod tests {
         assert_eq!(a.child(&["B"]).unwrap().number(0), Some(2.0));
         assert_eq!(roots[1].keyword, "C");
         assert!(roots[1].args.is_empty());
+    }
+
+    #[test]
+    fn iso_dates_are_literals() {
+        let roots = parse_document(
+            "TIMEEXTENT[2013-01-01,2013-12-31T23:59:59.5Z],T[1980-01-06T00:00:00+01:00]",
+        )
+        .unwrap();
+        assert_eq!(roots[0].args[0], Value::Literal("2013-01-01".into()));
+        assert_eq!(
+            roots[0].args[1],
+            Value::Literal("2013-12-31T23:59:59.5Z".into())
+        );
+        assert_eq!(roots[0].number(0), None);
+        assert_eq!(
+            roots[1].args[0],
+            Value::Literal("1980-01-06T00:00:00+01:00".into())
+        );
+        for bad in ["A[2013-01]x", "A[201-01-01]", "A[2013-01-01Q]", "A[12:30]"] {
+            assert!(parse_document(bad).is_err(), "{bad:?} should fail");
+        }
     }
 
     #[test]

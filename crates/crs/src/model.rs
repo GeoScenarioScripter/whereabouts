@@ -152,6 +152,19 @@ impl Unit {
     }
 }
 
+/// `value` if it is finite, else an [`crate::CrsError::Invalid`] naming `element`. Used after
+/// every value × unit-factor product: finite inputs can still overflow (1e300 × 1e300).
+pub(crate) fn finite(element: &'static str, value: f64) -> Result<f64, crate::CrsError> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(crate::CrsError::invalid(
+            element,
+            format!("value {value} is not finite"),
+        ))
+    }
+}
+
 pub(crate) fn approx(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-12 * a.abs().max(b.abs()).max(1.0)
 }
@@ -300,6 +313,14 @@ impl Parameter {
     /// Whether this parameter is an angle, a length, a scale, or unknown.
     pub fn class(&self) -> ParamClass {
         self.name.class()
+    }
+
+    /// Checks that the value and its unit conversions ([`Self::normalized`], hence
+    /// [`Self::degrees`] / [`Self::metres`]) are finite, so a parsed CRS never carries ±inf.
+    pub(crate) fn validated(self) -> Result<Self, crate::CrsError> {
+        finite("parameter value", self.value)?;
+        finite("parameter value", self.normalized())?;
+        Ok(self)
     }
 }
 

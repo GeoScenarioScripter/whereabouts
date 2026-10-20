@@ -7,9 +7,8 @@
 
 use super::tree::Node;
 use super::{authority, axes, ellipsoid, req_name, req_number, unit_child};
-use crate::names::{
-    ParamClass, ParamName, ProjectionMethod, harmonize_params, name_key, refine_method,
-};
+use crate::helmert::{self, Encoding, RawParam};
+use crate::names::{ParamName, ProjectionMethod, harmonize_params, refine_method};
 use crate::{
     AxisOrder, BaseCrs, Crs, CrsError, CrsKind, Datum, Dialect, Parameter, PrimeMeridian,
     Projection, Unit, UnitKind,
@@ -98,6 +97,17 @@ fn cs_type(node: &Node) -> Option<String> {
 }
 
 fn geodetic(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
+    // A derived geographic CRS (`GEOGCRS[…, BASEGEOGCRS[…], DERIVINGCONVERSION[…], …]`, e.g. a
+    // rotated pole) has no datum of its own and isn't georeferenced the plain way: Unknown,
+    // as PROJJSON's `DerivedGeographicCRS`.
+    if node
+        .child(&["BASEGEOGCRS", "BASEGEODCRS", "DERIVINGCONVERSION"])
+        .is_some()
+    {
+        let mut crs = Crs::empty(CrsKind::Unknown, dialect, req_name(node)?);
+        crs.authority = authority(node);
+        return Ok(crs);
+    }
     let mut crs = Crs::empty(CrsKind::Geographic, dialect, req_name(node)?);
     finish_axes(&mut crs, node, UnitKind::Angular)?;
     let unit = cs_unit(node, &crs, UnitKind::Unknown)?;
@@ -156,7 +166,10 @@ fn geodetic_datum(crs: &Node, angular_fallback: &Unit) -> Result<Datum, CrsError
                 .unwrap_or_else(|| angular_fallback.clone());
             PrimeMeridian {
                 name: req_name(pm)?,
-                longitude: unit.to_degrees(value).unwrap_or(value),
+                longitude: crate::model::finite(
+                    "prime meridian longitude",
+                    unit.to_degrees(value).unwrap_or(value),
+                )?,
                 authority: authority(pm),
             }
         }
@@ -233,28 +246,18 @@ fn projection(
                 .and_then(crate::Authority::epsg)
                 .and_then(ParamName::from_epsg)
                 .unwrap_or_else(|| ParamName::from_name(&original_name));
-            let context = match name.class() {
-                ParamClass::Angular => UnitKind::Angular,
-                ParamClass::Linear => UnitKind::Linear,
-                ParamClass::Scale => UnitKind::Scale,
-                ParamClass::Unknown => UnitKind::Unknown,
-            };
-            let unit = match unit_child(p, context)? {
+            let unit = match unit_child(p, name.class().unit_kind())? {
                 Some(u) => Some(u),
-                None => match name.class() {
-                    ParamClass::Angular => Some(angular.clone()),
-                    ParamClass::Linear => linear.cloned(),
-                    ParamClass::Scale => Some(Unit::unity()),
-                    ParamClass::Unknown => None,
-                },
+                None => name.class().default_unit(angular, linear),
             };
-            Ok(Parameter {
+            Parameter {
                 name,
                 value: req_number(p, 1, "parameter value")?,
                 original_name,
                 unit,
                 authority: param_authority,
-            })
+            }
+            .validated()
         })
         .collect::<Result<Vec<_>, CrsError>>()?;
 
@@ -323,7 +326,8 @@ fn compound(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
 }
 
 /// `BOUNDCRS[SOURCECRS[…], TARGETCRS[…], ABRIDGEDTRANSFORMATION[…]]` → the source CRS, with a
-/// Helmert transformation to WGS 84 recorded as `to_wgs84` on its (horizontal) datum.
+/// Helmert transformation to WGS 84 recorded as `to_wgs84` on its (horizontal) datum. An
+/// unreadable transformation leaves `to_wgs84` empty; the source CRS is still returned.
 fn bound(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
     let source = node
         .child(&["SOURCECRS"])
@@ -334,79 +338,25 @@ fn bound(node: &Node, dialect: Dialect) -> Result<Crs, CrsError> {
         .child(&["TARGETCRS"])
         .and_then(|t| t.children().find(|n| is_crs_node(n)))
         .is_some_and(|t| {
-            authority(t).and_then(|a| a.epsg()) == Some(4326)
-                || name_key(t.name().unwrap_or("")) == "wgs84"
+            helmert::is_wgs84(authority(t).and_then(|a| a.epsg()), t.name().unwrap_or(""))
         });
-    let helmert = node
-        .child(&["ABRIDGEDTRANSFORMATION"])
-        .and_then(|t| helmert_to_wgs84(t).transpose())
-        .transpose()?;
-    if let (true, Some(h)) = (target_is_wgs84, helmert) {
-        let datum = match crs.kind {
-            CrsKind::Compound => crs
-                .components
-                .iter_mut()
-                .find(|c| matches!(c.kind, CrsKind::Geographic | CrsKind::Projected))
-                .and_then(|c| c.datum.as_mut()),
-            _ => crs.datum.as_mut(),
-        };
-        if let Some(datum) = datum {
-            datum.to_wgs84 = Some(h);
+    let transformation = node.child(&["ABRIDGEDTRANSFORMATION"]);
+    if let (true, Some(t)) = (target_is_wgs84, transformation) {
+        let method = t.child(&["METHOD"]).and_then(Node::name).unwrap_or("");
+        let params: Vec<RawParam> = t
+            .children_named(&["PARAMETER"])
+            .map(|p| RawParam {
+                name: p.name().unwrap_or("").to_owned(),
+                epsg: authority(p).and_then(|a| a.epsg()),
+                value: p.number(1),
+                unit: unit_child(p, UnitKind::Unknown).map_err(|_| ()),
+            })
+            .collect();
+        if let Some(h) = helmert::helmert_from_params(method, &params, Encoding::Abridged) {
+            helmert::apply_to_wgs84(&mut crs, h);
         }
     }
     Ok(crs)
-}
-
-/// Reads a 3- or 7-parameter Helmert transformation into TOWGS84 conventions (metres,
-/// arc-seconds, ppm, position-vector rotation signs). Unknown methods give `None`.
-fn helmert_to_wgs84(t: &Node) -> Result<Option<[f64; 7]>, CrsError> {
-    let method = t
-        .child(&["METHOD"])
-        .and_then(Node::name)
-        .map(name_key)
-        .unwrap_or_default();
-    let coordinate_frame = method.contains("coordinateframe");
-    if !(method.contains("geocentrictranslation")
-        || method.contains("positionvector")
-        || coordinate_frame)
-    {
-        return Ok(None);
-    }
-    let arcsec = std::f64::consts::PI / 648_000.0;
-    let mut out = [0.0; 7];
-    for p in t.children_named(&["PARAMETER"]) {
-        let code = authority(p).and_then(|a| a.epsg());
-        let key = name_key(p.name().unwrap_or(""));
-        let slot = match (code, key.as_str()) {
-            (Some(8605), _) | (_, "xaxistranslation") => 0,
-            (Some(8606), _) | (_, "yaxistranslation") => 1,
-            (Some(8607), _) | (_, "zaxistranslation") => 2,
-            (Some(8608), _) | (_, "xaxisrotation") => 3,
-            (Some(8609), _) | (_, "yaxisrotation") => 4,
-            (Some(8610), _) | (_, "zaxisrotation") => 5,
-            (Some(8611), _) | (_, "scaledifference") => 6,
-            _ => continue,
-        };
-        let raw = req_number(p, 1, "transformation parameter")?;
-        let unit = unit_child(p, UnitKind::Unknown)?;
-        let factor = unit.as_ref().map_or(1.0, |u| u.factor);
-        out[slot] = match slot {
-            // Translations: metres (the default when no unit is given).
-            0..=2 => raw * factor,
-            // Rotations: arc-seconds (the default when no unit is given).
-            3..=5 if unit.is_some() => raw * factor / arcsec,
-            // Scale: PROJ writes the multiplier `1 + ds` (e.g. 0.999979511); EPSG uses ppm.
-            6 if factor == 1.0 && (raw - 1.0).abs() < 0.01 => (raw - 1.0) * 1e6,
-            6 if unit.is_some() => raw * factor / 1e-6,
-            _ => raw,
-        };
-    }
-    if coordinate_frame {
-        for r in &mut out[3..6] {
-            *r = -*r;
-        }
-    }
-    Ok(Some(out))
 }
 
 #[cfg(test)]
@@ -454,16 +404,81 @@ mod tests {
         assert!((t[6] - -20.489).abs() < 1e-6, "{}", t[6]);
     }
 
+    fn bound_with(params: &str) -> crate::Crs {
+        parse_wkt(&format!(
+            r#"BOUNDCRS[SOURCECRS[GEOGCRS["OSGB 1936",DATUM["OSGB 1936",ELLIPSOID["Airy 1830",6377563.396,299.3249646]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433]]],TARGETCRS[GEOGCRS["WGS 84",DATUM["WGS 84",ELLIPSOID["WGS 84",6378137,298.257223563]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",4326]]],ABRIDGEDTRANSFORMATION["t",METHOD["Position Vector transformation (geog2D domain)"],{params}]]"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn bound_scale_difference_and_malformed_parameters() {
+        let ok = r#"PARAMETER["X-axis translation",446.448],PARAMETER["Y-axis translation",-125.157],PARAMETER["Z-axis translation",542.06]"#;
+        // Abridged, no unit: PROJ's multiplier form 1 + dS.
+        let crs = bound_with(&format!(
+            r#"{ok},PARAMETER["Scale difference",1.000000995]"#
+        ));
+        let t = crs.datum.unwrap().to_wgs84.unwrap();
+        assert!((t[6] - 0.995).abs() < 1e-9, "{t:?}");
+        // Explicit ppm unit: 0.995 ppm stays 0.995 ppm.
+        let crs = bound_with(&format!(
+            r#"{ok},PARAMETER["Scale difference",0.995,SCALEUNIT["parts per million",1E-06]]"#
+        ));
+        let t = crs.datum.unwrap().to_wgs84.unwrap();
+        assert!((t[6] - 0.995).abs() < 1e-9, "{t:?}");
+        // Explicit unity multiplier.
+        let crs = bound_with(&format!(
+            r#"{ok},PARAMETER["Scale difference",1.000000995,SCALEUNIT["unity",1]]"#
+        ));
+        let t = crs.datum.unwrap().to_wgs84.unwrap();
+        assert!((t[6] - 0.995).abs() < 1e-9, "{t:?}");
+        // Malformed parameters drop the transformation but keep the source CRS.
+        for bad in [
+            r#"PARAMETER["X-axis translation","abc"]"#,
+            r#"PARAMETER["X-axis translation"]"#,
+            r#"PARAMETER["X-axis translation",1,LENGTHUNIT["m",-1]]"#,
+            r#"PARAMETER["X-axis translation",1e300,LENGTHUNIT["huge",1e300]]"#,
+        ] {
+            let crs = bound_with(&format!("{ok},{bad}"));
+            assert_eq!(crs.kind, CrsKind::Geographic, "{bad}");
+            assert_eq!(crs.name, "OSGB 1936");
+            assert_eq!(crs.datum.unwrap().to_wgs84, None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn overflowing_unit_products_are_rejected() {
+        for bad in [
+            r#"GEOGCRS["x",DATUM["d",ELLIPSOID["e",6378137,298.257]],PRIMEM["p",1e300,ANGLEUNIT["u",1e300]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433]]"#,
+            r#"GEOGCRS["x",DATUM["d",ELLIPSOID["e",1e300,298.257,LENGTHUNIT["u",1e300]]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433]]"#,
+            r#"PROJCRS["x",BASEGEOGCRS["b",DATUM["d",ELLIPSOID["e",6378137,298.257]]],CONVERSION["c",METHOD["Transverse Mercator"],PARAMETER["False easting",1e300,LENGTHUNIT["u",1e300]]],CS[Cartesian,2],AXIS["e",east],AXIS["n",north],LENGTHUNIT["metre",1]]"#,
+            r#"PROJCRS["x",BASEGEOGCRS["b",DATUM["d",ELLIPSOID["e",6378137,298.257]]],CONVERSION["c",METHOD["Transverse Mercator"],PARAMETER["Longitude of natural origin",1e306,ANGLEUNIT["u",1e3]]],CS[Cartesian,2],AXIS["e",east],AXIS["n",north],LENGTHUNIT["metre",1]]"#,
+        ] {
+            assert!(
+                matches!(parse_wkt(bad), Err(crate::CrsError::Invalid { .. })),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn derived_geographic_is_unknown() {
+        let crs = parse_wkt(
+            r#"GEOGCRS["Rotated_pole",BASEGEOGCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563]]],DERIVINGCONVERSION["Pole rotation",METHOD["Pole rotation (netCDF CF convention)"],PARAMETER["Grid north pole latitude (netCDF CF convention)",37.5,ANGLEUNIT["degree",0.0174532925199433]]],CS[ellipsoidal,2],AXIS["latitude",north],AXIS["longitude",east],ANGLEUNIT["degree",0.0174532925199433]]"#,
+        )
+        .unwrap();
+        assert_eq!(crs.kind, CrsKind::Unknown);
+        assert_eq!(crs.name, "Rotated_pole");
+    }
+
     #[test]
     fn unknown_wkt2_kinds_and_garbage() {
+        // TIMEORIGIN holds an unquoted ISO 8601 date-time literal.
         let crs = parse_wkt(
             r#"TIMECRS["GPS time",TDATUM["Time origin",TIMEORIGIN[1980-01-06T00:00:00.0Z]],CS[temporal,1],AXIS["time",future],TIMEUNIT["day",86400.0]]"#,
-        );
-        // TIMEORIGIN holds an unquoted ISO date, which isn't valid WKT token syntax for us:
-        // either outcome is acceptable as long as nothing panics.
-        if let Ok(crs) = crs {
-            assert_eq!(crs.kind, CrsKind::Unknown);
-        }
+        )
+        .unwrap();
+        assert_eq!(crs.kind, CrsKind::Unknown);
         let crs = parse_wkt(r#"PARAMETRICCRS["WMO standard atmosphere",PDATUM["Mean Sea Level",ANCHOR["1013.25 hPa at 15°C"]],CS[parametric,1],AXIS["pressure (hPa)",up],PARAMETRICUNIT["hPa",100.0]]"#).unwrap();
         assert_eq!(crs.kind, CrsKind::Unknown);
         assert!(parse_wkt("PROJCRS[\"x\"]").is_err());

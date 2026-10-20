@@ -33,8 +33,20 @@ fn check_invariants(crs: &Crs, what: &dyn Fn() -> String) {
             what()
         );
     }
+    for a in &crs.axes {
+        if let Some(u) = &a.unit {
+            assert!(u.factor.is_finite() && u.factor > 0.0, "{}", what());
+        }
+    }
     if let Some(d) = &crs.datum {
         assert!(d.prime_meridian.longitude.is_finite(), "{}", what());
+        if let Some(t) = &d.to_wgs84 {
+            assert!(
+                t.iter().all(|v| v.is_finite()),
+                "to_wgs84 {t:?} from {}",
+                what()
+            );
+        }
         if let Some(e) = &d.ellipsoid {
             assert!(
                 e.semi_major_axis.is_finite() && e.semi_major_axis > 0.0,
@@ -52,6 +64,7 @@ fn check_invariants(crs: &Crs, what: &dyn Fn() -> String) {
     if let Some(p) = &crs.projection {
         for param in &p.parameters {
             assert!(param.value.is_finite(), "{}", what());
+            assert!(param.normalized().is_finite(), "{}", what());
             if let Some(u) = &param.unit {
                 assert!(u.factor.is_finite() && u.factor > 0.0, "{}", what());
             }
@@ -246,5 +259,91 @@ fn pathological_inputs_are_rejected() {
     for (name, bytes) in cases {
         let r = parse_checked(&bytes, &|| name.clone());
         assert!(r.is_err(), "{name} should be rejected, got {r:?}");
+    }
+}
+
+/// Finite values times finite unit factors can still overflow (1e300 × 1e300). Every such
+/// product must be rejected (or, for a bound CRS's transformation, dropped) — never stored as
+/// ±inf.
+#[test]
+fn overflowing_unit_products_never_reach_the_model() {
+    // Every fixture with its unit factors blown up to 1e307: values above ~18 overflow, and
+    // degree conversions overflow for any value above ~0.3.
+    let mut variants = 0usize;
+    for f in fixtures() {
+        let text = String::from_utf8_lossy(&f.bytes).into_owned();
+        for (from, to) in [
+            ("0.0174532925199433", "1e307"),
+            ("0.017453292519943295", "1e307"),
+            ("0.0157079632679489", "1e307"),
+            ("\"metre\",1", "\"metre\",1e307"),
+            ("0.304800609601219", "1e307"),
+        ] {
+            if text.contains(from) {
+                let blown = text.replace(from, to);
+                let _ = parse_checked(blown.as_bytes(), &|| {
+                    format!("{} with {from} -> {to}", f.id)
+                });
+                variants += 1;
+            }
+        }
+    }
+    assert!(variants > 100, "only {variants} variants");
+
+    let geog = |inner: &str| {
+        format!(
+            r#"GEOGCRS["x",DATUM["d",ELLIPSOID["e",{inner}]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433]]"#
+        )
+    };
+    let bound = |param: &str| {
+        format!(
+            r#"BOUNDCRS[SOURCECRS[{}],TARGETCRS[GEOGCRS["WGS 84",DATUM["WGS 84",ELLIPSOID["WGS 84",6378137,298.257223563]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east],ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",4326]]],ABRIDGEDTRANSFORMATION["t",METHOD["Position Vector transformation"],{param}]]"#,
+            geog("6378137,298.257")
+        )
+    };
+    let bound_json = |param: &str| {
+        format!(
+            r#"{{"type":"BoundCRS","source_crs":{{"type":"GeographicCRS","name":"x","datum":{{"name":"d","ellipsoid":{{"name":"e","semi_major_axis":6378137,"inverse_flattening":298.257}}}}}},"target_crs":{{"type":"GeographicCRS","name":"WGS 84","datum":{{"name":"d","ellipsoid":{{"name":"e","semi_major_axis":6378137,"inverse_flattening":298.257}}}}}},"transformation":{{"name":"t","method":{{"name":"Position Vector transformation"}},"parameters":[{param}]}}}}"#
+        )
+    };
+    let huge_len = r#"{"type":"LinearUnit","name":"u","conversion_factor":1e300}"#;
+    let huge_ang = r#"{"type":"AngularUnit","name":"u","conversion_factor":1e300}"#;
+    let huge_scale = r#"{"type":"ScaleUnit","name":"u","conversion_factor":1e300}"#;
+    let cases = [
+        geog(r#"1e300,298.257,LENGTHUNIT["u",1e300]"#),
+        r#"GEOGCRS["x",DATUM["d",ELLIPSOID["e",6378137,298.257]],PRIMEM["p",1e300,ANGLEUNIT["u",1e300]],CS[ellipsoidal,2],AXIS["lat",north],AXIS["lon",east]]"#.to_owned(),
+        r#"PROJCRS["x",BASEGEOGCRS["b",DATUM["d",ELLIPSOID["e",6378137,298.257]]],CONVERSION["c",METHOD["Mercator"],PARAMETER["Latitude of 1st standard parallel",1e300,ANGLEUNIT["u",1e300]]],CS[Cartesian,2],AXIS["e",east],AXIS["n",north],LENGTHUNIT["metre",1]]"#.to_owned(),
+        r#"PROJCS["x",GEOGCS["g",DATUM["d",SPHEROID["s",6378137,298.257]],UNIT["u",1e300]],PROJECTION["Transverse_Mercator"],PARAMETER["central_meridian",1e300],UNIT["metre",1]]"#.to_owned(),
+        r#"PROJCS["x",GEOGCS["g",DATUM["d",SPHEROID["s",6378137,298.257]],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["false_easting",1e300],UNIT["u",1e300]]"#.to_owned(),
+        bound(r#"PARAMETER["X-axis translation",1e300,LENGTHUNIT["u",1e300]]"#),
+        bound(r#"PARAMETER["X-axis rotation",1e300,ANGLEUNIT["u",1e300]]"#),
+        // 1e306 radians is ~2e311 arc-seconds: overflows only after the conversion.
+        bound(r#"PARAMETER["X-axis rotation",1e306,ANGLEUNIT["radian",1]]"#),
+        bound(r#"PARAMETER["Scale difference",1e300,SCALEUNIT["u",1e300]]"#),
+        bound(r#"PARAMETER["Scale difference",1e305]"#),
+        bound_json(&format!(
+            r#"{{"name":"X-axis translation","value":1e300,"unit":{huge_len}}}"#
+        )),
+        bound_json(&format!(
+            r#"{{"name":"Z-axis rotation","value":1e300,"unit":{huge_ang}}}"#
+        )),
+        bound_json(&format!(
+            r#"{{"name":"Scale difference","value":1e300,"unit":{huge_scale}}}"#
+        )),
+        bound_json(r#"{"name":"Scale difference","value":1e305,"unit":"unity"}"#),
+        format!(
+            r#"{{"type":"GeographicCRS","name":"x","datum":{{"name":"d","ellipsoid":{{"name":"e","semi_major_axis":6378137,"inverse_flattening":298.257}},"prime_meridian":{{"name":"p","longitude":{{"value":1e300,"unit":{huge_ang}}}}}}}}}"#
+        ),
+        format!(
+            r#"{{"type":"GeographicCRS","name":"x","datum":{{"name":"d","ellipsoid":{{"name":"e","semi_major_axis":6378137,"semi_minor_axis":{{"value":1e300,"unit":{huge_len}}}}}}}}}"#
+        ),
+    ];
+    for (i, case) in cases.iter().enumerate() {
+        let r = parse_checked(case.as_bytes(), &|| format!("overflow case #{i}: {case}"));
+        if let Ok(crs) = &r {
+            // Only bound CRSs may survive, and then without the transformation.
+            let to_wgs84 = crs.datum.as_ref().and_then(|d| d.to_wgs84);
+            assert_eq!(to_wgs84, None, "overflow case #{i} kept {to_wgs84:?}");
+        }
     }
 }

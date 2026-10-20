@@ -145,6 +145,9 @@ const CASES: &[Case] = &[
     Case { fixture: "handwritten/wkt2_2019-boundcrs.txt", kind: CrsKind::Projected, method: Some(M::TransverseMercator), linear: Some(METRE), angular: Some(DEG), authority: Some(("EPSG", "27700")) },
     Case { fixture: "handwritten/wkt2_2019-engcrs.txt", kind: CrsKind::Engineering, method: None, linear: Some(METRE), angular: None, authority: None },
     Case { fixture: "handwritten/wkt2_2019-escaped-quotes.txt", kind: CrsKind::Geographic, method: None, linear: None, angular: Some(DEG), authority: None },
+    Case { fixture: "handwritten/wkt2_2019-usage-timeextent.txt", kind: CrsKind::Projected, method: Some(M::TransverseMercator), linear: Some(METRE), angular: Some(DEG), authority: Some(("EPSG", "32633")) },
+    Case { fixture: "handwritten/wkt2_2019-rotated-pole.txt", kind: CrsKind::Unknown, method: None, linear: None, angular: None, authority: None },
+    Case { fixture: "handwritten/projjson-rotated-pole.json", kind: CrsKind::Unknown, method: None, linear: None, angular: None, authority: None },
 ];
 
 /// Per-file method exceptions, where a dialect legitimately names a different (equivalent or
@@ -459,6 +462,22 @@ fn spot_checks() {
             assert!((got - want).abs() < 1e-6, "{id}: {t:?}");
         }
     }
+    // Derived geographic CRSs (rotated pole) are Unknown in both encodings.
+    let wkt = parse("handwritten/wkt2_2019-rotated-pole.txt");
+    let json = parse("handwritten/projjson-rotated-pole.json");
+    assert_eq!(wkt.kind, CrsKind::Unknown);
+    assert_eq!((wkt.kind, &wkt.name), (json.kind, &json.name));
+    // USAGE with TIMEEXTENT date literals is skipped; the CRS is the same as without it.
+    let with_usage = parse("handwritten/wkt2_2019-usage-timeextent.txt");
+    let plain = parse("epsg-32633/wkt2_2019.txt");
+    assert_eq!(
+        with_usage.projection.as_ref().map(|p| p.method),
+        plain.projection.as_ref().map(|p| p.method)
+    );
+    assert_eq!(
+        param(&with_usage, ParamName::LongitudeOfOrigin),
+        param(&plain, ParamName::LongitudeOfOrigin)
+    );
     // Escaped quotes and axis order.
     let quoted = parse("handwritten/wkt2_2019-escaped-quotes.txt");
     assert_eq!(quoted.name, r#"Somebody's "custom" WGS 84"#);

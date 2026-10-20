@@ -508,6 +508,34 @@ pub enum ParamClass {
     Unknown,
 }
 
+impl ParamClass {
+    /// The unit kind a parameter of this class is measured in (the kind a generic WKT `UNIT`
+    /// on the parameter takes).
+    pub fn unit_kind(self) -> crate::UnitKind {
+        match self {
+            Self::Angular => crate::UnitKind::Angular,
+            Self::Linear => crate::UnitKind::Linear,
+            Self::Scale => crate::UnitKind::Scale,
+            Self::Unknown => crate::UnitKind::Unknown,
+        }
+    }
+
+    /// The unit a parameter of this class inherits when none is written: the geographic
+    /// (base) CRS's angular unit, the projected CRS's linear unit, or unity.
+    pub(crate) fn default_unit(
+        self,
+        angular: &crate::Unit,
+        linear: Option<&crate::Unit>,
+    ) -> Option<crate::Unit> {
+        match self {
+            Self::Angular => Some(angular.clone()),
+            Self::Linear => linear.cloned(),
+            Self::Scale => Some(crate::Unit::unity()),
+            Self::Unknown => None,
+        }
+    }
+}
+
 const PARAM_ALIASES: &[(&str, ParamName)] = {
     use ParamName as P;
     &[

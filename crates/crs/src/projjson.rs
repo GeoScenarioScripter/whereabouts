@@ -6,9 +6,8 @@
 
 use serde_json::{Map, Value};
 
-use crate::names::{
-    ParamClass, ParamName, ProjectionMethod, harmonize_params, known_unit, name_key, refine_method,
-};
+use crate::helmert::{self, Encoding, RawParam};
+use crate::names::{ParamName, ProjectionMethod, harmonize_params, known_unit, refine_method};
 use crate::{
     Authority, Axis, AxisDirection, AxisOrder, BaseCrs, Crs, CrsError, CrsKind, Datum, Dialect,
     Ellipsoid, Parameter, PrimeMeridian, Projection, Unit, UnitKind,
@@ -244,7 +243,7 @@ fn geodetic_datum(o: &Obj) -> Result<Datum, CrsError> {
             let longitude = match pm.get("longitude") {
                 Some(l) => {
                     let (v, u) = measure(l, &Unit::degree())?;
-                    u.to_degrees(v).unwrap_or(v)
+                    crate::model::finite("prime meridian longitude", u.to_degrees(v).unwrap_or(v))?
                 }
                 None => 0.0,
             };
@@ -330,28 +329,18 @@ fn parameter(p: &Value, angular: &Unit, linear: Option<&Unit>) -> Result<Paramet
     let value = req(p, "value")?
         .as_f64()
         .ok_or_else(|| json_err(format!("parameter `{original_name}` value is not a number")))?;
-    let context = match name.class() {
-        ParamClass::Angular => UnitKind::Angular,
-        ParamClass::Linear => UnitKind::Linear,
-        ParamClass::Scale => UnitKind::Scale,
-        ParamClass::Unknown => UnitKind::Unknown,
-    };
     let unit = match p.get("unit") {
-        Some(u) => Some(unit(u, context)?),
-        None => match name.class() {
-            ParamClass::Angular => Some(angular.clone()),
-            ParamClass::Linear => linear.cloned(),
-            ParamClass::Scale => Some(Unit::unity()),
-            ParamClass::Unknown => None,
-        },
+        Some(u) => Some(unit(u, name.class().unit_kind())?),
+        None => name.class().default_unit(angular, linear),
     };
-    Ok(Parameter {
+    Parameter {
         name,
         original_name,
         value,
         unit,
         authority: param_authority,
-    })
+    }
+    .validated()
 }
 
 fn simple(o: &Obj, kind: CrsKind) -> Result<Crs, CrsError> {
@@ -391,87 +380,50 @@ fn compound(o: &Obj) -> Result<Crs, CrsError> {
 fn bound(o: &Obj) -> Result<Crs, CrsError> {
     let mut crs = self::crs(req(o, "source_crs")?)?;
     let target = object(req(o, "target_crs")?, "target_crs")?;
-    let target_is_wgs84 = authority(target).and_then(|a| a.epsg()) == Some(4326)
-        || target
-            .get("name")
+    let target_is_wgs84 = helmert::is_wgs84(
+        authority(target).and_then(|a| a.epsg()),
+        target.get("name").and_then(Value::as_str).unwrap_or(""),
+    );
+    let transformation = o.get("transformation").and_then(Value::as_object);
+    if let (true, Some(t)) = (target_is_wgs84, transformation) {
+        let method = t
+            .get("method")
+            .and_then(Value::as_object)
+            .and_then(|m| m.get("name"))
             .and_then(Value::as_str)
-            .is_some_and(|n| name_key(n) == "wgs84");
-    let helmert = match o.get("transformation") {
-        Some(t) => helmert_to_wgs84(object(t, "transformation")?)?,
-        None => None,
-    };
-    if let (true, Some(h)) = (target_is_wgs84, helmert) {
-        let datum = match crs.kind {
-            CrsKind::Compound => crs
-                .components
-                .iter_mut()
-                .find(|c| matches!(c.kind, CrsKind::Geographic | CrsKind::Projected))
-                .and_then(|c| c.datum.as_mut()),
-            _ => crs.datum.as_mut(),
-        };
-        if let Some(datum) = datum {
-            datum.to_wgs84 = Some(h);
+            .unwrap_or("");
+        // A malformed parameter list or parameter drops the transformation (see `helmert`).
+        let params: Option<Vec<RawParam>> =
+            t.get("parameters")
+                .and_then(Value::as_array)
+                .and_then(|list| {
+                    list.iter()
+                        .map(|p| {
+                            let p = p.as_object()?;
+                            Some(RawParam {
+                                name: p
+                                    .get("name")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("")
+                                    .to_owned(),
+                                epsg: authority(p).and_then(|a| a.epsg()),
+                                value: p.get("value").and_then(Value::as_f64),
+                                unit: p
+                                    .get("unit")
+                                    .map(|u| unit(u, UnitKind::Unknown))
+                                    .transpose()
+                                    .map_err(|_| ()),
+                            })
+                        })
+                        .collect()
+                });
+        if let Some(h) =
+            params.and_then(|ps| helmert::helmert_from_params(method, &ps, Encoding::Full))
+        {
+            helmert::apply_to_wgs84(&mut crs, h);
         }
     }
     Ok(crs)
-}
-
-fn helmert_to_wgs84(t: &Obj) -> Result<Option<[f64; 7]>, CrsError> {
-    let method = t
-        .get("method")
-        .and_then(Value::as_object)
-        .and_then(|m| m.get("name"))
-        .and_then(Value::as_str)
-        .map(name_key)
-        .unwrap_or_default();
-    let coordinate_frame = method.contains("coordinateframe");
-    if !(method.contains("geocentrictranslation")
-        || method.contains("positionvector")
-        || coordinate_frame)
-    {
-        return Ok(None);
-    }
-    let arcsec = std::f64::consts::PI / 648_000.0;
-    let mut out = [0.0; 7];
-    let Some(params) = t.get("parameters").and_then(Value::as_array) else {
-        return Ok(None);
-    };
-    for p in params {
-        let p = object(p, "parameter")?;
-        let code = authority(p).and_then(|a| a.epsg());
-        let key = p.get("name").and_then(Value::as_str).map(name_key);
-        let slot = match (code, key.as_deref()) {
-            (Some(8605), _) | (_, Some("xaxistranslation")) => 0,
-            (Some(8606), _) | (_, Some("yaxistranslation")) => 1,
-            (Some(8607), _) | (_, Some("zaxistranslation")) => 2,
-            (Some(8608), _) | (_, Some("xaxisrotation")) => 3,
-            (Some(8609), _) | (_, Some("yaxisrotation")) => 4,
-            (Some(8610), _) | (_, Some("zaxisrotation")) => 5,
-            (Some(8611), _) | (_, Some("scaledifference")) => 6,
-            _ => continue,
-        };
-        let raw = req(p, "value")?
-            .as_f64()
-            .ok_or_else(|| json_err("transformation parameter value is not a number"))?;
-        let u = p
-            .get("unit")
-            .map(|u| unit(u, UnitKind::Unknown))
-            .transpose()?;
-        let factor = u.as_ref().map_or(1.0, |u| u.factor);
-        out[slot] = match slot {
-            0..=2 => raw * factor,
-            3..=5 if u.is_some() => raw * factor / arcsec,
-            6 if factor == 1.0 && (raw - 1.0).abs() < 0.01 => (raw - 1.0) * 1e6,
-            6 if u.is_some() => raw * factor / 1e-6,
-            _ => raw,
-        };
-    }
-    if coordinate_frame {
-        for r in &mut out[3..6] {
-            *r = -*r;
-        }
-    }
-    Ok(Some(out))
 }
 
 #[cfg(test)]
@@ -490,6 +442,56 @@ mod tests {
         assert_eq!(crs.epsg(), Some(4326));
         assert_eq!(crs.axis_order, AxisOrder::NorthEast);
         assert!(crs.angular_unit.as_ref().unwrap().is_degree());
+    }
+
+    const OSGB: &str = r#"{"type":"GeographicCRS","name":"OSGB 1936","datum":{"name":"OSGB 1936","ellipsoid":{"name":"Airy 1830","semi_major_axis":6377563.396,"inverse_flattening":299.3249646}}}"#;
+    const WGS84: &str = r#"{"type":"GeographicCRS","name":"WGS 84","datum":{"name":"WGS 84","ellipsoid":{"name":"WGS 84","semi_major_axis":6378137,"inverse_flattening":298.257223563}},"id":{"authority":"EPSG","code":4326}}"#;
+
+    fn bound_with(params: &str) -> Crs {
+        parse(&format!(
+            r#"{{"type":"BoundCRS","source_crs":{OSGB},"target_crs":{WGS84},"transformation":{{"name":"t","method":{{"name":"Position Vector transformation (geog2D domain)"}},"parameters":[{{"name":"X-axis translation","value":446.448,"unit":"metre"}},{params}]}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn bound_scale_difference_and_malformed_parameters() {
+        // No unit on a (non-abridged) PROJJSON scale difference: ppm, whatever its magnitude.
+        let crs = bound_with(r#"{"name":"Scale difference","value":0.995}"#);
+        let t = crs.datum.unwrap().to_wgs84.unwrap();
+        assert!((t[6] - 0.995).abs() < 1e-9, "{t:?}");
+        // Explicit unity multiplier.
+        let crs = bound_with(r#"{"name":"Scale difference","value":1.000000995,"unit":"unity"}"#);
+        let t = crs.datum.unwrap().to_wgs84.unwrap();
+        assert!((t[6] - 0.995).abs() < 1e-9, "{t:?}");
+        // Malformed parameters drop the transformation but keep the source CRS.
+        for bad in [
+            r#"{"name":"Y-axis translation","value":"abc"}"#,
+            r#"{"name":"Y-axis translation"}"#,
+            r#"{"name":"Y-axis translation","value":1,"unit":"furlong"}"#,
+            r#"{"name":"Y-axis translation","value":1e300,"unit":{"type":"LinearUnit","name":"huge","conversion_factor":1e300}}"#,
+            r#"42"#,
+        ] {
+            let crs = bound_with(bad);
+            assert_eq!(crs.kind, CrsKind::Geographic, "{bad}");
+            assert_eq!(crs.name, "OSGB 1936");
+            assert_eq!(crs.datum.unwrap().to_wgs84, None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn overflowing_unit_products_are_rejected() {
+        for bad in [
+            r#"{"type":"GeographicCRS","name":"x","datum":{"name":"d","ellipsoid":{"name":"e","semi_major_axis":6378137,"inverse_flattening":298.257},"prime_meridian":{"name":"p","longitude":{"value":1e300,"unit":{"type":"AngularUnit","name":"u","conversion_factor":1e300}}}}}"#,
+            r#"{"type":"GeographicCRS","name":"x","datum":{"name":"d","ellipsoid":{"name":"e","semi_major_axis":{"value":1e300,"unit":{"type":"LinearUnit","name":"u","conversion_factor":1e300}},"inverse_flattening":298.257}}}"#,
+            r#"{"type":"ProjectedCRS","name":"x","base_crs":{"name":"b","datum":{"name":"d","ellipsoid":{"name":"e","semi_major_axis":6378137,"inverse_flattening":298.257}}},"conversion":{"name":"c","method":{"name":"Transverse Mercator"},"parameters":[{"name":"False easting","value":1e300,"unit":{"type":"LinearUnit","name":"u","conversion_factor":1e300}}]}}"#,
+        ] {
+            assert!(
+                matches!(parse(bad), Err(CrsError::Invalid { .. })),
+                "{bad}: {:?}",
+                parse(bad)
+            );
+        }
     }
 
     #[test]
