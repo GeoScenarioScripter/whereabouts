@@ -350,8 +350,10 @@ impl<'a> RecordIter<'a> {
     }
 
     /// Resumes iteration at byte `pos` of `buf` (offsets in errors are positions in `buf`).
-    /// Lets a caller that owns the buffer keep only a cursor between calls.
-    pub(crate) fn resume(buf: &'a [u8], pos: usize) -> Self {
+    /// Lets a caller that owns the buffer keep only a cursor between calls (the enumerator does
+    /// this; 2.2's journal reader can do the same) instead of re-implementing the record walk.
+    #[must_use]
+    pub fn resume(buf: &'a [u8], pos: usize) -> Self {
         Self {
             buf,
             pos,
@@ -362,7 +364,8 @@ impl<'a> RecordIter<'a> {
 
     /// Byte position of the next record in `buf`, or `None` once a structural error has ended
     /// the iteration.
-    pub(crate) fn position(&self) -> Option<usize> {
+    #[must_use]
+    pub fn position(&self) -> Option<usize> {
         (!self.fused).then_some(self.pos)
     }
 
