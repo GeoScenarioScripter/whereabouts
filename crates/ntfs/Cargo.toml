@@ -12,6 +12,26 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Exposes `record::build` (synthetic USN record/enum-output builders) for other crates' tests.
+# Enable only from `[dev-dependencies]`; not part of the production API.
+test-fixtures = []
+
 [dependencies]
 whereabouts-core.workspace = true
 whereabouts-source.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Raw volume access is Windows-only (AGENTS.md guardrail 6). On other targets the crate compiles
+# to its pure, cross-platform parsing API only, so Linux CI stays green.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+] }
