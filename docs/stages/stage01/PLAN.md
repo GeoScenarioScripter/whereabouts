@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Next: gate G1 (owner go/no-go), then wave 2.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Next: wave 2.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -36,7 +36,7 @@ Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`
 
 | Gate | After | Question | Evidence | If it fails |
 |---|---|---|---|---|
-| **G1 — contracts + enumeration** | wave 1 | Are the core contracts (1.1) right for everything downstream? Does `FSCTL_ENUM_USN_DATA` enumerate fast enough to keep the USN-API approach (Q-16)? | 1.1 API summary; 1.3 enumeration timing and memory on CI + owner volume | Contract fixes before wave 2; or add a raw-`$MFT` session to wave 2 |
+| **G1 — contracts + enumeration** | wave 1 | Are the core contracts (1.1) right for everything downstream? Does `FSCTL_ENUM_USN_DATA` enumerate fast enough to keep the USN-API approach (Q-16)? | 1.1 API summary; 1.3 enumeration timing and memory on CI + owner volume | Contract fixes before wave 2; or add a raw-`$MFT` session to wave 2. **Outcome (2026-10-20, owner): go.** Contracts D-27…D-33 Agreed. Owner V4 run, D: on NVMe: 1.44M records in 41.0 s, above the ~10 s rule. Added session **2.7** (raw `$MFT` spike); Q-16 decided in 4.3 |
 | **G2 — CRS coverage** | wave 2 | Is pure-Rust CRS (`proj4rs` + embedded EPSG table) good enough (Q-14)? | 2.4 identification rate + WGS84 agreement on corpus + fixtures | Owner decides: PROJ via the `proj` crate as fallback (D-09), or widen 2.4's tables |
 
 Gates are owner go/no-go points: the orchestrator presents evidence and waits.
@@ -50,13 +50,13 @@ Gates are owner go/no-go points: the orchestrator presents evidence and waits.
 | 0 | bootstrap (orchestrator) | — | Repo, tooling, docs, this plan ✅ |
 | 1 | **1.1** core-contracts · **1.2** oracle-corpus · **1.3** ntfs-enumeration · **1.4** crs-wkt-parsing | wave 0 | Contracts + the two riskiest spikes + test oracle |
 | — | **Gate G1** | wave 1 merged | |
-| 2 | **2.1** nameindex · **2.2** ntfs-journal-source · **2.3** dataset-grouper · **2.4** crs-epsg-transform · **2.5** catalog · **2.6** reader-shapefile | G1 | Build every component against the frozen contracts (≤ 4 concurrent; see order below) |
+| 2 | **2.1** nameindex · **2.2** ntfs-journal-source · **2.3** dataset-grouper · **2.4** crs-epsg-transform · **2.5** catalog · **2.6** reader-shapefile · **2.7** ntfs-mft-reader *(added at G1)* | G1 (2.7: after 2.2 merges) | Build every component against the frozen contracts (≤ 4 concurrent; see order below) |
 | — | **Gate G2** | 2.4 merged | |
 | 3 | **3.1** reader-geopackage · **3.2** reader-geotiff · **3.3** index-pipeline | wave 2 + G2 | Remaining readers + end-to-end `index` |
 | 4 | **4.1** query-and-inspect-cli · **4.2** resilience · **4.3** benchmarks-and-coverage | wave 3 | Usable CLI, failure modes, numbers |
 | 5 | **5.1** exit-verification | wave 4 | Exit criteria evidence, docs sync, retro draft |
 
-Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6** first (longest / gate-relevant), then **2.3, 2.5** as slots free.
+Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6** first (longest / gate-relevant), then **2.3, 2.5** as slots free. **2.7** (added at G1) also writes `crates/ntfs`, so it starts only after 2.2 has merged.
 
 ### Dependency graph
 
@@ -72,6 +72,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 | 2.4 | 1.1, 1.4 (+1.2 for corpus checks) | Identification/transform on 1.4's model, `Bounds` from core |
 | 2.5 | 1.1 | Persists core types |
 | 2.6 | 1.1, 1.2 | Implements `FormatReader`; oracle wiring needs the corpus |
+| 2.7 | 1.3, 2.2 | Produces 1.3's raw records from `$MFT`; same crate as 2.2, so it runs after 2.2 merges |
 | 3.1, 3.2 | 2.6 (reader pattern), 2.4 (3.2 adds GeoKeys to `crs`) | Same pattern, same registry |
 | 3.3 | 2.1–2.6 | Wires everything |
 | 4.1 | 3.3 | Needs a populated catalog + snapshot |
@@ -82,7 +83,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 ### Watch points (shared files within a wave)
 
 - **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
-- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer, 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6.
+- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7.
 - **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`.
 - **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
 
@@ -195,6 +196,21 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Acceptance (V2):** oracle agreement on all non-corrupt shapefile cases for geometry type, count and native bbox; corrupt cases → `Error` status, no panic; bounded-read test shows < 64 KiB read per dataset.
 - **Out of scope:** geometry reading (previews, M3).
 
+#### 2.7 — ntfs-mft-reader *(added at gate G1, 2026-10-20)*
+- **Why:** the owner's V4 run read D: (NVMe, 1.44M records) in 41.0 s, of which 40.8 s was inside `FSCTL_ENUM_USN_DATA` and 0.19 s in our code. That's about 35 MB/s of MFT, consistent with small synchronous reads. C: did 812k records in 4.9 s. Raw `$MFT` reading with large sequential reads should cut the cold first-index time (Q-16).
+- **Reads:** 1.3 note, D-31, Q-16; NTFS on-disk format (FILE record header, update sequence array, attribute headers, `$FILE_NAME` 0x30, `$ATTRIBUTE_LIST` 0x20, non-resident runlists, `$MFT`'s own `$DATA` and `$BITMAP`).
+- **Write scope:** `crates/ntfs/**` (starts after 2.2 merges).
+- **Deliverables:**
+  - `FSCTL_GET_NTFS_VOLUME_DATA` for geometry; read `$MFT`'s own record to get its `$DATA` runlist and `$BITMAP`.
+  - Read the MFT in large sequential chunks (multi-MiB; overlapped I/O optional) and apply update-sequence fixups. Skip records not in use (bitmap + header flag).
+  - Parse `$FILE_NAME`: prefer Win32/Win32+DOS names, skip DOS-only names, follow `$ATTRIBUTE_LIST` into extension records.
+  - Yield the **same raw record type** as `enumerate()` (FRN with sequence number, parent FRN, `NtfsName`, attributes), so `Source` and its consumers don't change.
+  - Pure parsers over byte buffers with hand-built fixtures, plus truncation/mutation fuzzing (bad fixups, runlist bombs, attribute-length lies); every length/offset/count validated, allocations bounded.
+  - `enum_volume --mft` for side-by-side runs.
+  - Note in the session note whether sizes/timestamps could come from the same pass (input to stage02).
+- **Acceptance (V3, plus V4 requested):** on the CI Windows runner's C:, the record set equals USN enumeration (same FRNs, parents and names; any difference explained, e.g. hard-link names). Cold and warm timings for both methods recorded. Malformed input never panics. Owner asked to run cold and warm on D: with both methods.
+- **Out of scope:** choosing the default method (4.3 decides Q-16), wiring it into `NtfsVolumeSource` beyond an internal option, extracting sizes/timestamps.
+
 ### Wave 3 — remaining readers, end-to-end pipeline
 
 #### 3.1 — reader-geopackage
@@ -225,7 +241,7 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 
 #### 4.3 — benchmarks-and-coverage
 - **Write scope:** `tests/oracle/**`, `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
-- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; **proposed answers** to Q-14, Q-16, Q-18 (as *Decisions proposed*).
+- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; **proposed answers** to Q-14, Q-16, Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
 - **Acceptance (V2 in CI + V4 numbers from the owner's run).**
 
 ### Wave 5 — exit
@@ -261,7 +277,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 0 | Bootstrap: repo, tooling, docs, stage plan | — | ✅ done (2026-10-19) | [note](sessions/0-bootstrap.md) |
 | 1.1 | core-contracts | #1 | ✅ done (2026-10-19, V1, PR #21) | [note](sessions/1.1-core-contracts.md) |
 | 1.2 | oracle-corpus | #2 | ✅ done (2026-10-19, V2, PR #22) | [note](sessions/1.2-oracle-corpus.md) |
-| 1.3 | ntfs-enumeration | #3 | ✅ done (2026-10-19, V3, PR #20; V4 run pending with owner) | [note](sessions/1.3-ntfs-enumeration.md) |
+| 1.3 | ntfs-enumeration | #3 | ✅ done (2026-10-19, V3, PR #20; V4 owner run 2026-10-20 → G1) | [note](sessions/1.3-ntfs-enumeration.md) |
 | 1.4 | crs-wkt-parsing | #4 | ✅ done (2026-10-19, V1, PR #23) | [note](sessions/1.4-crs-wkt-parsing.md) |
 | 2.1 | nameindex | #5 | ⏳ planned | |
 | 2.2 | ntfs-journal-source | #6 | ⏳ planned | |
@@ -269,6 +285,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 2.4 | crs-epsg-transform | #8 | ⏳ planned | |
 | 2.5 | catalog | #9 | ⏳ planned | |
 | 2.6 | reader-shapefile | #10 | ⏳ planned | |
+| 2.7 | ntfs-mft-reader (added at G1) | #31 | ⏳ planned | |
 | 3.1 | reader-geopackage | #11 | ⏳ planned | |
 | 3.2 | reader-geotiff | #12 | ⏳ planned | |
 | 3.3 | index-pipeline | #13 | ⏳ planned | |

@@ -84,6 +84,9 @@ First session: 2026-10-19.
   - A forked `/code-review` checked the PR out in the main checkout, so only one PR review runs at a time.
   - `AGENTS.md` now allows printing in tests/examples/benches and read-only enumeration of the system volume in elevated tests.
 - **Open:** Q-16 waits on the owner's V4 `enum_volume` run. Gate G1 is next. Follow-ups #24–#29.
+- **Gate G1 (2026-10-20):**
+  - **Owner's V4 run (NVMe, release build):** C: 812k records in 4.9 s. D: 1.44M records in 41.0 s, of which 40.8 s was inside `FSCTL_ENUM_USN_DATA` and 0.19 s in our code. That's about 35 MB/s of MFT, consistent with small synchronous reads.
+  - **Owner decision:** go for wave 2; D-27…D-33 → Agreed; add session 2.7 (raw `$MFT` reader, #31) behind the same raw-record API, after 2.2. Q-16 is decided in 4.3 on cold/warm numbers for both methods.
 
 ---
 
