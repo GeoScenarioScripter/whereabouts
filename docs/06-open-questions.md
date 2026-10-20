@@ -17,7 +17,7 @@ When resolved, record the answer in `02-decisions.md` and remove or strike it he
 | # | Question | Notes / default |
 |---|---|---|
 | Q-05 | Windows-only for v1? | Proposed yes (D-19) |
-| Q-06 | Include non-NTFS local drives (FAT/exFAT/ReFS, USB) in v1? | Would need a walker + `ReadDirectoryChangesW` fallback |
+| Q-06 | Include non-NTFS local drives (FAT/exFAT/ReFS, USB) in v1? | Would need a walker + `ReadDirectoryChangesW` fallback. Since stage01/1.3: `Volume::open` rejects non-NTFS and non-local drives (D-31). ReFS's 128-bit file IDs don't fit `Frn(u64)` (#24) |
 | Q-07 | FileGDB in v1.0 or v1.x? | Currently M4 (end of v1); previews later |
 | Q-08 | Ship the GDAL Extended Format Pack in v1 or later? | Currently post-v1 |
 | Q-09 | Point-cloud previews in v1? | May slip to v1.x |
@@ -30,9 +30,9 @@ When resolved, record the answer in `02-decisions.md` and remove or strike it he
 | Q-11 | Search syntax design | Default: Everything-compatible operators + GIS filters (`crs:`, `geom:`, `res:`, `format:`, `in:"place"`) |
 | Q-12 | Frontend framework | Solid / Svelte (light) vs React (ecosystem) |
 | Q-13 | Where does the tile server run? | Default: Tauri protocol handler forwards to the service over IPC |
-| Q-14 | Is pure-Rust CRS (`proj4rs` + EPSG table) coverage sufficient? | Validate on corpus; fallback = PROJ via `proj` crate. Answered in stage01 (session 2.4 → gate G2, final in 4.3) |
+| Q-14 | Is pure-Rust CRS (`proj4rs` + EPSG table) coverage sufficient? | Validate on corpus; fallback = PROJ via `proj` crate. Answered in stage01 (session 2.4 → gate G2, final in 4.3). The oracle's EPSG/WGS84 minimum rates are 0.0 until this is answered (D-33) |
 | Q-15 | Large GeoJSON/KML extent policy | Size threshold + timeout; mark extent "pending/approximate" |
-| Q-16 | Raw `$MFT` parsing vs `FSCTL_ENUM_USN_DATA` | Start with the USN API; raw MFT as later optimization. Measured in stage01 (session 1.3 → gate G1, final in 4.3) |
+| Q-16 | Raw `$MFT` parsing vs `FSCTL_ENUM_USN_DATA` | Start with the USN API; raw MFT as later optimization. Measured in stage01 (session 1.3 → gate G1, final in 4.3). **1.3 CI numbers (debug build, cloud OS disk, 1.34M records):** cold 36–61 s, about 90% of it kernel/MFT I/O; warm 2.8–3.4 s (≈ 400k rec/s); enumeration memory = its 1 MiB buffer. Raw `$MFT` would read the same bytes. Its possible wins are larger sequential reads on a cold cache, and sizes/timestamps in the same pass. Proposed rule: keep USN if a cold run on the owner's largest volume stays under about 10 s. **Waiting for the owner's V4 run.** |
 | Q-17 | Ranking model for results | Name relevance + spatial overlap + recency — weights TBD |
 | Q-18 | Performance targets (index time, memory per million files, query latency) | Not yet set — proposed in stage01 session 4.3 from benchmarks against Everything |
 | Q-19 | Auto-update and crash reporting approach | M4 |

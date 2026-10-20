@@ -32,9 +32,9 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 | Crate | Responsibility |
 |---|---|
-| `whereabouts-core` | Shared types: `DatasetId`, `Dataset`, `Layer`, `Bounds`, `CrsRef`, errors |
-| `whereabouts-source` | `Source` trait; event types (Created/Deleted/Renamed/Modified) |
-| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` |
+| `whereabouts-core` | Shared types (contracts summary at the top of `core/src/lib.rs`): identities `VolumeId`/`Frn`/`DatasetId`/`LayerId` (D-27), `FileRecord`/`FileName` (WTF-8, D-28), `Format`/`DatasetKind`, `Dataset`/`Member`, `Bounds`/`Wgs84Extent`, `CrsDefinition`/`ResolvedCrs`, `LayerMetadata`/`DatasetMetadata`, `DatasetRecord`/`LayerRecord`, `ExtractionStatus`, the `FormatReader` trait, errors |
+| `whereabouts-source` | `Source` trait, `SourceEvent` (Created/Deleted/Renamed/Modified), `Changes::{Batch, FullRescanRequired}`, opaque versioned `Checkpoint` (D-29) |
+| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL`; local NTFS drive letters only (D-31) |
 | `whereabouts-nameindex` | Compact in-memory filename index, path reconstruction, substring/wildcard/regex scan, snapshot I/O |
 | `whereabouts-datasets` | Dataset grouping rules (file sets → datasets/layers) |
 | `whereabouts-readers` | Native format readers (header/metadata; later full-geometry reads for previews) |
@@ -133,6 +133,15 @@ CREATE TABLE crs (
 -- WGS84 bbox per layer for the coarse spatial filter
 CREATE VIRTUAL TABLE layer_extents USING rtree(id, minx, maxx, miny, maxy);
 ```
+
+**Deltas proposed in stage01 wave 1 (2.5 decides and records the final schema here):**
+- `datasets.anchor_frn` + `UNIQUE(volume_id, anchor_frn)` (D-27); `layers.ordinal`.
+- `crs.def_kind` gains `'epsg'`; `crs.authority`/`crs.auth_code` and `crs.status`.
+- `rasters.geotransform` (JSON) and an overview count in place of `has_overviews`.
+- `layer_extents` gets one row per antimeridian part, plus an auxiliary `layer_id`.
+- A `volumes` table (`VolumeId`, `SourceIdentity`, checkpoint bytes).
+- `datasets.kind` codes also include `table` and `unknown`.
+- `layers.footprint` stays NULL until M1 (D-16).
 
 Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_mtime, z, x, y, format, data)`.
 
