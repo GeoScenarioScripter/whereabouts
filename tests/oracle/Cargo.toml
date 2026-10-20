@@ -13,6 +13,22 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Only this crate reads TOML today (corpus manifest + baseline); move to [workspace.dependencies]
+# when a second crate needs it.
+toml = "1.1.6"
+# Adapters (added by the reader sessions, see src/adapters.rs) call into these.
 whereabouts-core.workspace = true
 whereabouts-crs.workspace = true
 whereabouts-readers.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# Prints the per-format agreement report on every run and fails below tests/oracle/baseline.toml.
+# No libtest harness, so the report is always visible (no --nocapture needed).
+[[test]]
+name = "agreement"
+harness = false
