@@ -148,7 +148,7 @@ impl Unit {
 
     /// Converts `value` in this unit to metres (linear units only).
     pub fn to_metres(&self, value: f64) -> Option<f64> {
-        (self.kind == UnitKind::Linear).then(|| value * self.factor)
+        (self.kind == UnitKind::Linear).then_some(value * self.factor)
     }
 }
 

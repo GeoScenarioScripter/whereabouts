@@ -315,8 +315,9 @@ const METHOD_ALIASES: &[(&str, ProjectionMethod)] = {
 
 impl ProjectionMethod {
     /// Looks a method up by any known spelling (OGC WKT1, ESRI, EPSG/WKT2, PROJJSON).
-    /// Ambiguous ESRI/OGC names resolve to their most common meaning; parsers then call
-    /// [`refine_method`] with the parameters.
+    /// Ambiguous ESRI/OGC names (`Lambert_Conformal_Conic`, `Mercator`, `Stereographic`,
+    /// `Polar_Stereographic`, ESRI `Krovak`) resolve to their most common meaning here; the
+    /// parsers then refine the method from the parameters, the way GDAL does.
     pub fn from_name(name: &str) -> Self {
         let key = name_key(name);
         METHOD_ALIASES
