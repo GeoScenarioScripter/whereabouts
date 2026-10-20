@@ -339,6 +339,11 @@ impl Volume {
     /// `USN_RECORD_V2` records. Interpret it with [`crate::journal::read_step`] and
     /// [`RecordIter`]. At the end of the journal the reply is the 8-byte header only.
     ///
+    /// `start_usn == 0` is special to the kernel: it means "from the first record still in the
+    /// journal" and never fails with `ERROR_JOURNAL_ENTRY_DELETED`, even after a wrap. Callers
+    /// must compare their position with `JournalInfo::first_usn` first, as
+    /// `crate::checkpoint::assess` does.
+    ///
     /// # Errors
     /// [`Error::JournalEntryDeleted`] when `start_usn` has been purged (the journal wrapped),
     /// [`Error::JournalNotActive`], [`Error::JournalDeleteInProgress`], [`Error::Unsupported`],

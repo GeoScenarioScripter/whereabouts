@@ -307,13 +307,17 @@ fn one_batch_is_coalesced_per_file() {
 #[test]
 #[ignore = "needs an elevated shell: creates and mounts a VHD test volume"]
 fn checkpoint_older_than_first_usn_requires_rescan() {
-    // A small journal, so a few thousand records wrap it.
+    // A small journal, so churn wraps it quickly.
     let mut f = fixture(1 << 20, 64 << 10);
+    // Journal a few records first: on a fresh journal the checkpoint USN would be 0, and the
+    // kernel treats StartUsn = 0 as "from the first record" instead of failing (seen in CI).
+    std::fs::write(f.vol.path("seed.txt"), b"x").unwrap();
     let (_, cp) = enumerate(&mut f.source);
     let pos = NtfsCheckpoint::from_checkpoint(&cp)
         .unwrap()
         .journal
         .unwrap();
+    assert!(pos.next_usn > 0, "{pos:?}");
 
     std::fs::create_dir(f.vol.path("churn")).unwrap();
     let long = "x".repeat(200);
