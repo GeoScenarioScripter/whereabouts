@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "case": "shp_no_prj",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "local",
+      "kind": "vector",
+      "geometry_type": "Point",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 6,
+      "extent": [
+        1000.0,
+        2000.0,
+        1250.0,
+        2125.0
+      ],
+      "declared_extent": [
+        1000.0,
+        2000.0,
+        1250.0,
+        2125.0
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": {
+        "source_encoding": "ISO-8859-1",
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
+      },
+      "crs": {
+        "status": "missing",
+        "source": "none",
+        "raw_kind": null,
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": null,
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": null,
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

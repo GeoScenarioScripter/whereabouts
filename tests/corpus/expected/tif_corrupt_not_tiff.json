@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "case": "tif_corrupt_not_tiff",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "error",
+  "error": "fake.tif: TIFFReadDirectory:Failed to read directory at offset 2147483647 May be caused by: fake.tif: TIFFFetchDirectory:fake.tif: Can not read TIFF directory count",
+  "messages": [],
+  "layers": []
+}

@@ -1,0 +1,13 @@
+# Large real-world samples, fetched into tests/corpus/external/ (gitignored) by
+# fetch-external.sh / fetch-external.ps1 and verified by sha256. Each case is also listed in
+# tests/corpus/manifest.toml with location = "external".
+#
+# Columns (whitespace-separated): <sha256> <path relative to tests/corpus/external/> <url>
+# URLs must be immutable (pinned commit / versioned release), and the data redistributable.
+
+# Natural Earth 1:10m Admin 0 countries — public domain. Pinned to natural-earth-vector@ca96624a.
+3ad3031f5503a4404af825262ee8232cc04d4ea6683d42c5dd0a2f2a27ac9824 shapefile/ext_ne_10m_admin_0_countries/ne_10m_admin_0_countries.cpg https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/10m_cultural/ne_10m_admin_0_countries.cpg
+ca96066b8043ade5d34e3711eab3d75dbfad11faf77a6d4b6211c6da5583ca7d shapefile/ext_ne_10m_admin_0_countries/ne_10m_admin_0_countries.dbf https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/10m_cultural/ne_10m_admin_0_countries.dbf
+a02a27b1d1982c8516d83398e85a3c8b1aef1713c13ef4d84d7bde17430c07c4 shapefile/ext_ne_10m_admin_0_countries/ne_10m_admin_0_countries.prj https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/10m_cultural/ne_10m_admin_0_countries.prj
+7ce119ef6342e43cff7c0c3004e0911ab7ec1988a14734372031d2012180e7bc shapefile/ext_ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/10m_cultural/ne_10m_admin_0_countries.shp
+ca19ec112d054c77bc8f7ac00e3b110d5dff32cc9bcf4cd1b8b66bdd0f611d32 shapefile/ext_ne_10m_admin_0_countries/ne_10m_admin_0_countries.shx https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/10m_cultural/ne_10m_admin_0_countries.shx
