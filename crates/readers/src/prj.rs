@@ -35,7 +35,7 @@ pub(crate) fn read_prj(path: &Path, budget: &Budget) -> Result<CrsDefinition, St
 pub(crate) fn parse_prj(bytes: &[u8]) -> Result<CrsDefinition, String> {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
     // Non-UTF-8 text is decoded as Windows-1252, like `whereabouts-crs` does (D-32).
-    let text = crate::encoding::decode(bytes, None);
+    let (text, _) = crate::encoding::decode(bytes, None);
     let text = text.trim_matches(|c: char| c.is_whitespace() || c == '\0');
     if text.is_empty() {
         return Err("empty .prj; CRS unknown".to_owned());

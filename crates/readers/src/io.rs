@@ -111,19 +111,27 @@ pub(crate) struct SourceFile<'a> {
 }
 
 impl<'a> SourceFile<'a> {
-    /// Opens `path` read-only. Fails for anything that is not a regular file.
+    /// Opens `path` read-only. Fails for anything that is not a regular file; the type is
+    /// checked *before* opening, so a FIFO or device can never block the reader.
     pub(crate) fn open(path: &'a Path, budget: &'a Budget) -> Result<Self, ReadError> {
         let io_err = |source| ReadError::Io {
             path: path.to_owned(),
             source,
         };
-        let file = File::open(path).map_err(io_err)?;
-        let meta = file.metadata().map_err(io_err)?;
-        if !meta.is_file() {
-            return Err(io_err(io::Error::new(
+        let not_a_file = || {
+            io_err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "not a regular file",
-            )));
+            ))
+        };
+        if !std::fs::metadata(path).map_err(io_err)?.is_file() {
+            return Err(not_a_file());
+        }
+        let file = File::open(path).map_err(io_err)?;
+        // Re-check on the handle: the path may have been swapped between the two calls.
+        let meta = file.metadata().map_err(io_err)?;
+        if !meta.is_file() {
+            return Err(not_a_file());
         }
         meter(|m| m.files_opened = m.files_opened.saturating_add(1));
         Ok(SourceFile {
@@ -139,11 +147,34 @@ impl<'a> SourceFile<'a> {
         self.len
     }
 
-    /// Reads exactly `len` bytes at `offset`. Callers bound `len` by a constant and check it
-    /// against [`len`](Self::len) first; a file that shrank since opening gives an I/O error.
+    /// Reads exactly `len` bytes at `offset`.
+    ///
+    /// Order matters, because `offset` and `len` may come from file contents: the range is checked
+    /// against the file length (overflow-safe), then charged to the budget, and only then is the
+    /// buffer allocated. A file that shrank since opening gives an I/O error.
     pub(crate) fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>, ReadError> {
+        let io_err = |source| ReadError::Io {
+            path: self.path.to_owned(),
+            source,
+        };
+        let n = u64::try_from(len).unwrap_or(u64::MAX);
+        if offset.checked_add(n).is_none_or(|end| end > self.len) {
+            return Err(io_err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                format!(
+                    "read of {len} bytes at offset {offset} is beyond the end of the file ({} bytes)",
+                    self.len
+                ),
+            )));
+        }
+        self.budget.charge(n).map_err(io_err)?;
+        meter(|m| m.reads = m.reads.saturating_add(1));
         let mut buf = vec![0; len];
-        self.read_into(offset, &mut buf)?;
+        self.file
+            .seek(SeekFrom::Start(offset))
+            .and_then(|_| self.file.read_exact(&mut buf))
+            .map_err(io_err)?;
+        meter(|m| m.bytes_read = m.bytes_read.saturating_add(n));
         Ok(buf)
     }
 
@@ -151,22 +182,6 @@ impl<'a> SourceFile<'a> {
     pub(crate) fn read_prefix(&mut self, max: usize) -> Result<Vec<u8>, ReadError> {
         let n = usize::try_from(self.len).map_or(max, |len| len.min(max));
         self.read_at(0, n)
-    }
-
-    fn read_into(&mut self, offset: u64, buf: &mut [u8]) -> Result<(), ReadError> {
-        let n = buf.len() as u64;
-        let result = self
-            .budget
-            .charge(n)
-            .and_then(|()| self.file.seek(SeekFrom::Start(offset)))
-            .and_then(|_| self.file.read_exact(buf));
-        meter(|m| m.reads = m.reads.saturating_add(1));
-        result.map_err(|source| ReadError::Io {
-            path: self.path.to_owned(),
-            source,
-        })?;
-        meter(|m| m.bytes_read = m.bytes_read.saturating_add(n));
-        Ok(())
     }
 }
 
@@ -197,9 +212,40 @@ mod tests {
             IoStats {
                 bytes_read: 200,
                 files_opened: 1,
-                reads: 3
+                reads: 2
             }
         );
+    }
+
+    #[test]
+    fn out_of_range_reads_fail_before_allocating_or_charging() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("f.bin");
+        std::fs::write(&path, [0u8; 16]).unwrap();
+        let budget = Budget::new(1 << 20);
+        let (results, stats) = measure(|| {
+            let mut f = SourceFile::open(&path, &budget).unwrap();
+            [
+                // A huge length would abort on allocation if it were allocated first.
+                f.read_at(0, usize::MAX),
+                f.read_at(0, 1 << 40),
+                // offset + len overflows u64.
+                f.read_at(u64::MAX, 2),
+                f.read_at(u64::MAX - 1, usize::MAX),
+                f.read_at(1 << 60, 1),
+                f.read_at(10, 7),
+            ]
+        });
+        for r in results {
+            let err = r.unwrap_err().to_string();
+            assert!(err.contains("beyond the end"), "{err}");
+        }
+        assert_eq!(stats.bytes_read, 0);
+        assert_eq!(stats.reads, 0);
+        // Nothing was charged: the whole budget is still available.
+        let mut f = SourceFile::open(&path, &budget).unwrap();
+        assert_eq!(f.read_at(10, 6).unwrap().len(), 6);
+        assert_eq!(budget.used.get(), 6);
     }
 
     #[test]
@@ -226,6 +272,25 @@ mod tests {
             SourceFile::open(&missing, &budget),
             Err(ReadError::Io { .. })
         ));
+    }
+
+    /// A FIFO must be rejected before `File::open`, which would block until a writer appears.
+    #[cfg(unix)]
+    #[test]
+    fn fifos_are_rejected_without_blocking() {
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("pipe.dbf");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !made {
+            eprintln!("mkfifo unavailable; skipping");
+            return;
+        }
+        let budget = Budget::new(1 << 20);
+        let err = SourceFile::open(&fifo, &budget).unwrap_err().to_string();
+        assert!(err.contains("not a regular file"), "{err}");
     }
 
     #[test]

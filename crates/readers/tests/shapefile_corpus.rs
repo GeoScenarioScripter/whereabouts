@@ -96,14 +96,37 @@ fn every_corpus_shapefile_reads_under_64_kib() {
             stats.bytes_read
         );
         max = max.max(stats.bytes_read);
-        if case.contains("corrupt") {
-            assert!(
-                !matches!(&result, Ok(md) if md.partial.is_empty()),
-                "{case} read as Ok"
-            );
-        } else {
-            let md = result.unwrap();
-            assert!(md.partial.is_empty(), "{case}: {:?}", md.partial);
+        // Exact outcome per case, so an Io error from a wrongly resolved anchor can't pass.
+        match &*case {
+            "shp_corrupt_truncated_header" | "shp_corrupt_truncated_records" => {
+                assert!(
+                    matches!(
+                        &result,
+                        Err(ReadError::Malformed {
+                            format: Format::Shapefile,
+                            ..
+                        })
+                    ),
+                    "{case}: expected Malformed, got {result:?}"
+                );
+            }
+            "shp_corrupt_bad_dbf" => {
+                let md = result.unwrap();
+                assert_eq!(md.partial.len(), 1, "{case}: {:?}", md.partial);
+                assert!(md.partial[0].contains("beyond the end"), "{:?}", md.partial);
+                let layer = &md.layers[0];
+                assert!(layer.fields.is_empty());
+                assert_eq!(layer.feature_count, Some(9));
+                assert!(layer.native_bounds.is_some());
+            }
+            other => {
+                assert!(
+                    !other.contains("corrupt"),
+                    "{other}: add its expected outcome"
+                );
+                let md = result.unwrap();
+                assert!(md.partial.is_empty(), "{case}: {:?}", md.partial);
+            }
         }
     }
     println!("max bytes read per dataset: {max}");

@@ -21,6 +21,12 @@ const HEADER_LEN: usize = 32;
 const DESCRIPTOR_LEN: usize = 32;
 /// Field descriptor terminator.
 const TERMINATOR: u8 = 0x0D;
+/// Version bytes (header byte 0) of the table flavours this parser understands: dBase III
+/// (with or without memo), dBase IV/V, FoxBASE, FoxPro and Visual FoxPro. Anything else may lay
+/// its header out differently, so it is not parsed.
+const SUPPORTED_VERSIONS: &[u8] = &[
+    0x02, 0x03, 0x30, 0x31, 0x32, 0x43, 0x63, 0x83, 0x8B, 0xCB, 0xF5, 0xFB,
+];
 /// Most field descriptors read. dBase allows 255 and GDAL writes up to 2046 (the 16-bit header
 /// length limit); 1,024 keeps the header read at ≤ 32 KiB, so a whole shapefile stays < 64 KiB.
 pub(crate) const MAX_FIELDS: usize = 1024;
@@ -72,18 +78,45 @@ pub(crate) struct DbfHeader {
 }
 
 impl DbfHeader {
-    /// Decoded fields, using the table's encoding (`.cpg` content wins over the LDID).
-    pub(crate) fn field_infos(&self, cpg: Option<&str>) -> Vec<FieldInfo> {
+    /// Decoded fields, using the table's encoding (`.cpg` content wins over the LDID), plus
+    /// reasons for [`DatasetMetadata::partial`] when names may be wrong: the declared encoding
+    /// could not decode them (U+FFFD substituted), or a declaration could not be honoured and some
+    /// name is non-ASCII (ASCII-only tables decode the same in every supported encoding).
+    pub(crate) fn field_infos(&self, cpg: Option<&str>) -> (Vec<FieldInfo>, Vec<String>) {
         let encoding = crate::encoding::resolve(cpg, self.ldid);
-        self.fields
+        let mut lossy = false;
+        let mut non_ascii = false;
+        let fields = self
+            .fields
             .iter()
-            .map(|f| FieldInfo {
-                name: crate::encoding::decode(&f.name, encoding),
-                kind: f.field_kind(),
-                width: Some(f.width),
-                precision: Some(f.decimals),
+            .map(|f| {
+                non_ascii |= !f.name.is_ascii();
+                let (name, replaced) = crate::encoding::decode(&f.name, encoding.encoding);
+                lossy |= replaced;
+                FieldInfo {
+                    name,
+                    kind: f.field_kind(),
+                    width: Some(f.width),
+                    precision: Some(f.decimals),
+                }
             })
-            .collect()
+            .collect();
+        let mut problems = Vec::new();
+        if non_ascii && !encoding.unsupported.is_empty() {
+            problems.push(format!(
+                "{}; non-ASCII field names decoded as {}",
+                encoding.unsupported.join("; "),
+                encoding.used()
+            ));
+        }
+        if lossy {
+            problems.push(format!(
+                "field names are not valid {} (declared by {}); undecodable bytes replaced",
+                encoding.used(),
+                encoding.declared_by.as_deref().unwrap_or("the table")
+            ));
+        }
+        (fields, problems)
     }
 }
 
@@ -112,6 +145,13 @@ pub(crate) fn read_header(
         ));
     }
     let head = file.read_at(0, HEADER_LEN)?;
+    let version = head.first().copied().unwrap_or_default();
+    if !SUPPORTED_VERSIONS.contains(&version) {
+        return Err(ReadError::Unsupported(format!(
+            "{}: dbf version byte 0x{version:02X} is not a dBase III / FoxPro table",
+            path.display()
+        )));
+    }
     let (Some(count), Some(header_len), Some(record_len), Some(&ldid)) = (
         le_u32(&head, 4),
         le_u16(&head, 8),
@@ -188,11 +228,13 @@ pub(crate) fn read_header(
     })
 }
 
-/// Reads a `.cpg` file's content (at most [`MAX_CPG_BYTES`]); `None` if unreadable.
-pub(crate) fn read_cpg(path: &Path, budget: &Budget) -> Option<String> {
-    let mut file = SourceFile::open(path, budget).ok()?;
-    let bytes = file.read_prefix(MAX_CPG_BYTES).ok()?;
-    Some(String::from_utf8_lossy(&bytes).into_owned())
+/// Reads a `.cpg` file's content (at most [`MAX_CPG_BYTES`]). `Err` holds a reason for
+/// [`DatasetMetadata::partial`] (unreadable, or read budget exhausted).
+pub(crate) fn read_cpg(path: &Path, budget: &Budget) -> Result<String, String> {
+    let bytes = SourceFile::open(path, budget)
+        .and_then(|mut file| file.read_prefix(MAX_CPG_BYTES))
+        .map_err(|e| format!("{e}; .cpg ignored"))?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn parse_descriptor(d: &[u8]) -> RawField {
@@ -260,18 +302,21 @@ impl FormatReader for DbfReader {
         }
         let budget = Budget::new(limits.max_bytes);
         let header = read_header(&dataset.anchor, &budget, Format::Dbf)?;
+        let mut partial = header.problems.clone();
         let cpg = dataset
             .sidecar(MemberRole::Cpg)
-            .and_then(|p| read_cpg(p, &budget));
+            .and_then(|p| read_cpg(p, &budget).map_err(|r| partial.push(r)).ok());
+        let (fields, problems) = header.field_infos(cpg.as_deref());
+        partial.extend(problems);
         let layer = LayerMetadata {
             name: crate::layer_name(&dataset.anchor),
             feature_count: header.record_count,
-            fields: header.field_infos(cpg.as_deref()),
+            fields,
             ..LayerMetadata::default()
         };
         Ok(DatasetMetadata {
             layers: vec![layer],
-            partial: header.problems,
+            partial,
         })
     }
 }
@@ -338,8 +383,9 @@ pub(crate) mod tests {
         assert_eq!(h.record_count, Some(3));
         assert_eq!(h.ldid, 87);
         assert!(h.problems.is_empty(), "{:?}", h.problems);
-        let kinds: Vec<_> = h
-            .field_infos(None)
+        let (fields, problems) = h.field_infos(None);
+        assert!(problems.is_empty(), "{problems:?}");
+        let kinds: Vec<_> = fields
             .into_iter()
             .map(|f| (f.name, f.kind, f.width))
             .collect();
@@ -372,15 +418,72 @@ pub(crate) mod tests {
             77,
         );
         let h = header_of(&bytes).unwrap();
-        let names: Vec<_> = h.field_infos(None).into_iter().map(|f| f.name).collect();
+        let (fields, problems) = h.field_infos(None);
+        assert!(problems.is_empty(), "{problems:?}");
+        let names: Vec<_> = fields.into_iter().map(|f| f.name).collect();
         assert_eq!(names, vec!["名称".to_owned(), "ELEVENCHARS".to_owned()]);
         // A .cpg overrides the LDID.
-        let names: Vec<_> = h
-            .field_infos(Some("1251"))
-            .into_iter()
-            .map(|f| f.name)
-            .collect();
-        assert_ne!(names[0], "名称");
+        let (fields, _) = h.field_infos(Some("1251"));
+        assert_ne!(fields[0].name, "名称");
+    }
+
+    /// Partial reasons from `field_infos` for a single field named `name`.
+    fn name_problems(name: &[u8], ldid: u8, cpg: Option<&str>) -> (String, Vec<String>) {
+        let h = header_of(&dbf_bytes(&[(name, b'C', 10, 0)], 0, ldid)).unwrap();
+        let (mut fields, problems) = h.field_infos(cpg);
+        (fields.remove(0).name, problems)
+    }
+
+    #[test]
+    fn undecodable_names_under_a_declared_encoding_are_partial() {
+        // 0xFF 0xFE is not UTF-8, but the .cpg says it is.
+        let (name, problems) = name_problems(&[b'a', 0xFF, 0xFE], 0, Some("UTF-8"));
+        assert_eq!(name, "a��");
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("not valid UTF-8"), "{problems:?}");
+        assert!(problems[0].contains(".cpg \"UTF-8\""), "{problems:?}");
+        // Same bytes, LDID-declared Shift_JIS with a dangling lead byte.
+        let (_, problems) = name_problems(&[b'a', 0x81], 19, None);
+        assert!(problems[0].contains("Shift_JIS"), "{problems:?}");
+        assert!(problems[0].contains("LDID 0x13"), "{problems:?}");
+    }
+
+    #[test]
+    fn unhonoured_declarations_matter_only_for_non_ascii_names() {
+        // LDID 0x01 = CP437, which the Encoding Standard lacks.
+        let (_, problems) = name_problems(b"plain", 0x01, None);
+        assert!(problems.is_empty(), "{problems:?}");
+        let (name, problems) = name_problems(&[b'n', 0x82], 0x01, None);
+        assert_eq!(name, "n‚"); // Windows-1252 fallback, not CP437's "é"
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("code page 437"), "{problems:?}");
+        assert!(problems[0].contains("Windows-1252"), "{problems:?}");
+
+        // An unrecognised .cpg label names itself and the encoding used instead.
+        let (_, problems) = name_problems(b"plain", 0xC9, Some("klingon"));
+        assert!(problems.is_empty(), "{problems:?}");
+        let (name, problems) = name_problems(&[0xC8, 0xEC, 0xFF], 0xC9, Some("klingon"));
+        assert_eq!(name, "Имя");
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].contains("\"klingon\""), "{problems:?}");
+        assert!(problems[0].contains("windows-1251"), "{problems:?}");
+    }
+
+    #[test]
+    fn unknown_versions_are_unsupported() {
+        for version in [0x00u8, 0x04, 0x7B, 0xFF] {
+            let mut bytes = dbf_bytes(&[(b"id", b'N', 10, 0)], 1, 87);
+            bytes[0] = version;
+            assert!(
+                matches!(header_of(&bytes), Err(ReadError::Unsupported(_))),
+                "version 0x{version:02X}"
+            );
+        }
+        for version in SUPPORTED_VERSIONS {
+            let mut bytes = dbf_bytes(&[(b"id", b'N', 10, 0)], 1, 87);
+            bytes[0] = *version;
+            assert!(header_of(&bytes).is_ok(), "version 0x{version:02X}");
+        }
     }
 
     #[test]
@@ -491,6 +594,27 @@ pub(crate) mod tests {
         assert_eq!(layer.geometry_type, None);
         assert_eq!(layer.native_bounds, None);
         assert_eq!(layer.fields.len(), 1);
+
+        // An unreadable .cpg is reported, not silently dropped.
+        let mut with_dir_cpg = ds.clone();
+        with_dir_cpg.sidecars[0].path = dir.path().to_path_buf();
+        let md = DbfReader
+            .read(&with_dir_cpg, &ReadLimits::default())
+            .unwrap();
+        assert!(
+            md.partial.iter().any(|p| p.contains(".cpg ignored")),
+            "{:?}",
+            md.partial
+        );
+
+        // An unknown dBase flavour is unsupported, not misparsed.
+        let mut bytes = dbf_bytes(&[(b"name", b'C', 20, 0)], 4, 0);
+        bytes[0] = 0x04;
+        std::fs::write(&ds.anchor, bytes).unwrap();
+        assert!(matches!(
+            DbfReader.read(&ds, &ReadLimits::default()),
+            Err(ReadError::Unsupported(_))
+        ));
 
         let shp = ResolvedDataset {
             format: Format::Shapefile,
