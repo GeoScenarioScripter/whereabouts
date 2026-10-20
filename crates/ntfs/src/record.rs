@@ -182,17 +182,13 @@ impl<'a> UsnRecord<'a> {
 
     /// The file name's UTF-16 code units.
     pub fn name_units(&self) -> impl Iterator<Item = u16> + 'a {
-        self.name_utf16le
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|&pair| u16::from_le_bytes(pair))
+        crate::name::utf16le_units(self.name_utf16le)
     }
 
     /// The file name, losslessly converted (see [`NtfsName`]).
     #[must_use]
     pub fn name(&self) -> NtfsName {
-        NtfsName::from_utf16(self.name_units())
+        NtfsName::from_utf16le_bytes(self.name_utf16le)
     }
 
     /// `true` if `FILE_ATTRIBUTE_DIRECTORY` is set.
@@ -251,7 +247,13 @@ impl RawRecord {
 /// [`ParseError::is_record_local`]).
 pub fn parse_record(buf: &[u8], offset: usize) -> Result<(UsnRecord<'_>, usize), ParseError> {
     let length = record_length(buf, offset)?;
-    let rec = &buf[..length];
+    parse_record_body(&buf[..length], offset).map(|record| (record, length))
+}
+
+/// Parses one record whose `RecordLength` has already been validated: `rec` is exactly the
+/// record's bytes. Every error from here is record-local.
+fn parse_record_body(rec: &[u8], offset: usize) -> Result<UsnRecord<'_>, ParseError> {
+    let length = rec.len();
     let major = read_u16(rec, 4);
     let record_length = length as u32;
     let header = match major {
@@ -287,22 +289,19 @@ pub fn parse_record(buf: &[u8], offset: usize) -> Result<(UsnRecord<'_>, usize),
             record_length,
         });
     }
-    Ok((
-        UsnRecord {
-            major_version: major,
-            minor_version: read_u16(rec, 6),
-            frn,
-            parent_frn,
-            usn: read_i64(rec, tail),
-            timestamp: read_i64(rec, tail + 8),
-            reason: read_u32(rec, tail + 16),
-            source_info: read_u32(rec, tail + 20),
-            security_id: read_u32(rec, tail + 24),
-            file_attributes: read_u32(rec, tail + 28),
-            name_utf16le: &rec[name_start..name_end],
-        },
-        length,
-    ))
+    Ok(UsnRecord {
+        major_version: major,
+        minor_version: read_u16(rec, 6),
+        frn,
+        parent_frn,
+        usn: read_i64(rec, tail),
+        timestamp: read_i64(rec, tail + 8),
+        reason: read_u32(rec, tail + 16),
+        source_info: read_u32(rec, tail + 20),
+        security_id: read_u32(rec, tail + 24),
+        file_attributes: read_u32(rec, tail + 28),
+        name_utf16le: &rec[name_start..name_end],
+    })
 }
 
 /// Reads and validates `RecordLength` (≥ 8 and within `buf`).
@@ -350,6 +349,23 @@ impl<'a> RecordIter<'a> {
         }
     }
 
+    /// Resumes iteration at byte `pos` of `buf` (offsets in errors are positions in `buf`).
+    /// Lets a caller that owns the buffer keep only a cursor between calls.
+    pub(crate) fn resume(buf: &'a [u8], pos: usize) -> Self {
+        Self {
+            buf,
+            pos,
+            base_offset: 0,
+            fused: false,
+        }
+    }
+
+    /// Byte position of the next record in `buf`, or `None` once a structural error has ended
+    /// the iteration.
+    pub(crate) fn position(&self) -> Option<usize> {
+        (!self.fused).then_some(self.pos)
+    }
+
     /// Bytes not yet consumed.
     #[must_use]
     pub fn remaining(&self) -> usize {
@@ -360,30 +376,23 @@ impl<'a> RecordIter<'a> {
 impl<'a> Iterator for RecordIter<'a> {
     type Item = Result<UsnRecord<'a>, ParseError>;
 
+    /// The crate's one record walker: validate `RecordLength` (a failure is structural and ends
+    /// the iteration), then parse the body (a failure is record-local: yielded, then skipped).
     fn next(&mut self) -> Option<Self::Item> {
         if self.fused || self.pos >= self.buf.len() {
             return None;
         }
         let offset = self.base_offset + self.pos;
         let rest = &self.buf[self.pos..];
-        match parse_record(rest, offset) {
-            Ok((record, len)) => {
-                self.pos += len;
-                Some(Ok(record))
-            }
-            Err(e) if e.is_record_local() => {
-                // The length was validated before any record-local check, so we can skip on.
-                match record_length(rest, offset) {
-                    Ok(len) => self.pos += len,
-                    Err(_) => self.fused = true,
-                }
-                Some(Err(e))
-            }
+        let length = match record_length(rest, offset) {
+            Ok(length) => length,
             Err(e) => {
                 self.fused = true;
-                Some(Err(e))
+                return Some(Err(e));
             }
-        }
+        };
+        self.pos += length;
+        Some(parse_record_body(&rest[..length], offset))
     }
 }
 
@@ -403,10 +412,53 @@ pub fn parse_enum_output(buf: &[u8]) -> Result<(u64, RecordIter<'_>), ParseError
     Ok((read_u64(buf, 0), RecordIter::new(&buf[8..], 8)))
 }
 
+/// What to do after one successful `FSCTL_ENUM_USN_DATA` call (see [`enum_step`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnumStep {
+    /// The reply holds records; continue from `next_start` once they are consumed.
+    Records {
+        /// `StartFileReferenceNumber` for the next call.
+        next_start: u64,
+    },
+    /// Header-only reply with a larger start reference: no record in this MFT range passed the
+    /// USN filter, but enumeration is not over — call again from `next_start`.
+    Advance {
+        /// `StartFileReferenceNumber` for the next call.
+        next_start: u64,
+    },
+    /// Header-only reply that did not move: enumeration is complete.
+    End,
+    /// The returned start reference did not move forward although records were returned, or
+    /// went backwards: continuing could loop or repeat records.
+    Stalled {
+        /// The start reference the kernel returned.
+        next_start: u64,
+    },
+}
+
+/// Decides how enumeration proceeds after a call made with `current_start` returned `reply`
+/// (the bytes the kernel wrote). Pure, so the termination logic is unit-tested.
+///
+/// The normal end of enumeration is `ERROR_HANDLE_EOF`, handled by the caller before this.
+///
+/// # Errors
+/// [`ParseError::Truncated`] when the reply is shorter than its 8-byte header.
+pub fn enum_step(current_start: u64, reply: &[u8]) -> Result<EnumStep, ParseError> {
+    let (next_start, records) = parse_enum_output(reply)?;
+    let header_only = records.remaining() == 0;
+    Ok(match (header_only, next_start.cmp(&current_start)) {
+        (true, std::cmp::Ordering::Equal) => EnumStep::End,
+        (true, std::cmp::Ordering::Greater) => EnumStep::Advance { next_start },
+        (false, std::cmp::Ordering::Greater) => EnumStep::Records { next_start },
+        _ => EnumStep::Stalled { next_start },
+    })
+}
+
 /// Test-and-fixture helpers that build records in the documented layout.
 ///
-/// Public so integration tests and benchmarks in other crates (e.g. 2.2's journal tests) can
-/// synthesise buffers; not intended for production code.
+/// Only compiled for this crate's tests or with the `test-fixtures` feature, which other crates
+/// enable as a dev-dependency (e.g. 2.2's journal tests) — not part of the production API.
+#[cfg(any(test, feature = "test-fixtures"))]
 pub mod build {
     use super::{USN_RECORD_V2_HEADER, USN_RECORD_V3_HEADER};
 
@@ -726,6 +778,82 @@ mod tests {
         assert_eq!(record_number(0x0005_0000_0000_0005), 5);
         assert_eq!(sequence_number(0x0005_0000_0000_0005), 5);
         assert_eq!(sequence_number(u64::MAX), u16::MAX);
+    }
+
+    #[test]
+    fn enum_step_with_records_advances() {
+        let buf = enum_output(0x40, &[record(&spec(2, 0x3F, 5, "a"))]);
+        assert_eq!(
+            enum_step(0, &buf),
+            Ok(EnumStep::Records { next_start: 0x40 })
+        );
+    }
+
+    #[test]
+    fn enum_step_header_only_with_larger_start_keeps_going() {
+        // With a USN filter (low_usn > 0) a whole MFT range can be filtered out: the kernel
+        // returns just the header with a larger start reference. That is not the end.
+        let buf = enum_output(0x2_0000, &[]);
+        assert_eq!(
+            enum_step(0x1_0000, &buf),
+            Ok(EnumStep::Advance {
+                next_start: 0x2_0000
+            })
+        );
+    }
+
+    #[test]
+    fn enum_step_header_only_without_progress_ends() {
+        let buf = enum_output(0x1_0000, &[]);
+        assert_eq!(enum_step(0x1_0000, &buf), Ok(EnumStep::End));
+    }
+
+    #[test]
+    fn enum_step_detects_stalls_and_regressions() {
+        let rec = record(&spec(2, 0x10, 5, "a"));
+        // Records but no progress.
+        let same = enum_output(0x40, std::slice::from_ref(&rec));
+        assert_eq!(
+            enum_step(0x40, &same),
+            Ok(EnumStep::Stalled { next_start: 0x40 })
+        );
+        // Start reference went backwards, with or without records.
+        let back = enum_output(0x20, std::slice::from_ref(&rec));
+        assert_eq!(
+            enum_step(0x40, &back),
+            Ok(EnumStep::Stalled { next_start: 0x20 })
+        );
+        let back_empty = enum_output(0x20, &[]);
+        assert_eq!(
+            enum_step(0x40, &back_empty),
+            Ok(EnumStep::Stalled { next_start: 0x20 })
+        );
+        // Shorter than the header.
+        assert!(matches!(
+            enum_step(0, &[0; 7]),
+            Err(ParseError::Truncated { .. })
+        ));
+    }
+
+    #[test]
+    fn resumed_iterator_matches_fresh_one() {
+        let recs: Vec<Vec<u8>> = (0..4_u16)
+            .map(|i| record(&spec(2 + i % 2, 16 + u64::from(i), 5, "x")))
+            .collect();
+        let buf = recs.concat();
+        let mut it = RecordIter::resume(&buf, 0);
+        let mut seen = Vec::new();
+        while let Some(pos) = it.position() {
+            let mut step = RecordIter::resume(&buf, pos);
+            match step.next() {
+                Some(r) => seen.push(r.map(|r| r.frn)),
+                None => break,
+            }
+            it = step;
+        }
+        let fresh: Vec<_> = RecordIter::new(&buf, 0).map(|r| r.map(|r| r.frn)).collect();
+        assert_eq!(seen, fresh);
+        assert_eq!(seen.len(), 4);
     }
 
     /// Deterministic xorshift so the fuzz-style tests need no extra dependency.

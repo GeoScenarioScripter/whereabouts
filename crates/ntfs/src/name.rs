@@ -49,13 +49,7 @@ impl NtfsName {
     /// byte, which the record parser never produces, is ignored.
     #[must_use]
     pub fn from_utf16le_bytes(bytes: &[u8]) -> Self {
-        Self::from_utf16(
-            bytes
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|&pair| u16::from_le_bytes(pair)),
-        )
+        Self::from_utf16(utf16le_units(bytes))
     }
 
     /// The WTF-8 bytes. Equal to the UTF-8 encoding whenever the name is valid Unicode.
@@ -136,6 +130,16 @@ impl NtfsName {
         use std::os::windows::ffi::OsStringExt;
         std::ffi::OsString::from_wide(&self.to_utf16())
     }
+}
+
+/// The single UTF-16LE decoder of the crate: code units of a little-endian byte string (a
+/// trailing odd byte is ignored).
+pub(crate) fn utf16le_units(bytes: &[u8]) -> impl Iterator<Item = u16> + '_ {
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&pair| u16::from_le_bytes(pair))
 }
 
 impl fmt::Debug for NtfsName {

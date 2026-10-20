@@ -12,6 +12,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Exposes `record::build` (synthetic USN record/enum-output builders) for other crates' tests.
+# Enable only from `[dev-dependencies]`; not part of the production API.
+test-fixtures = []
+
 [dependencies]
 whereabouts-core.workspace = true
 whereabouts-source.workspace = true

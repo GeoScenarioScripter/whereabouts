@@ -47,7 +47,11 @@
 //!   name, unpaired UTF-16 surrogates preserved.
 //! - **Hard links:** enumeration returns one record per MFT file record, i.e. one of a
 //!   hard-linked file's names. Other names are not reported (documented M0 limitation).
+//! - **Local volumes only** (D-03): network drives and `SUBST` aliases (which can report NTFS)
+//!   are rejected with [`Error::NotLocal`] before anything is opened.
 //! - **Malformed kernel output** never panics: it becomes [`Error::Parse`] or a skipped record.
+//! - **Fixture builders** (`record::build`) exist only for this crate's tests or with the
+//!   `test-fixtures` feature (enable it from `[dev-dependencies]`).
 
 #![allow(unsafe_code)]
 
@@ -71,4 +75,6 @@ pub use record::{JournalInfo, RawRecord, RecordIter, UsnRecord};
 #[cfg(windows)]
 pub use process::{ProcessMemory, process_memory};
 #[cfg(windows)]
-pub use volume::{EnumOptions, EnumStats, Enumerator, Volume, VolumeInfo, volume_info};
+pub use volume::{
+    EnumOptions, EnumStats, Enumerator, Volume, VolumeInfo, ensure_local, volume_info,
+};

@@ -9,17 +9,18 @@ use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAGS_AND_ATTRIBUTES,
-    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    GetFileInformationByHandle, GetVolumeInformationW, OPEN_EXISTING,
+    FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, GetDriveTypeW,
+    GetFileInformationByHandle, GetVolumeInformationW, OPEN_EXISTING, QueryDosDeviceW,
 };
 use windows::Win32::System::IO::DeviceIoControl;
 use windows::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL};
 use windows::core::HSTRING;
 
-use crate::drive::{device_path, parse_drive_letter, root_path};
+use crate::drive::{check_local, device_path, parse_drive_letter, root_path};
 use crate::error::{Error, Result, win32};
 use crate::record::{
-    self, JournalInfo, MFT_ENUM_DATA_V1_SIZE, RawRecord, RecordIter, USN_JOURNAL_DATA_V2_SIZE,
+    self, EnumStep, JournalInfo, MFT_ENUM_DATA_V1_SIZE, RawRecord, RecordIter,
+    USN_JOURNAL_DATA_V2_SIZE,
 };
 
 /// What `GetVolumeInformationW` reports about a volume. Needs no elevation.
@@ -84,6 +85,37 @@ pub fn volume_info(volume: &str) -> Result<VolumeInfo> {
     })
 }
 
+/// Rejects drive letters that are not local disk volumes (network drives, `SUBST` aliases,
+/// optical and RAM disks) — D-03. Network and SUBST drives can report NTFS, so the file-system
+/// check alone is not enough. No elevation needed.
+///
+/// # Errors
+/// [`Error::NotLocal`], or [`Error::Os`] if the DOS device cannot be queried.
+pub fn ensure_local(letter: char) -> Result<()> {
+    let root = HSTRING::from(root_path(letter));
+    // SAFETY: `root` is a NUL-terminated wide string that outlives the call; the API only reads
+    // it.
+    let kind = unsafe { GetDriveTypeW(&root) };
+    let device = HSTRING::from(letter_str(letter));
+    let mut target = [0_u16; 1024];
+    // SAFETY: `device` is a NUL-terminated wide string that outlives the call; `target` is a
+    // live, writable buffer passed as a slice (the wrapper passes its exact length). The API
+    // writes NUL-separated strings into it and returns the count of characters written (0 on
+    // failure), so it never writes past the slice.
+    let written = unsafe { QueryDosDeviceW(&device, Some(&mut target)) };
+    let target = if written == 0 {
+        // No DOS device for this letter (e.g. nothing mounted). Let the drive type decide;
+        // an empty target is rejected below for any local type.
+        String::new()
+    } else {
+        wide_to_string(&target[..(written as usize).min(target.len())])
+    };
+    check_local(kind, &target).map_err(|reason| Error::NotLocal {
+        volume: letter_str(letter),
+        reason: reason.to_owned(),
+    })
+}
+
 /// Decodes a NUL-terminated wide buffer (lossy; labels and FS names are display-only).
 fn wide_to_string(buf: &[u16]) -> String {
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
@@ -143,6 +175,7 @@ impl Volume {
     /// [`Error::InvalidVolume`], [`Error::NotNtfs`], [`Error::NotElevated`] (access denied), or
     /// [`Error::Os`].
     pub fn open(volume: &str) -> Result<Self> {
+        ensure_local(parse_drive_letter(volume)?)?;
         let info = volume_info(volume)?;
         let letter = info.letter;
         if !info.is_ntfs() {
@@ -254,6 +287,10 @@ impl Volume {
             return match win32::code_from_hresult(e.code().0) {
                 win32::ERROR_JOURNAL_NOT_ACTIVE => Ok(None),
                 win32::ERROR_JOURNAL_DELETE_IN_PROGRESS => Err(Error::JournalDeleteInProgress {
+                    volume: letter_str(letter),
+                }),
+                win32::ERROR_INVALID_FUNCTION => Err(Error::Unsupported {
+                    op: "FSCTL_QUERY_USN_JOURNAL",
                     volume: letter_str(letter),
                 }),
                 _ => Err(os_error(
@@ -451,40 +488,47 @@ impl Enumerator<'_> {
             if let Err(e) = result {
                 self.done = true;
                 return match win32::code_from_hresult(e.code().0) {
+                    // The normal end of enumeration.
                     win32::ERROR_HANDLE_EOF => Ok(false),
+                    win32::ERROR_INVALID_FUNCTION => Err(Error::Unsupported {
+                        op: "FSCTL_ENUM_USN_DATA",
+                        volume: letter_str(letter),
+                    }),
                     _ => Err(os_error("DeviceIoControl(FSCTL_ENUM_USN_DATA)", letter, &e)),
                 };
             }
             let len = (returned as usize).min(out_len);
-            let bytes = &u64s_as_bytes(&self.buf)[..len];
-            let (next, _) = record::parse_enum_output(bytes).map_err(|source| {
-                self.done = true;
-                Error::Parse {
-                    what: "FSCTL_ENUM_USN_DATA output",
-                    volume: letter_str(letter),
-                    source,
-                }
-            })?;
+            let step = record::enum_step(self.next_start, &u64s_as_bytes(&self.buf)[..len])
+                .map_err(|source| {
+                    self.done = true;
+                    Error::Parse {
+                        what: "FSCTL_ENUM_USN_DATA output",
+                        volume: letter_str(letter),
+                        source,
+                    }
+                })?;
             self.stats.batches += 1;
             self.stats.bytes += len as u64;
-            if len == 8 {
-                // A header without records: nothing left (some systems return this instead of
-                // ERROR_HANDLE_EOF).
-                self.done = true;
-                return Ok(false);
-            }
-            if next == self.next_start {
-                self.done = true;
-                return Err(Error::Stalled {
-                    volume: letter_str(letter),
-                    frn: next,
-                });
-            }
-            self.next_start = next;
-            self.pos = 8;
-            self.end = len;
-            if self.pos < self.end {
-                return Ok(true);
+            match step {
+                EnumStep::Records { next_start } => {
+                    self.next_start = next_start;
+                    self.pos = 8;
+                    self.end = len;
+                    return Ok(true);
+                }
+                // Nothing in this MFT range passed the USN filter; keep going.
+                EnumStep::Advance { next_start } => self.next_start = next_start,
+                EnumStep::End => {
+                    self.done = true;
+                    return Ok(false);
+                }
+                EnumStep::Stalled { next_start } => {
+                    self.done = true;
+                    return Err(Error::Stalled {
+                        volume: letter_str(letter),
+                        frn: next_start,
+                    });
+                }
             }
         }
     }
@@ -506,25 +550,24 @@ impl Iterator for Enumerator<'_> {
                     Err(e) => return Some(Err(e)),
                 }
             }
-            let (pos, end) = (self.pos, self.end);
-            let rest = &u64s_as_bytes(&self.buf)[pos..end];
-            match record::parse_record(rest, pos) {
-                Ok((rec, len)) => {
-                    self.pos += len;
+            // One step of the shared record walker, resumed from our cursor.
+            let mut walker = RecordIter::resume(&u64s_as_bytes(&self.buf)[..self.end], self.pos);
+            let item = walker.next();
+            let position = walker.position();
+            match item {
+                None => self.pos = self.end,
+                Some(Ok(rec)) => {
+                    let raw = rec.to_raw();
+                    self.pos = position.unwrap_or(self.end);
                     self.stats.records += 1;
-                    return Some(Ok(rec.to_raw()));
+                    return Some(Ok(raw));
                 }
-                Err(e) if e.is_record_local() => {
-                    // Length already validated by `parse_record` before any record-local check.
-                    let len = rest
-                        .get(..4)
-                        .and_then(|b| <[u8; 4]>::try_from(b).ok())
-                        .map_or(0, |b| u32::from_le_bytes(b) as usize);
+                Some(Err(e)) if e.is_record_local() => {
+                    self.pos = position.unwrap_or(self.end);
                     self.stats.skipped += 1;
                     tracing::warn!(volume = %self.volume.letter(), error = %e, "skipping USN record");
-                    self.pos += len.max(8);
                 }
-                Err(source) => {
+                Some(Err(source)) => {
                     self.done = true;
                     self.pos = self.end;
                     return Some(Err(Error::Parse {

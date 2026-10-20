@@ -1,9 +1,13 @@
 //! Volume-level tests (Windows only).
 //!
 //! The `#[ignore]` tests need an elevated shell (raw volume handle) and read the system volume
-//! `C:` — read-only: the volume is opened with `GENERIC_READ`, no journal is created and nothing
-//! is written. CI runs them on the elevated Windows runner with
-//! `cargo test -p whereabouts-ntfs -- --ignored`.
+//! `C:`. Enumerating `C:` is what `docs/stages/stage01/PLAN.md` §1.3 *Acceptance* requires
+//! ("`#[ignore]` elevated test on the CI Windows runner enumerates `C:`"), which is why these
+//! tests do not use an isolated test volume. They are strictly read-only: the volume is opened
+//! with `GENERIC_READ` only, the only control codes issued are `FSCTL_QUERY_USN_JOURNAL` and
+//! `FSCTL_ENUM_USN_DATA` (no journal is created or deleted), the root directory handle is opened
+//! with `FILE_READ_ATTRIBUTES` only, and nothing is written anywhere. CI runs them on the elevated
+//! Windows runner with `cargo test -p whereabouts-ntfs -- --ignored`.
 #![cfg(windows)]
 #![allow(clippy::unwrap_used)]
 
@@ -29,6 +33,11 @@ fn system_volume_is_ntfs_without_elevation() {
     assert_eq!(info.letter, 'C');
     assert!(info.is_ntfs(), "C: reports {}", info.file_system);
     assert!(info.max_component_length >= 255);
+}
+
+#[test]
+fn system_volume_is_local_without_elevation() {
+    whereabouts_ntfs::ensure_local('C').unwrap();
 }
 
 #[test]

@@ -104,10 +104,20 @@ mod windows_main {
         let mut enumerator = volume.enumerate_with(options);
         let mut records = Vec::new();
         let (mut count, mut dirs, mut name_bytes) = (0_u64, 0_u64, 0_u64);
+        let mut batch_skipped = 0_u64;
         if args.count_only {
             while let Some(batch) = enumerator.next_batch()? {
                 for rec in batch {
-                    let rec = rec?;
+                    // Same policy as the owned iterator: skip and count record-local errors,
+                    // stop on structural ones — so both modes report comparable numbers.
+                    let rec = match rec {
+                        Ok(rec) => rec,
+                        Err(e) if e.is_record_local() => {
+                            batch_skipped += 1;
+                            continue;
+                        }
+                        Err(e) => return Err(e.into()),
+                    };
                     count += 1;
                     dirs += u64::from(rec.is_directory());
                     name_bytes += rec.name_utf16le().len() as u64 / 2;
@@ -141,7 +151,7 @@ mod windows_main {
         );
         println!(
             "skipped       {} (records with parse errors; expected 0)",
-            stats.skipped
+            stats.skipped + batch_skipped
         );
         println!(
             "kernel calls  {} returning {:.1} MiB",

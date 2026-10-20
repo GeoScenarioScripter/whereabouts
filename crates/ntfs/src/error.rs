@@ -110,6 +110,24 @@ pub enum Error {
         /// File-system name reported by `GetVolumeInformationW`.
         found: String,
     },
+    /// The drive is not a local disk volume: a mapped network drive, a `SUBST` alias, an optical
+    /// or RAM disk. v1 indexes local files only (D-03).
+    #[error("{volume} is not a local disk volume ({reason})")]
+    NotLocal {
+        /// The volume, e.g. `Z:`.
+        volume: String,
+        /// Why it was rejected, e.g. `network drive`.
+        reason: String,
+    },
+    /// The file system rejected the control code (`ERROR_INVALID_FUNCTION`): it does not
+    /// support this operation.
+    #[error("{op} is not supported by the file system on {volume}")]
+    Unsupported {
+        /// The operation, e.g. `FSCTL_ENUM_USN_DATA`.
+        op: &'static str,
+        /// The volume, e.g. `C:`.
+        volume: String,
+    },
     /// Opening the raw volume was denied: raw volume access needs an elevated process.
     #[error(
         "access denied opening {volume}: raw volume access needs an elevated (administrator) process"
