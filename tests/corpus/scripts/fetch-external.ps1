@@ -2,6 +2,8 @@
 # (gitignored) and verify each file's sha256. Files already present with the right hash are kept.
 # Usage: pwsh tests/corpus/scripts/fetch-external.ps1   (Windows PowerShell 5.1 works too)
 $ErrorActionPreference = 'Stop'
+# The progress bar makes Invoke-WebRequest orders of magnitude slower on Windows PowerShell 5.1.
+$ProgressPreference = 'SilentlyContinue'
 
 $destRoot = Join-Path $PSScriptRoot '..\external'
 $list = Join-Path $PSScriptRoot 'external-files.txt'

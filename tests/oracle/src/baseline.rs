@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 use crate::OracleError;
 use crate::compare::{Check, Tolerances};
+use crate::manifest::KNOWN_FORMATS;
 use crate::report::Report;
 
 /// Parsed baseline.
@@ -81,6 +82,18 @@ impl Baseline {
             path: "baseline.toml".into(),
             source,
         })?;
+        // A typo'd format section would silently enforce nothing; unknown check names are
+        // already rejected by `Check`'s Deserialize.
+        if let Some(unknown) = b
+            .format
+            .keys()
+            .find(|f| !KNOWN_FORMATS.contains(&f.as_str()))
+        {
+            return Err(OracleError::Invalid(format!(
+                "[format.{unknown}] is not a known format (known: {})",
+                KNOWN_FORMATS.join(", ")
+            )));
+        }
         let rates = b
             .min_rate
             .iter()
@@ -201,5 +214,12 @@ mod tests {
         assert!(Baseline::parse(&TOML.replace("epsg = 0.0", "epsg = 1.5")).is_err());
         assert!(Baseline::parse(&TOML.replace("epsg = 0.0", "epgs = 0.5")).is_err());
         assert!(Baseline::parse(&TOML.replace("wgs84_deg = 0.01", "wgs84_deg = -1.0")).is_err());
+        // Unknown check name inside a format section, and an unknown format section.
+        assert!(
+            Baseline::parse(&TOML.replace("feature_count = 0.5", "feature_cnt = 0.5")).is_err()
+        );
+        let err = Baseline::parse(&TOML.replace("[format.geotiff.", "[format.geotif."))
+            .expect_err("unknown format must be rejected");
+        assert!(err.to_string().contains("geotif"), "{err}");
     }
 }

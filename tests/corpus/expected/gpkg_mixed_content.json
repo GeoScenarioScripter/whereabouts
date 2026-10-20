@@ -52,8 +52,8 @@
           -115.762720967
         ],
         "resolution": [
-          130.452528273,
-          115.762720967
+          130.452528273337,
+          115.762720967221
         ],
         "georef_source": "gpkg_tile_matrix",
         "pixel_is_point": false,

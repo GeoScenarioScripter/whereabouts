@@ -25,6 +25,8 @@ whereabouts-crs.workspace = true
 whereabouts-readers.workspace = true
 
 [dev-dependencies]
+# Verifies committed real-world samples against their recorded upstream sha256 (tests/corpus.rs).
+sha2 = "0.11.0"
 tempfile.workspace = true
 
 # Prints the per-format agreement report on every run and fails below tests/oracle/baseline.toml.

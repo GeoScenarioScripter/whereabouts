@@ -308,7 +308,13 @@ fn raster_verdict(e: &RasterRecord, a: &NativeRaster, tol: &Tolerances) -> Verdi
 }
 
 fn nodata_eq(a: Option<NoData>, b: Option<NoData>) -> bool {
-    match (a, b) {
+    // An adapter may build `NoData::Value(f64::NAN)` directly; fold every value through
+    // `from_f64` so NaN/±inf always land in their own variants before comparing.
+    let norm = |n: NoData| match n {
+        NoData::Value(v) => NoData::from_f64(v),
+        other => other,
+    };
+    match (a.map(norm), b.map(norm)) {
         (None, None) => true,
         (Some(NoData::NaN), Some(NoData::NaN)) => true,
         (Some(x), Some(y)) => x == y,
@@ -325,14 +331,25 @@ fn bbox_close(e: &Bbox, a: &Bbox, close: impl Fn(f64, f64) -> bool) -> bool {
     e.iter().zip(a).all(|(x, y)| close(*x, *y))
 }
 
-/// Longitudes compared on the circle (so 180 ≡ -180), latitudes directly.
+/// Longitude span of `[west, _, east, _]` in degrees, 0–360: crossing boxes (`west > east`) wrap.
+/// `[-180, 180]` is the full globe (360), `[180, 180]` and `[180, -180]` are empty (0).
+fn lon_span(b: &Bbox) -> f64 {
+    let (w, e) = (b[0], b[2]);
+    if e >= w { e - w } else { e - w + 360.0 }
+}
+
+/// Longitude edges compared on the circle (so an east edge written as 181° matches -179°), plus
+/// the longitude span, so that a box collapsed or inverted at ±180° can never match the full
+/// globe (its edges are "equal" modulo 360, its span is not). Latitudes compared directly.
 fn wgs84_close(e: &Bbox, a: &Bbox, deg: f64) -> bool {
     let lon = |x: f64, y: f64| {
         let d = (x - y).rem_euclid(360.0);
         d.min(360.0 - d) <= deg
     };
     let lat = |x: f64, y: f64| (x - y).abs() <= deg;
-    lon(e[0], a[0]) && lat(e[1], a[1]) && lon(e[2], a[2]) && lat(e[3], a[3])
+    // Each edge may be off by `deg`, so the span by twice that.
+    let span_ok = (lon_span(e) - lon_span(a)).abs() <= 2.0 * deg;
+    span_ok && lon(e[0], a[0]) && lat(e[1], a[1]) && lon(e[2], a[2]) && lat(e[3], a[3])
 }
 
 #[cfg(test)]
@@ -590,5 +607,41 @@ mod tests {
         }
         let r = compare(&case(&[]), &o, &n, &[Check::Raster], &Tolerances::default());
         assert_eq!(verdicts(&r), vec![(Check::Raster, false)]);
+    }
+
+    #[test]
+    fn full_globe_does_not_match_collapsed_or_inverted_boxes() {
+        let deg = Tolerances::default().wgs84_deg;
+        let globe = [-180.0, -90.0, 180.0, 83.6];
+        assert!(wgs84_close(&globe, &globe, deg));
+        assert!(wgs84_close(&globe, &[-179.995, -90.0, 179.995, 83.6], deg));
+        // Zero-width box at ±180: edges equal modulo 360, span 0 vs 360.
+        assert!(!wgs84_close(&globe, &[180.0, -90.0, 180.0, 83.6], deg));
+        assert!(!wgs84_close(&globe, &[-180.0, -90.0, -180.0, 83.6], deg));
+        // Inverted (antimeridian-crossing, empty) box.
+        assert!(!wgs84_close(&globe, &[180.0, -90.0, -180.0, 83.6], deg));
+        assert!(!wgs84_close(&[180.0, -90.0, -180.0, 83.6], &globe, deg));
+        // A genuine crossing box may write its east edge either way.
+        let fiji = [176.9, -18.6, -178.3, -16.4];
+        assert!(wgs84_close(&fiji, &[176.9, -18.6, 181.7, -16.4], deg));
+        assert!(!wgs84_close(&fiji, &[-178.3, -18.6, 176.9, -16.4], deg));
+    }
+
+    #[test]
+    fn nodata_nan_matches_whatever_its_representation() {
+        let nan_value = Some(NoData::Value(f64::NAN));
+        assert!(nodata_eq(nan_value, Some(NoData::NaN)));
+        assert!(nodata_eq(Some(NoData::NaN), nan_value));
+        assert!(nodata_eq(nan_value, nan_value));
+        assert!(nodata_eq(
+            Some(NoData::Value(f64::NEG_INFINITY)),
+            Some(NoData::NegInf)
+        ));
+        assert!(!nodata_eq(nan_value, Some(NoData::Value(0.0))));
+        assert!(!nodata_eq(nan_value, None));
+        assert!(nodata_eq(
+            Some(NoData::Value(-9999.0)),
+            Some(NoData::Value(-9999.0))
+        ));
     }
 }

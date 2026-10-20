@@ -28,7 +28,7 @@ if [[ "${WHEREABOUTS_IN_GDAL_CONTAINER:-}" != "1" ]]; then
     user_args=(--user "$(id -u):$(id -g)")
   fi
   exec docker run --rm --platform "$GDAL_PLATFORM" \
-    "${user_args[@]}" \
+    ${user_args[@]+"${user_args[@]}"} \
     -e WHEREABOUTS_IN_GDAL_CONTAINER=1 -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
     -v "$mount_src:/work" -w /work \
     "$GDAL_IMAGE" bash tests/corpus/scripts/generate.sh "$@"

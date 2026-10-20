@@ -23,6 +23,8 @@ on:
     paths:
       - tests/corpus/scripts/**
       - tests/corpus/manifest.toml
+      - tests/corpus/data/**
+      - tests/corpus/expected/**
       - .github/workflows/oracle-golden.yml
 
 permissions:

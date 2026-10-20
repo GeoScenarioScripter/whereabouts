@@ -35,7 +35,7 @@ differs from what is committed — the corpus is reproducible byte for byte.
 
 Determinism: one image pinned by digest, one platform (`linux/amd64`), no wall-clock time (DBF
 dates and GeoPackage `last_change` pinned), closed-form coordinates and pixels, goldens with
-stable key order and floats rounded to 9 decimals. Bumping GDAL = edit `GDAL_IMAGE` in
+stable key order and floats rounded to 9 decimals (raster `resolution` is written at full precision, because it is compared with a purely relative tolerance). Bumping GDAL = edit `GDAL_IMAGE` in
 `generate.sh`, regenerate, review the diff like code.
 
 ## Adding a case

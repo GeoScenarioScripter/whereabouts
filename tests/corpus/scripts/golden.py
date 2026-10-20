@@ -73,6 +73,17 @@ def num(v):
     return round(v, DECIMALS) + 0.0  # + 0.0 folds -0.0 into 0.0
 
 
+def exact(v):
+    """Like num() but without rounding: for values compared with a purely relative tolerance
+    (raster resolution), where 9 decimals would be far coarser than the tolerance."""
+    if v is None:
+        return None
+    v = float(v)
+    if math.isnan(v) or math.isinf(v):
+        return num(v)
+    return v + 0.0
+
+
 def bbox(minx, miny, maxx, maxy):
     return [num(minx), num(miny), num(maxx), num(maxy)]
 
@@ -303,7 +314,9 @@ def gpkg_layers(case_dir: Path, anchor: Path):
     for table, dtype, x0, y0, x1, y1, srs_id, org, org_id, definition in rows:
         declared = None if None in (x0, y0, x1, y1) else bbox(x0, y0, x1, y1)
         raw = definition if definition and definition.strip().lower() != "undefined" else None
-        authority = {"name": org, "code": str(org_id), "srs_id": srs_id} if srs_id is not None else None
+        # org/org_id are NULL when srs_id dangles (no gpkg_spatial_ref_sys row): keep them null.
+        authority = ({"name": org, "code": None if org_id is None else str(org_id), "srs_id": srs_id}
+                     if srs_id is not None else None)
         if dtype in ("features", "attributes"):
             lyr = ds.GetLayerByName(table)
             srs = lyr.GetSpatialRef()
@@ -397,7 +410,7 @@ def raster_layer(ds, name, kind, anchor: Path, crs_source=None, raw=None, author
         "data_types": [gdal.GetDataTypeName(b.DataType) for b in bands],
         "nodata": [num(b.GetNoDataValue()) for b in bands],
         "geotransform": [num(v) for v in gt] if gt is not None else None,
-        "resolution": [num(math.hypot(gt[1], gt[4])), num(math.hypot(gt[2], gt[5]))] if gt is not None else None,
+        "resolution": [exact(math.hypot(gt[1], gt[4])), exact(math.hypot(gt[2], gt[5]))] if gt is not None else None,
         "georef_source": georef_source,
         "pixel_is_point": (ds.GetMetadataItem("AREA_OR_POINT") or "").lower() == "point",
         "overview_count": bands[0].GetOverviewCount() if bands else 0,
@@ -476,7 +489,9 @@ def main(argv):
         ids.add(case["id"])
         if only and case["id"] not in only:
             continue
-        if not case_root(case).exists():
+        # Same rule as Corpus::is_present: a partial fetch must never overwrite a committed golden.
+        root = case_root(case)
+        if not all((root / f).is_file() for f in case["files"]):
             print(f"{case['id']:36s} skipped (data not present; golden kept)")
             continue
         rec = golden(case)

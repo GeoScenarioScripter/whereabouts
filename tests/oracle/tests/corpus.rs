@@ -235,6 +235,37 @@ fn provenance_is_recorded() {
 }
 
 #[test]
+fn committed_files_match_their_recorded_sha256() {
+    use sha2::{Digest, Sha256};
+
+    let c = corpus();
+    let mut checked = 0;
+    for case in c
+        .cases()
+        .iter()
+        .filter(|k| k.location == Location::Committed)
+    {
+        let dir = c.case_dir(case);
+        for (file, expected) in &case.sha256 {
+            let bytes =
+                fs::read(dir.join(file)).unwrap_or_else(|e| panic!("{}/{file}: {e}", case.id));
+            let actual: String = Sha256::digest(&bytes)
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            assert_eq!(
+                &actual,
+                &expected.to_ascii_lowercase(),
+                "{}/{file}: content differs from the recorded upstream hash",
+                case.id
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no committed file has a recorded sha256");
+}
+
+#[test]
 fn empty_registry_reports_everything_as_skipped() {
     let c = corpus();
     let report = whereabouts_oracle::evaluate(&c, &[], &Default::default()).expect("evaluate");

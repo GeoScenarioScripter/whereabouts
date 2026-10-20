@@ -276,8 +276,8 @@ pub enum CrsStatus {
 pub struct DeclaredAuthority {
     /// `organization` (e.g. `EPSG`, `NONE`).
     pub name: Option<String>,
-    /// `organization_coordsys_id` as text.
-    pub code: String,
+    /// `organization_coordsys_id` as text (`None` if `srs_id` has no `gpkg_spatial_ref_sys` row).
+    pub code: Option<String>,
     /// GPKG `srs_id`.
     pub srs_id: i64,
 }
