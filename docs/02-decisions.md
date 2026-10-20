@@ -37,13 +37,13 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-24 | Workspace layout, pinned toolchain, lints, CI matrix | Proposed |
 | D-25 | GDAL golden files are committed; GDAL needed only to regenerate them | Proposed |
 | D-26 | Workflow practices: contracts-first waves, write-scope ownership, GitHub-tracked status, verification levels V1–V4 | Proposed |
-| D-27 | Identities: `DatasetId` = (catalog-assigned `VolumeId`, anchor FRN); `LayerId` = dataset + reader-order ordinal | Proposed |
-| D-28 | File names are stored losslessly as WTF-8 | Proposed |
-| D-29 | `Source` change contract: `Changes::{Batch, FullRescanRequired}`, checkpoint taken before enumeration, idempotent replay | Proposed |
-| D-30 | Core data conventions: frozen enum string codes, `Timestamp` = i64 ns, `ReadLimits` 16 MiB / 2 s, validated records | Proposed |
-| D-31 | NTFS enumeration: V2 records, root FRN from the root handle, local fixed/removable drives only | Proposed |
-| D-32 | CRS parsing: crate-local model, EPSG/PROJ vocabulary, GDAL's WKT1 conventions, bounded input, lenient datum shifts | Proposed |
-| D-33 | Oracle comparison rules: tolerances, baseline, true-extent convention, pinned GDAL image, drift check on PRs | Proposed |
+| D-27 | Identities: `DatasetId` = (catalog-assigned `VolumeId`, anchor FRN); `LayerId` = dataset + reader-order ordinal | Agreed (2026-10-20) |
+| D-28 | File names are stored losslessly as WTF-8 | Agreed (2026-10-20) |
+| D-29 | `Source` change contract: `Changes::{Batch, FullRescanRequired}`, checkpoint taken before enumeration, idempotent replay | Agreed (2026-10-20) |
+| D-30 | Core data conventions: frozen enum string codes, `Timestamp` = i64 ns, `ReadLimits` 16 MiB / 2 s, validated records | Agreed (2026-10-20) |
+| D-31 | NTFS enumeration: V2 records, root FRN from the root handle, local fixed/removable drives only | Agreed (2026-10-20) |
+| D-32 | CRS parsing: crate-local model, EPSG/PROJ vocabulary, GDAL's WKT1 conventions, bounded input, lenient datum shifts | Agreed (2026-10-20) |
+| D-33 | Oracle comparison rules: tolerances, baseline, true-extent convention, pinned GDAL image, drift check on PRs | Agreed (2026-10-20) |
 
 ---
 
@@ -192,28 +192,28 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Rationale:** Designed for a crate-structured Rust workspace and elevated Windows code; folds in lessons from the org's earlier stage/session work (bookkeeping conflicts, never-run live tests). Details in `08-development-workflow.md`.
 
 ## D-27 — Dataset, layer and volume identities
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** stage01/1.1 had to choose stable IDs before wave 2 builds the catalog, name index and grouper on them ([1.1 note](stages/stage01/sessions/1.1-core-contracts.md)).
 - **Decision:** `DatasetId` = (`VolumeId`, anchor FRN). `VolumeId` is a `u32` assigned by the catalog per registered source, matched by `SourceIdentity.key` (NTFS: volume GUID path). `LayerId` = (`DatasetId`, ordinal), where ordinal is the index in the reader's layer list; readers must order layers deterministically, and layers are replaced wholesale on re-extraction. The catalog keeps integer surrogate keys plus `UNIQUE(volume_id, anchor_frn)`.
 - **Rationale:** An anchor FRN survives renames, moves and sidecar churn, and a delete + recreate correctly gives a new dataset. A hash or packed `u64` risks collisions. NTFS serials collide on cloned disks and VHDs, and non-NTFS sources have none.
 - **Consequences:** 2.5 adds `anchor_frn` and `ordinal` columns. Hard-linked anchors collapse to one ID, which is the documented M0 hard-link limitation.
 
 ## D-28 — Lossless WTF-8 file names
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** NTFS names are UTF-16 and may contain unpaired surrogates. Proposed independently by stage01/1.1 (`FileName`) and 1.3 (`NtfsName`).
 - **Decision:** File names are stored as WTF-8: identical to UTF-8 for valid names, with unpaired surrogates kept. `as_str()` is zero-cost for valid names. Serde writes a string, or a UTF-16 array for invalid names.
 - **Rationale:** Every file stays openable and no two names collide, unlike lossy `String`. It's half the size of UTF-16 for ASCII, works on Linux unlike `OsString::from_wide`, and matches `OsStr::as_encoded_bytes` on Windows.
 - **Consequences:** the name-index string pool (2.1) stores WTF-8 bytes directly. Types that hold `PathBuf` must not offer serialisation that fails on such names (`ResolvedDataset` has no serde for this reason).
 
 ## D-29 — `Source` change contract
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** D-18 requires a `Source` trait. stage01/1.1 defined it ([1.1 note](stages/stage01/sessions/1.1-core-contracts.md)).
 - **Decision:** `Source { identity(), root(), enumerate(sink) -> Checkpoint, changes(&Checkpoint) -> Changes }`, synchronous and poll-based. `Changes` is either `Batch { events, checkpoint }` or `FullRescanRequired(reason)`; a rescan is not a `SourceEvent`. `enumerate` takes its checkpoint **before** enumerating, so replay covers the gap, and consumers apply events idempotently. `Deleted`/`Modified` carry the full `FileRecord`. `Checkpoint` is opaque versioned bytes (`WBCP` magic, ≤ 64 KiB, validated on construction and on decode).
 - **Rationale:** A rescan can then never be committed together with a checkpoint, and event consumers (name index, grouper) never see a non-event.
 - **Consequences:** this deviates from the stage01 spec wording (`SourceEvent::FullRescanRequired`), which is accepted here. 2.2 implements it for NTFS.
 
 ## D-30 — Core data conventions
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** stage01/1.1 ([note](stages/stage01/sessions/1.1-core-contracts.md)) and its review.
 - **Decision:**
   - Every core enum has one frozen string code, used both as the catalog TEXT value and as the serde form. Codes are matched exactly, except `GeometryKind::parse_lenient`, which readers use for names read from files (GPKG writes them upper-case).
@@ -225,7 +225,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Consequences:** codes can't change once released. 2.5 calls `validate()`.
 
 ## D-31 — NTFS enumeration specifics
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** stage01/1.3 ([note](stages/stage01/sessions/1.3-ntfs-enumeration.md)).
 - **Decision:**
   - Request `USN_RECORD_V2` only (`MFT_ENUM_DATA_V1`, min = max = 2). V3 is still parsed and narrowed to 64 bits, or rejected.
@@ -236,7 +236,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Consequences:** 2.1/2.2 seed the root entry. Mount points and GUID paths are #25; 128-bit file IDs (ReFS) are #24.
 
 ## D-32 — CRS parsing model and conventions
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** stage01/1.4 ([note](stages/stage01/sessions/1.4-crs-wkt-parsing.md)). Readers hand over raw text (`CrsDefinition`, D-30).
 - **Decision:**
   - The parsed `Crs` model stays inside `whereabouts-crs`; 2.4 wires `CrsDefinition → Crs`.
@@ -251,7 +251,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Consequences:** 2.4 decides axis order for WKT1/ESRI and compares angles modulo 360. EPSG and Esri attribution goes into `NOTICE` (#27).
 
 ## D-33 — Oracle comparison rules
-- **Status:** Proposed
+- **Status:** Agreed (2026-10-20, owner — at gate G1)
 - **Context:** D-08/D-25 use GDAL as the correctness oracle. stage01/1.2 built the corpus and harness ([note](stages/stage01/sessions/1.2-oracle-corpus.md)).
 - **Decision:**
   - **Tolerances:** native extent `|Δ| ≤ max(1e-6, 1e-9·|v|)`. WGS84: each edge within 0.01°, longitude compared modulo 360, **and** longitude span within 0.02°. Raster resolution relative 1e-9 (goldens unrounded). Counts and EPSG exact.
