@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "case": "tif_nodata_float32",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "thickness",
+      "kind": "raster",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": null,
+      "extent": [
+        -800000.0,
+        -800000.0,
+        800000.0,
+        800000.0
+      ],
+      "declared_extent": null,
+      "raster": {
+        "width": 64,
+        "height": 64,
+        "band_count": 1,
+        "data_types": [
+          "Float32"
+        ],
+        "nodata": [
+          -9999.0
+        ],
+        "geotransform": [
+          -800000.0,
+          25000.0,
+          0.0,
+          800000.0,
+          0.0,
+          -25000.0
+        ],
+        "resolution": [
+          25000.0,
+          25000.0
+        ],
+        "georef_source": "geotiff_tags",
+        "pixel_is_point": false,
+        "overview_count": 0,
+        "bigtiff": false,
+        "layout": null,
+        "compression": null
+      },
+      "fields": null,
+      "encoding": null,
+      "crs": {
+        "status": "identified",
+        "source": "geokeys",
+        "raw_kind": "geokeys",
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"WGS 84 / Antarctic Polar Stereographic\",BASEGEOGCRS[\"WGS 84\",ENSEMBLE[\"World Geodetic System 1984 ensemble\",MEMBER[\"World Geodetic System 1984 (Transit)\"],MEMBER[\"World Geodetic System 1984 (G730)\"],MEMBER[\"World Geodetic System 1984 (G873)\"],MEMBER[\"World Geodetic System 1984 (G1150)\"],MEMBER[\"World Geodetic System 1984 (G1674)\"],MEMBER[\"World Geodetic System 1984 (G1762)\"],MEMBER[\"World Geodetic System 1984 (G2139)\"],MEMBER[\"World Geodetic System 1984 (G2296)\"],ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]],ENSEMBLEACCURACY[2.0]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4326]],CONVERSION[\"Antarctic Polar Stereographic\",METHOD[\"Polar Stereographic (variant B)\",ID[\"EPSG\",9829]],PARAMETER[\"Latitude of standard parallel\",-71,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8832]],PARAMETER[\"Longitude of origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8833]],PARAMETER[\"False easting\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"(E)\",north,MERIDIAN[90,ANGLEUNIT[\"degree\",0.0174532925199433]],ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"(N)\",north,MERIDIAN[0,ANGLEUNIT[\"degree\",0.0174532925199433]],ORDER[2],LENGTHUNIT[\"metre\",1]],USAGE[SCOPE[\"Antarctic Digital Database and small scale topographic mapping.\"],AREA[\"Antarctica.\"],BBOX[-90,-180,-60,180]],ID[\"EPSG\",3031]]",
+        "epsg": 3031,
+        "epsg_method": "authority",
+        "epsg_confidence": 100,
+        "candidates": []
+      },
+      "wgs84_extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        -79.614627031
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

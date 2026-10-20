@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "case": "shp_corrupt_truncated_records",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "error",
+  "error": "Error in fread() reading object of size 28 at offset 296 from .shp file",
+  "messages": [],
+  "layers": []
+}

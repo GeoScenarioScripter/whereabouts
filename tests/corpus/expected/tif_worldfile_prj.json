@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "case": "tif_worldfile_prj",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "landcover",
+      "kind": "raster",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": null,
+      "extent": [
+        -2000000.0,
+        2495200.0,
+        -1993600.0,
+        2500000.0
+      ],
+      "declared_extent": null,
+      "raster": {
+        "width": 64,
+        "height": 48,
+        "band_count": 1,
+        "data_types": [
+          "Byte"
+        ],
+        "nodata": [
+          null
+        ],
+        "geotransform": [
+          -2000000.0,
+          100.0,
+          0.0,
+          2500000.0,
+          0.0,
+          -100.0
+        ],
+        "resolution": [
+          100.0,
+          100.0
+        ],
+        "georef_source": "worldfile",
+        "pixel_is_point": false,
+        "overview_count": 0,
+        "bigtiff": false,
+        "layout": null,
+        "compression": null
+      },
+      "fields": null,
+      "encoding": null,
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "PROJCS[\"NAD_1983_Contiguous_USA_Albers\",GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Albers\"],PARAMETER[\"False_Easting\",0.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",-96.0],PARAMETER[\"Standard_Parallel_1\",29.5],PARAMETER[\"Standard_Parallel_2\",45.5],PARAMETER[\"Latitude_Of_Origin\",23.0],UNIT[\"Meter\",1.0]]",
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"NAD83 / Conus Albers\",BASEGEOGCRS[\"NAD83\",DATUM[\"North American Datum 1983\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]],ID[\"EPSG\",6269]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"Degree\",0.0174532925199433]]],CONVERSION[\"unnamed\",METHOD[\"Albers Equal Area\",ID[\"EPSG\",9822]],PARAMETER[\"Latitude of false origin\",23,ANGLEUNIT[\"Degree\",0.0174532925199433],ID[\"EPSG\",8821]],PARAMETER[\"Longitude of false origin\",-96,ANGLEUNIT[\"Degree\",0.0174532925199433],ID[\"EPSG\",8822]],PARAMETER[\"Latitude of 1st standard parallel\",29.5,ANGLEUNIT[\"Degree\",0.0174532925199433],ID[\"EPSG\",8823]],PARAMETER[\"Latitude of 2nd standard parallel\",45.5,ANGLEUNIT[\"Degree\",0.0174532925199433],ID[\"EPSG\",8824]],PARAMETER[\"Easting at false origin\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8826]],PARAMETER[\"Northing at false origin\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8827]]],CS[Cartesian,2],AXIS[\"(E)\",east,ORDER[1],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]],AXIS[\"(N)\",north,ORDER[2],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]]]",
+        "epsg": 5070,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "5070",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        -120.992054106,
+        43.07299371,
+        -120.900338221,
+        43.129365607
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Oracle agreement baseline — enforced by `cargo test -p whereabouts-oracle` (tests/agreement.rs).
+#
+# The agreement test fails if any per-format, per-check agreement rate drops below `min_rate`
+# (per-format overrides in [format.<name>.min_rate]). Checks an adapter does not declare, and
+# checks with nothing compared, are not enforced — so an empty adapter registry passes.
+# Raise these as readers land; never lower one without a recorded reason (PR + session note).
+#
+# Values proposed by stage01 session 1.2 (not yet decisions — see the session note).
+
+[tolerance]
+# Native extents: pass if |a - b| <= native_abs OR <= native_rel * max(|a|, |b|).
+# Header bboxes are stored as doubles, so agreement should be essentially exact.
+native_abs = 1e-6
+native_rel = 1e-9
+# WGS84 extents in degrees (~1.1 km at the equator). Covers proj4rs-vs-PROJ differences such as
+# ignored datum grid shifts (D-09: metres of error are fine for a search index). Q-14 may tighten.
+wgs84_deg = 0.01
+# Raster pixel size, relative.
+resolution_rel = 1e-9
+
+[min_rate]
+# Stage01 exit criterion 4: native bbox, geometry type and counts agree on >= 98% of cases.
+status = 1.0
+layers = 1.0
+geometry_type = 0.98
+feature_count = 0.98
+native_extent = 0.98
+raster = 0.98
+# Q-14: EPSG identification and WGS84 agreement targets are set by sessions 2.4 / 4.3.
+epsg = 0.0
+wgs84_extent = 0.0

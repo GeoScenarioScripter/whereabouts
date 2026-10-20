@@ -1,0 +1,90 @@
+name: Oracle goldens
+
+# Regenerates the synthetic test corpus and the GDAL oracle records (tests/corpus/expected/)
+# inside the pinned GDAL image (tests/corpus/scripts/generate.sh) and uploads the result as an
+# artifact, so sessions without Docker can regenerate. GDAL never touches any crate (D-07/D-08).
+#
+# - workflow_dispatch: regenerate (optionally with the external samples) and upload; with
+#   `verify`, fail if the output differs from what is committed (reproducibility check).
+# - pull_request touching the generator: always verify, so scripts and committed output can't drift.
+
+on:
+  workflow_dispatch:
+    inputs:
+      verify:
+        description: Fail if regenerated corpus/goldens differ from the committed ones
+        type: boolean
+        default: true
+      external:
+        description: Also fetch the external real-world samples and regenerate their goldens
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - tests/corpus/scripts/**
+      - tests/corpus/manifest.toml
+      - tests/corpus/data/**
+      - tests/corpus/expected/**
+      - .github/workflows/oracle-golden.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-golden-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    name: regenerate corpus + goldens (pinned GDAL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch external samples
+        if: github.event_name == 'workflow_dispatch' && inputs.external
+        run: bash tests/corpus/scripts/fetch-external.sh
+
+      - name: Regenerate
+        run: bash tests/corpus/scripts/generate.sh
+
+      - name: Diff against committed files
+        id: diff
+        run: |
+          git add -A --intent-to-add tests/corpus
+          {
+            echo '### Oracle golden regeneration'
+            echo
+            if git diff --quiet -- tests/corpus; then
+              echo 'No differences: committed corpus and goldens are reproducible.'
+            else
+              echo 'Regenerated output differs from the committed files:'
+              echo
+              echo '```'
+              git diff --stat -- tests/corpus
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet -- tests/corpus; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- tests/corpus
+          fi
+
+      - name: Upload regenerated corpus
+        uses: actions/upload-artifact@v7
+        with:
+          name: oracle-corpus
+          path: |
+            tests/corpus/data/
+            tests/corpus/expected/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail on drift
+        if: steps.diff.outputs.changed == 'true' && (github.event_name == 'pull_request' || inputs.verify)
+        run: |
+          echo "::error::Regenerated corpus/goldens differ from the committed files. Run tests/corpus/scripts/generate.sh (or download this run's artifact) and commit the result."
+          exit 1

@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "case": "tif_aux_xml_only",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "ortho",
+      "kind": "raster",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": null,
+      "extent": [
+        650000.0,
+        6858800.0,
+        651200.0,
+        6860000.0
+      ],
+      "declared_extent": null,
+      "raster": {
+        "width": 48,
+        "height": 48,
+        "band_count": 1,
+        "data_types": [
+          "Byte"
+        ],
+        "nodata": [
+          null
+        ],
+        "geotransform": [
+          650000.0,
+          25.0,
+          0.0,
+          6860000.0,
+          0.0,
+          -25.0
+        ],
+        "resolution": [
+          25.0,
+          25.0
+        ],
+        "georef_source": "aux_xml",
+        "pixel_is_point": false,
+        "overview_count": 0,
+        "bigtiff": false,
+        "layout": null,
+        "compression": null
+      },
+      "fields": null,
+      "encoding": null,
+      "crs": {
+        "status": "identified",
+        "source": "aux_xml",
+        "raw_kind": "wkt1",
+        "raw": "PROJCS[\"RGF93 v1 / Lambert-93\",GEOGCS[\"RGF93 v1\",DATUM[\"Reseau_Geodesique_Francais_1993_v1\",SPHEROID[\"GRS 1980\",6378137,298.257222101,AUTHORITY[\"EPSG\",\"7019\"]],AUTHORITY[\"EPSG\",\"6171\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4171\"]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",46.5],PARAMETER[\"central_meridian\",3],PARAMETER[\"standard_parallel_1\",49],PARAMETER[\"standard_parallel_2\",44],PARAMETER[\"false_easting\",700000],PARAMETER[\"false_northing\",6600000],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"2154\"]]",
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"RGF93 v1 / Lambert-93\",BASEGEOGCRS[\"RGF93 v1\",DATUM[\"Reseau Geodesique Francais 1993 v1\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4171]],CONVERSION[\"unnamed\",METHOD[\"Lambert Conic Conformal (2SP)\",ID[\"EPSG\",9802]],PARAMETER[\"Latitude of false origin\",46.5,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8821]],PARAMETER[\"Longitude of false origin\",3,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8822]],PARAMETER[\"Latitude of 1st standard parallel\",49,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8823]],PARAMETER[\"Latitude of 2nd standard parallel\",44,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8824]],PARAMETER[\"Easting at false origin\",700000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8826]],PARAMETER[\"Northing at false origin\",6600000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8827]]],CS[Cartesian,2],AXIS[\"easting\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"northing\",north,ORDER[2],LENGTHUNIT[\"metre\",1]],ID[\"EPSG\",2154]]",
+        "epsg": 2154,
+        "epsg_method": "authority",
+        "epsg_confidence": 100,
+        "candidates": []
+      },
+      "wgs84_extent": [
+        2.318790597,
+        48.827318442,
+        2.335276467,
+        48.838202107
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

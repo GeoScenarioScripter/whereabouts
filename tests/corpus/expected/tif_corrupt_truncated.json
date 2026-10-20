@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "case": "tif_corrupt_truncated",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [
+    "cut.tif: TIFFFetchNormalTag:IO error during reading of \"GeoPixelScale\"; tag ignored",
+    "cut.tif: TIFFFetchNormalTag:IO error during reading of \"GeoTiePoints\"; tag ignored",
+    "cut.tif: TIFFFetchNormalTag:IO error during reading of \"GeoKeyDirectory\"; tag ignored",
+    "cut.tif: TIFFFetchNormalTag:IO error during reading of \"GeoASCIIParams\"; tag ignored",
+    "TIFFFetchNormalTag:IO error during reading of \"GeoPixelScale\"; tag ignored",
+    "TIFFFetchNormalTag:IO error during reading of \"GeoTiePoints\"; tag ignored",
+    "TIFFFetchNormalTag:IO error during reading of \"GeoKeyDirectory\"; tag ignored",
+    "TIFFFetchNormalTag:IO error during reading of \"GeoASCIIParams\"; tag ignored"
+  ],
+  "layers": [
+    {
+      "name": "cut",
+      "kind": "raster",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": null,
+      "extent": null,
+      "declared_extent": null,
+      "raster": {
+        "width": 64,
+        "height": 64,
+        "band_count": 1,
+        "data_types": [
+          "Byte"
+        ],
+        "nodata": [
+          null
+        ],
+        "geotransform": null,
+        "resolution": null,
+        "georef_source": null,
+        "pixel_is_point": false,
+        "overview_count": 0,
+        "bigtiff": false,
+        "layout": null,
+        "compression": null
+      },
+      "fields": null,
+      "encoding": null,
+      "crs": {
+        "status": "missing",
+        "source": "none",
+        "raw_kind": null,
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": null,
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": null,
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}
