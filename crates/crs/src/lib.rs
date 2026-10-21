@@ -17,7 +17,24 @@
 //!   [`Authority`] — plus name normalisation in [`names`] (ESRI `GCS_*`/`D_*`, method and
 //!   parameter aliases) for the identification step.
 //!
-//! Not here yet: EPSG identification and bbox transformation (session 2.4), GeoKeys (3.2).
+//! # What is here (session 2.4)
+//!
+//! - An embedded EPSG table (`data/epsg.txt`, generated from PROJ's `proj.db` by
+//!   `scripts/gen_epsg.py`): datums, geographic and projected CRSs with Esri aliases and a
+//!   preferred Helmert shift to WGS 84. [`epsg_crs`] builds a [`Crs`] for a bare code.
+//! - [`identify`]: authority code → name/alias match → parameter match ([`Identification`]).
+//! - [`transform_bounds`] / [`Transformer`]: native bounds → [`whereabouts_core::Wgs84Extent`]
+//!   with 21 points per edge, traditional GIS axis order by default ([`AxisPolicy`]),
+//!   antimeridian split, poles, out-of-domain → partial. Projections come from `proj4rs`
+//!   (TM, LCC, Albers, Mercator, Web Mercator, stereographic, LAEA, equal-area cylindrical,
+//!   Krovak, Swiss oblique Mercator, Mollweide, Miller, geostationary) or from native inverses
+//!   in this crate (Cassini, Hotine oblique Mercator, NZMG, Equal Earth, Robinson, Sinusoidal,
+//!   ellipsoidal equidistant cylindrical). Other methods (azimuthal equidistant, polyconic,
+//!   equidistant conic, orthographic, …) are [`TransformError::UnsupportedMethod`].
+//! - [`resolve`]: a reader's [`whereabouts_core::CrsDefinition`] →
+//!   [`whereabouts_core::ResolvedCrs`] + model.
+//!
+//! Not here yet: GeoKeys (3.2).
 //!
 //! # Untrusted input
 //!
@@ -44,19 +61,31 @@
 //! # Ok::<(), whereabouts_crs::CrsError>(())
 //! ```
 
+mod epsg;
 mod error;
 mod helmert;
+mod identify;
 mod model;
 pub mod names;
+mod native;
 mod projjson;
+mod resolve;
+mod spec;
+mod transform;
 mod wkt;
 
 pub use error::CrsError;
+pub use identify::{Identification, MatchMethod, identify};
 pub use model::{
     Authority, Axis, AxisDirection, AxisOrder, BaseCrs, Crs, CrsKind, Datum, Dialect, Ellipsoid,
     Parameter, PrimeMeridian, Projection, Unit, UnitKind,
 };
 pub use names::{ParamClass, ParamName, ProjectionMethod};
+pub use resolve::{Resolution, resolve};
+pub use transform::{
+    AxisPolicy, DEFAULT_DENSIFY, MAX_DENSIFY, TransformError, TransformOptions, TransformedBounds,
+    Transformer, transform_bounds, transform_bounds_with,
+};
 
 /// Largest CRS definition accepted, in bytes (256 KiB). Real definitions are a few KiB; the
 /// longest EPSG WKT2 strings (compound CRSs with usage text) stay well under 16 KiB.
@@ -68,6 +97,24 @@ pub const MAX_DEPTH: usize = 32;
 
 /// Most WKT keyword nodes accepted in one definition.
 pub const MAX_NODES: usize = 16_384;
+
+/// The geographic or projected CRS with this EPSG code, built from the embedded EPSG table
+/// (`None` for codes the table does not have: vertical, geocentric, compound, unknown).
+pub fn epsg_crs(code: u32) -> Option<Crs> {
+    let t = epsg::table();
+    t.crs(t.get(code)?)
+}
+
+/// The EPSG name of a geographic or projected CRS in the embedded table.
+pub fn epsg_name(code: u32) -> Option<&'static str> {
+    let t = epsg::table();
+    t.name(t.get(code)?)
+}
+
+/// Provenance of the embedded EPSG table (dataset version and date, PROJ version).
+pub fn epsg_table_source() -> &'static str {
+    epsg::table().source
+}
 
 /// Parses a CRS definition in any supported text format: PROJJSON if it starts with `{`,
 /// otherwise WKT (WKT1, ESRI WKT1 or WKT2, detected from the content).

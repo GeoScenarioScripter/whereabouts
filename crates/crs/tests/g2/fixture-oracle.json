@@ -1,0 +1,4439 @@
+{
+ "schema": 1,
+ "oracle": {
+  "gdal": "3.13.3",
+  "proj": "9.8.1"
+ },
+ "identify": [
+  {
+   "fixture": "epsg-2046/esri.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "epsg-2046/projjson.json",
+   "parsed": true,
+   "epsg": 2046,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2046/wkt1.txt",
+   "parsed": true,
+   "epsg": 2046,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2046/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2046,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2056/esri.prj",
+   "parsed": true,
+   "epsg": 2056,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2056/projjson.json",
+   "parsed": true,
+   "epsg": 2056,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2056/wkt1.txt",
+   "parsed": true,
+   "epsg": 2056,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2056/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2056,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2154/esri.prj",
+   "parsed": true,
+   "epsg": 2154,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2154/projjson.json",
+   "parsed": true,
+   "epsg": 2154,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2154/wkt1.txt",
+   "parsed": true,
+   "epsg": 2154,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2154/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2154,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2193/esri.prj",
+   "parsed": true,
+   "epsg": 2193,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2193/projjson.json",
+   "parsed": true,
+   "epsg": 2193,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2193/wkt1.txt",
+   "parsed": true,
+   "epsg": 2193,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2193/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2193,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2227/esri.prj",
+   "parsed": true,
+   "epsg": 2227,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2227/projjson.json",
+   "parsed": true,
+   "epsg": 2227,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2227/wkt1.txt",
+   "parsed": true,
+   "epsg": 2227,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2227/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 2227,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2227/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2227,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2263/esri.prj",
+   "parsed": true,
+   "epsg": 2263,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2263/projjson.json",
+   "parsed": true,
+   "epsg": 2263,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2263/wkt1.txt",
+   "parsed": true,
+   "epsg": 2263,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-2263/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 2263,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-25832/esri.prj",
+   "parsed": true,
+   "epsg": 25832,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-25832/projjson.json",
+   "parsed": true,
+   "epsg": 25832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-25832/wkt1.txt",
+   "parsed": true,
+   "epsg": 25832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-25832/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 25832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-26917/esri.prj",
+   "parsed": true,
+   "epsg": 26917,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-26917/projjson.json",
+   "parsed": true,
+   "epsg": 26917,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-26917/wkt1.txt",
+   "parsed": true,
+   "epsg": 26917,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-26917/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 26917,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27200/esri.prj",
+   "parsed": true,
+   "epsg": 27200,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27200/projjson.json",
+   "parsed": true,
+   "epsg": 27200,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27200/wkt1.txt",
+   "parsed": true,
+   "epsg": 27200,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27200/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 27200,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27572/esri.prj",
+   "parsed": true,
+   "epsg": 27572,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27572/projjson.json",
+   "parsed": true,
+   "epsg": 27572,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27572/wkt1.txt",
+   "parsed": true,
+   "epsg": 27572,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27572/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 27572,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27700/esri.prj",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27700/projjson.json",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27700/wkt1.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-27700/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28355/esri.prj",
+   "parsed": true,
+   "epsg": 28355,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28355/projjson.json",
+   "parsed": true,
+   "epsg": 28355,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28355/wkt1.txt",
+   "parsed": true,
+   "epsg": 28355,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28355/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 28355,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28992/esri.prj",
+   "parsed": true,
+   "epsg": 28992,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28992/projjson.json",
+   "parsed": true,
+   "epsg": 28992,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28992/wkt1.txt",
+   "parsed": true,
+   "epsg": 28992,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-28992/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 28992,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3005/esri.prj",
+   "parsed": true,
+   "epsg": 3005,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3005/projjson.json",
+   "parsed": true,
+   "epsg": 3005,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3005/wkt1.txt",
+   "parsed": true,
+   "epsg": 3005,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3005/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3005,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3031/esri.prj",
+   "parsed": true,
+   "epsg": 3031,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3031/projjson.json",
+   "parsed": true,
+   "epsg": 3031,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3031/wkt1.txt",
+   "parsed": true,
+   "epsg": 3031,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3031/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 3031,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3031/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3031,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3034/esri.prj",
+   "parsed": true,
+   "epsg": 3034,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3034/projjson.json",
+   "parsed": true,
+   "epsg": 3034,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3034/wkt1.txt",
+   "parsed": true,
+   "epsg": 3034,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3034/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3034,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3035/esri.prj",
+   "parsed": true,
+   "epsg": 3035,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3035/projjson.json",
+   "parsed": true,
+   "epsg": 3035,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3035/wkt1.txt",
+   "parsed": true,
+   "epsg": 3035,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3035/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3035,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3068/esri.prj",
+   "parsed": true,
+   "epsg": 3068,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3068/projjson.json",
+   "parsed": true,
+   "epsg": 3068,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3068/wkt1.txt",
+   "parsed": true,
+   "epsg": 3068,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3068/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3068,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31300/esri.prj",
+   "parsed": true,
+   "epsg": 31300,
+   "method": "find_matches",
+   "confidence": 90
+  },
+  {
+   "fixture": "epsg-31300/projjson.json",
+   "parsed": true,
+   "epsg": 31300,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31300/wkt1.txt",
+   "parsed": true,
+   "epsg": 31300,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31300/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 31300,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31370/esri.prj",
+   "parsed": true,
+   "epsg": 31370,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31370/projjson.json",
+   "parsed": true,
+   "epsg": 31370,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31370/wkt1.txt",
+   "parsed": true,
+   "epsg": 31370,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31370/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 31370,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31467/esri.prj",
+   "parsed": true,
+   "epsg": 31467,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31467/projjson.json",
+   "parsed": true,
+   "epsg": 31467,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31467/wkt1.txt",
+   "parsed": true,
+   "epsg": 31467,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-31467/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 31467,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32633/esri.prj",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32633/projjson.json",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32633/wkt1.txt",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32633/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32633/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32661/esri.prj",
+   "parsed": true,
+   "epsg": 32661,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32661/projjson.json",
+   "parsed": true,
+   "epsg": 32661,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32661/wkt1.txt",
+   "parsed": true,
+   "epsg": 32661,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32661/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 32661,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32755/esri.prj",
+   "parsed": true,
+   "epsg": 32755,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32755/projjson.json",
+   "parsed": true,
+   "epsg": 32755,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32755/wkt1.txt",
+   "parsed": true,
+   "epsg": 32755,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-32755/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 32755,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3347/esri.prj",
+   "parsed": true,
+   "epsg": 3347,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3347/projjson.json",
+   "parsed": true,
+   "epsg": 3347,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3347/wkt1.txt",
+   "parsed": true,
+   "epsg": 3347,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3347/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3347,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3375/esri.prj",
+   "parsed": true,
+   "epsg": 3375,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3375/projjson.json",
+   "parsed": true,
+   "epsg": 3375,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3375/wkt1.txt",
+   "parsed": true,
+   "epsg": 3375,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3375/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3375,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3395/esri.prj",
+   "parsed": true,
+   "epsg": 3395,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3395/projjson.json",
+   "parsed": true,
+   "epsg": 3395,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3395/wkt1.txt",
+   "parsed": true,
+   "epsg": 3395,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3395/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3395,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3413/esri.prj",
+   "parsed": true,
+   "epsg": 3413,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3413/projjson.json",
+   "parsed": true,
+   "epsg": 3413,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3413/wkt1.txt",
+   "parsed": true,
+   "epsg": 3413,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3413/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3413,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3460/esri.prj",
+   "parsed": true,
+   "epsg": 3460,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3460/projjson.json",
+   "parsed": true,
+   "epsg": 3460,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3460/wkt1.txt",
+   "parsed": true,
+   "epsg": 3460,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3460/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3460,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3577/esri.prj",
+   "parsed": true,
+   "epsg": 3577,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3577/projjson.json",
+   "parsed": true,
+   "epsg": 3577,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3577/wkt1.txt",
+   "parsed": true,
+   "epsg": 3577,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3577/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3577,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3832/esri.prj",
+   "parsed": true,
+   "epsg": 3832,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3832/projjson.json",
+   "parsed": true,
+   "epsg": 3832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3832/wkt1.txt",
+   "parsed": true,
+   "epsg": 3832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3832/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3832,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3855/esri.prj",
+   "parsed": false,
+   "epsg": null,
+   "method": null,
+   "confidence": null,
+   "error": "OGR Error: Corrupt data"
+  },
+  {
+   "fixture": "epsg-3855/projjson.json",
+   "parsed": true,
+   "epsg": 3855,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3855/wkt1.txt",
+   "parsed": true,
+   "epsg": 3855,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3855/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3855,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3857/esri.prj",
+   "parsed": true,
+   "epsg": 3857,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3857/projjson.json",
+   "parsed": true,
+   "epsg": 3857,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3857/wkt1.txt",
+   "parsed": true,
+   "epsg": 3857,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3857/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3857,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3995/esri.prj",
+   "parsed": true,
+   "epsg": 3995,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3995/projjson.json",
+   "parsed": true,
+   "epsg": 3995,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3995/wkt1.txt",
+   "parsed": true,
+   "epsg": 3995,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-3995/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 3995,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4087/esri.prj",
+   "parsed": true,
+   "epsg": 4087,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4087/projjson.json",
+   "parsed": true,
+   "epsg": 4087,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4087/wkt1.txt",
+   "parsed": true,
+   "epsg": 4087,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4087/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4087,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4167/esri.prj",
+   "parsed": true,
+   "epsg": 4167,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4167/projjson.json",
+   "parsed": true,
+   "epsg": 4167,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4167/wkt1.txt",
+   "parsed": true,
+   "epsg": 4167,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4167/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4167,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4230/esri.prj",
+   "parsed": true,
+   "epsg": 4230,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4230/projjson.json",
+   "parsed": true,
+   "epsg": 4230,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4230/wkt1.txt",
+   "parsed": true,
+   "epsg": 4230,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4230/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4230,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4258/esri.prj",
+   "parsed": true,
+   "epsg": 4258,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4258/projjson.json",
+   "parsed": true,
+   "epsg": 4258,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4258/wkt1.txt",
+   "parsed": true,
+   "epsg": 4258,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4258/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4258,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4267/esri.prj",
+   "parsed": true,
+   "epsg": 4267,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4267/projjson.json",
+   "parsed": true,
+   "epsg": 4267,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4267/wkt1.txt",
+   "parsed": true,
+   "epsg": 4267,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4267/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4267,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4269/esri.prj",
+   "parsed": true,
+   "epsg": 4269,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4269/projjson.json",
+   "parsed": true,
+   "epsg": 4269,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4269/wkt1.txt",
+   "parsed": true,
+   "epsg": 4269,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4269/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4269,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4277/esri.prj",
+   "parsed": true,
+   "epsg": 4277,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4277/projjson.json",
+   "parsed": true,
+   "epsg": 4277,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4277/wkt1.txt",
+   "parsed": true,
+   "epsg": 4277,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4277/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4277,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4283/esri.prj",
+   "parsed": true,
+   "epsg": 4283,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4283/projjson.json",
+   "parsed": true,
+   "epsg": 4283,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4283/wkt1.txt",
+   "parsed": true,
+   "epsg": 4283,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4283/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4283,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4326/esri.prj",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4326/projjson.json",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4326/wkt1.txt",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4326/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4326/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4807/esri.prj",
+   "parsed": true,
+   "epsg": 4807,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4807/projjson.json",
+   "parsed": true,
+   "epsg": 4807,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4807/wkt1.txt",
+   "parsed": true,
+   "epsg": 4807,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4807/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4807,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4978/projjson.json",
+   "parsed": true,
+   "epsg": 4978,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4978/wkt1.txt",
+   "parsed": true,
+   "epsg": 4978,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4978/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 4978,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-4978/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 4978,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5041/esri.prj",
+   "parsed": true,
+   "epsg": 5041,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5041/projjson.json",
+   "parsed": true,
+   "epsg": 5041,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5041/wkt1.txt",
+   "parsed": true,
+   "epsg": 5041,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5041/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 5041,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5070/esri.prj",
+   "parsed": true,
+   "epsg": 5070,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5070/projjson.json",
+   "parsed": true,
+   "epsg": 5070,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5070/wkt1.txt",
+   "parsed": true,
+   "epsg": 5070,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5070/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 5070,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5514/esri.prj",
+   "parsed": true,
+   "epsg": 5514,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5514/projjson.json",
+   "parsed": true,
+   "epsg": 5514,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5514/wkt1.txt",
+   "parsed": true,
+   "epsg": 5514,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5514/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 5514,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5703/esri.prj",
+   "parsed": false,
+   "epsg": null,
+   "method": null,
+   "confidence": null,
+   "error": "OGR Error: Corrupt data"
+  },
+  {
+   "fixture": "epsg-5703/projjson.json",
+   "parsed": true,
+   "epsg": 5703,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5703/wkt1.txt",
+   "parsed": true,
+   "epsg": 5703,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-5703/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 5703,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-6931/esri.prj",
+   "parsed": true,
+   "epsg": 6931,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-6931/projjson.json",
+   "parsed": true,
+   "epsg": 6931,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-6931/wkt1.txt",
+   "parsed": true,
+   "epsg": 6931,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-6931/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 6931,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7405/esri.prj",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7405/projjson.json",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7405/wkt1.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7405/wkt2_2015.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7405/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7844/esri.prj",
+   "parsed": true,
+   "epsg": 7844,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7844/projjson.json",
+   "parsed": true,
+   "epsg": 7844,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7844/wkt1.txt",
+   "parsed": true,
+   "epsg": 7844,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-7844/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 7844,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-8857/esri.prj",
+   "parsed": true,
+   "epsg": 8857,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-8857/projjson.json",
+   "parsed": true,
+   "epsg": 8857,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "epsg-8857/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": 8857,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "esri-102003/esri.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-102003/projjson.json",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-102003/wkt1.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-102003/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54009/esri.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54009/projjson.json",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54009/wkt1.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54009/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54030/esri.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54030/projjson.json",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54030/wkt1.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54030/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54034/esri.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54034/projjson.json",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54034/wkt1.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "esri-54034/wkt2_2019.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/esri-ellipsoidal-height-vertcs.prj",
+   "parsed": false,
+   "epsg": null,
+   "method": null,
+   "confidence": null,
+   "error": "OGR Error: Corrupt data"
+  },
+  {
+   "fixture": "handwritten/esri-geogcs-vertcs.prj",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "find_matches",
+   "confidence": 100
+  },
+  {
+   "fixture": "handwritten/esri-sphere-mercator.prj",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/projjson-boundcrs.json",
+   "parsed": true,
+   "epsg": 4277,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "handwritten/projjson-rotated-pole.json",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/wkt1-local-cs.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/wkt1-minimal-geogcs.txt",
+   "parsed": true,
+   "epsg": 4326,
+   "method": "find_matches",
+   "confidence": 90
+  },
+  {
+   "fixture": "handwritten/wkt1-parentheses-lowercase.txt",
+   "parsed": true,
+   "epsg": 26717,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "handwritten/wkt1-towgs84.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "handwritten/wkt2_2019-boundcrs.txt",
+   "parsed": true,
+   "epsg": 27700,
+   "method": "authority",
+   "confidence": 100
+  },
+  {
+   "fixture": "handwritten/wkt2_2019-engcrs.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/wkt2_2019-escaped-quotes.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/wkt2_2019-rotated-pole.txt",
+   "parsed": true,
+   "epsg": null,
+   "method": null,
+   "confidence": null
+  },
+  {
+   "fixture": "handwritten/wkt2_2019-usage-timeextent.txt",
+   "parsed": true,
+   "epsg": 32633,
+   "method": "authority",
+   "confidence": 100
+  }
+ ],
+ "transform": [
+  {
+   "fixture": "epsg-2046",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      14.35,
+      -23.15,
+      14.6,
+      -22.68
+     ],
+     "native": [
+      40963.792290969,
+      2509155.534638418,
+      66796.711194572,
+      2561297.786670717
+     ],
+     "wgs84": [
+      14.347754916,
+      -23.150832815,
+      14.601376815,
+      -22.679180353
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      14.45,
+      -22.962,
+      14.5,
+      -22.868
+     ],
+     "native": [
+      51276.061790538,
+      2530006.497643835,
+      56442.683887006,
+      2540434.931502176
+     ],
+     "wgs84": [
+      14.449620591,
+      -22.962165515,
+      14.500344678,
+      -22.867835012
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-2056",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      5.95,
+      45.81,
+      10.5,
+      47.81
+     ],
+     "native": [
+      2484273.295915764,
+      1073150.157442241,
+      2837939.883429096,
+      1299970.968424894
+     ],
+     "wgs84": [
+      5.892720732,
+      45.768269659,
+      10.615720035,
+      47.85022307
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      7.77,
+      46.61,
+      8.68,
+      47.01
+     ],
+     "native": [
+      2625198.002959656,
+      1162135.822706613,
+      2695096.226443421,
+      1207296.033733379
+     ],
+     "wgs84": [
+      7.767553831,
+      46.603718572,
+      8.689249873,
+      47.016235172
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-2154",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -9.86,
+      41.15,
+      10.38,
+      51.56
+     ],
+     "native": [
+      -378305.80996752,
+      6005281.203377918,
+      1320649.571233652,
+      7235612.724773035
+     ],
+     "wgs84": [
+      -12.507059846,
+      40.370961751,
+      12.002857385,
+      52.210894767
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -1.764,
+      45.314,
+      2.284,
+      47.396
+     ],
+     "native": [
+      326930.17885216,
+      6468546.362676252,
+      645993.261863952,
+      6710354.262295965
+     ],
+     "wgs84": [
+      -1.948471508,
+      45.215103987,
+      2.310756147,
+      47.491343166
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-2193",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      166.37,
+      -47.33,
+      178.63,
+      -34.1
+     ],
+     "native": [
+      987942.452263656,
+      4736810.6927014,
+      2119620.6610292,
+      6226754.650208413
+     ],
+     "wgs84": [
+      164.91153206,
+      -47.522110172,
+      179.876724489,
+      -33.921678943
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      171.274,
+      -42.038,
+      173.726,
+      -39.392
+     ],
+     "native": [
+      1451366.395646104,
+      5344563.544690323,
+      1662517.585993684,
+      5639719.888563715
+     ],
+     "wgs84": [
+      171.204282335,
+      -42.050965734,
+      173.755454212,
+      -39.379214164
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-2227",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -123.02,
+      36.73,
+      -117.83,
+      38.71
+     ],
+     "native": [
+      5823176.279241634,
+      1724173.279383112,
+      7344103.223655109,
+      2456022.576740105
+     ],
+     "wgs84": [
+      -123.088109846,
+      36.699380697,
+      -117.75796228,
+      38.739815631
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -120.944,
+      37.522,
+      -119.906,
+      37.918
+     ],
+     "native": [
+      6432904.586183722,
+      2012536.614047268,
+      6733928.940388579,
+      2157270.772196783
+     ],
+     "wgs84": [
+      -120.946375422,
+      37.520500176,
+      -119.902827417,
+      37.919491773
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-2263",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -74.26,
+      40.47,
+      -71.8,
+      41.3
+     ],
+     "native": [
+      911908.376998809,
+      110512.611069242,
+      1596307.97575372,
+      420506.527096915
+     ],
+     "wgs84": [
+      -74.263348341,
+      40.448914833,
+      -71.772372477,
+      41.320826695
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -73.276,
+      40.802,
+      -72.784,
+      40.968
+     ],
+     "native": [
+      1184192.018575339,
+      232295.576063654,
+      1320896.803414666,
+      294278.571088862
+     ],
+     "wgs84": [
+      -73.277805465,
+      40.797860488,
+      -72.78096029,
+      40.972129316
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-25832",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      6.0,
+      36.53,
+      12.01,
+      84.01
+     ],
+     "native": [
+      231401.818883594,
+      4042735.819735376,
+      769493.749816422,
+      9330126.130136942
+     ],
+     "wgs84": [
+      -12.951409975,
+      36.492045779,
+      31.017654416,
+      84.018203194
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      8.404,
+      55.522,
+      9.606,
+      65.018
+     ],
+     "native": [
+      462371.553683938,
+      6152881.573230549,
+      538259.787717878,
+      7210597.541751262
+     ],
+     "wgs84": [
+      8.201527527,
+      55.520501444,
+      9.811867865,
+      65.019228164
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-26917",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -84.0,
+      23.81,
+      -78.0,
+      84.0
+     ],
+     "native": [
+      194325.667563359,
+      2633191.154398901,
+      805674.332436641,
+      9329005.182354301
+     ],
+     "wgs84": [
+      -105.605313702,
+      23.780841075,
+      -56.394686298,
+      84.00816353
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -81.6,
+      47.886,
+      -80.4,
+      59.924
+     ],
+     "native": [
+      455144.263389155,
+      5303629.724198136,
+      544855.736610844,
+      6643099.278721081
+     ],
+     "wgs84": [
+      -81.802335411,
+      47.884432492,
+      -80.197664589,
+      59.925364741
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-27200",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      166.37,
+      -47.33,
+      178.63,
+      -34.1
+     ],
+     "native": [
+      1896986.132904292,
+      5299423.978882954,
+      3031010.615418813,
+      6789002.028697631
+     ],
+     "wgs84": [
+      164.898054979,
+      -47.50847654,
+      179.877978852,
+      -33.95267232
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      171.274,
+      -42.038,
+      173.726,
+      -39.392
+     ],
+     "native": [
+      2361255.374407456,
+      5906209.866501589,
+      2572570.276971785,
+      6201521.233090615
+     ],
+     "wgs84": [
+      171.203590638,
+      -42.051205762,
+      173.755890119,
+      -39.379676012
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-27572",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -4.87,
+      42.33,
+      8.23,
+      51.14
+     ],
+     "native": [
+      5168.430492486,
+      1702851.304305768,
+      1086668.417749794,
+      2706243.896093692
+     ],
+     "wgs84": [
+      -6.141493952,
+      42.086065974,
+      9.281723294,
+      51.347678581
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      0.37,
+      45.854,
+      2.99,
+      47.616
+     ],
+     "native": [
+      447277.720200177,
+      2094859.559619983,
+      650752.106669923,
+      2292567.64724993
+     ],
+     "wgs84": [
+      0.304820264,
+      45.836818349,
+      3.011824603,
+      47.632630369
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-27700",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -9.01,
+      49.75,
+      2.01,
+      61.01
+     ],
+     "native": [
+      -104728.764702916,
+      -16627.731120647,
+      688806.00733956,
+      1256616.320702428
+     ],
+     "wgs84": [
+      -11.316448852,
+      49.539112503,
+      3.358927194,
+      61.192171031
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -4.602,
+      54.254,
+      -2.398,
+      56.506
+     ],
+     "native": [
+      230591.25987815,
+      484331.296324937,
+      375600.941163459,
+      737915.308042097
+     ],
+     "wgs84": [
+      -4.754051718,
+      54.226597365,
+      -2.375997432,
+      56.532616791
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-28355",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      144.0,
+      -50.89,
+      150.01,
+      -9.23
+     ],
+     "native": [
+      170325.08072827,
+      4358091.030205715,
+      830774.800261953,
+      8979719.500272578
+     ],
+     "wgs84": [
+      142.317293165,
+      -50.928815404,
+      151.698273572,
+      -9.21740357
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      146.404,
+      -34.226,
+      147.606,
+      -25.894
+     ],
+     "native": [
+      440299.612153095,
+      6212619.106347427,
+      560702.095284305,
+      7136054.895615427
+     ],
+     "wgs84": [
+      146.351812034,
+      -34.22749717,
+      147.659063226,
+      -25.892734219
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-28992",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      2.53,
+      50.75,
+      7.22,
+      55.77
+     ],
+     "native": [
+      -46622.032926306,
+      306674.525663892,
+      284347.250157297,
+      869062.900117468
+     ],
+     "wgs84": [
+      2.177547704,
+      50.714719388,
+      7.447268034,
+      55.802450634
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      4.406,
+      52.758,
+      5.344,
+      53.762
+     ],
+     "native": [
+      88762.361735621,
+      530075.742725089,
+      152150.053285122,
+      642254.468168298
+     ],
+     "wgs84": [
+      4.382924576,
+      52.753968048,
+      5.344989225,
+      53.765965144
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3005",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -139.04,
+      48.25,
+      -114.08,
+      60.01
+     ],
+     "native": [
+      34758.748716824,
+      359549.244602214,
+      1883159.499099459,
+      1736633.684218184
+     ],
+     "wgs84": [
+      -143.206952276,
+      47.460599091,
+      -110.20610353,
+      60.611286694
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -129.056,
+      52.954,
+      -124.064,
+      55.306
+     ],
+     "native": [
+      795168.709200847,
+      882899.48138447,
+      1129786.363807502,
+      1149564.074213096
+     ],
+     "wgs84": [
+      -129.234660879,
+      52.914445564,
+      -123.949581843,
+      55.343372844
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3031",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      -60.0
+     ],
+     "native": [
+      -3299207.529211401,
+      -3333134.027630276,
+      3299207.529211401,
+      3333134.027630276
+     ],
+     "wgs84": [
+      -180.0,
+      -90.0,
+      180.0,
+      -48.656405653
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -78.0,
+      36.0,
+      -72.0
+     ],
+     "native": [
+      -1158724.294675115,
+      1058536.970840569,
+      1158724.294675115,
+      1971339.515845068
+     ],
+     "wgs84": [
+      -47.587159674,
+      -80.280023172,
+      47.587159674,
+      -69.177335422
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3034",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -35.58,
+      24.6,
+      44.83,
+      84.73
+     ],
+     "native": [
+      -587060.159306315,
+      -226291.721083234,
+      7600887.12868903,
+      6860717.592827124
+     ],
+     "wgs84": [
+      -92.677547696,
+      14.521775561,
+      109.123475762,
+      85.892557445
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -3.416,
+      48.652,
+      12.666,
+      60.678
+     ],
+     "native": [
+      3050043.768347035,
+      2440354.23392159,
+      4189773.280431454,
+      3803727.205740568
+     ],
+     "wgs84": [
+      -7.66516596,
+      47.860751439,
+      13.594942109,
+      61.272741766
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3035",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -35.58,
+      24.6,
+      44.83,
+      84.73
+     ],
+     "native": [
+      -146473.113241654,
+      198374.608133627,
+      7824928.564455923,
+      6971477.484522135
+     ],
+     "wgs84": [
+      -85.041308511,
+      13.998365788,
+      100.998693394,
+      86.114665606
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -3.416,
+      48.652,
+      12.666,
+      60.678
+     ],
+     "native": [
+      3338411.420443699,
+      2837658.68243296,
+      4517453.661537321,
+      4244794.864835855
+     ],
+     "wgs84": [
+      -7.879909561,
+      47.85946573,
+      13.649890238,
+      61.303616594
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3068",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      13.09,
+      52.33,
+      13.76,
+      52.65
+     ],
+     "native": [
+      3499.121603001,
+      291.004229271,
+      49173.96078165,
+      36034.612440375
+     ],
+     "wgs84": [
+      13.086092416,
+      52.328782772,
+      13.760976378,
+      52.65121366
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      13.358,
+      52.458,
+      13.492,
+      52.522
+     ],
+     "native": [
+      21821.738604486,
+      14542.53621479,
+      30943.647383457,
+      21689.647229915
+     ],
+     "wgs84": [
+      13.35760993,
+      52.457771583,
+      13.492195175,
+      52.522228218
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-31300",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      2.5,
+      49.5,
+      6.4,
+      51.51
+     ],
+     "native": [
+      15401.082039773,
+      20909.395092506,
+      297896.91944336,
+      246444.314538062
+     ],
+     "wgs84": [
+      2.419349554,
+      49.481743823,
+      6.48853344,
+      51.52749551
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      4.06,
+      50.304,
+      4.84,
+      50.706
+     ],
+     "native": [
+      128756.837332852,
+      110332.897016841,
+      184322.831177525,
+      155158.955582325
+     ],
+     "wgs84": [
+      4.057459578,
+      50.302996898,
+      4.844113276,
+      50.706994585
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-31370",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      2.5,
+      49.5,
+      6.4,
+      51.51
+     ],
+     "native": [
+      14637.247395171,
+      20909.210345647,
+      297133.131967331,
+      246424.275460389
+     ],
+     "wgs84": [
+      2.418906573,
+      49.481930013,
+      6.488076761,
+      51.527317159
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      4.06,
+      50.304,
+      4.84,
+      50.706
+     ],
+     "native": [
+      128005.470996922,
+      110332.912758145,
+      183571.474113025,
+      155154.217595616
+     ],
+     "wgs84": [
+      4.057369987,
+      50.303040002,
+      4.844023365,
+      50.706951852
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-31467",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      7.5,
+      47.27,
+      10.51,
+      55.09
+     ],
+     "native": [
+      3386568.198271814,
+      5236824.133081954,
+      3614339.428419198,
+      6107852.276365773
+     ],
+     "wgs84": [
+      7.222468582,
+      47.260057922,
+      10.789609693,
+      55.099377621
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      8.704,
+      50.398,
+      9.306,
+      51.962
+     ],
+     "native": [
+      3479028.479653004,
+      5584677.836668692,
+      3521831.826995033,
+      5758719.73056804
+     ],
+     "wgs84": [
+      8.693833126,
+      50.397596353,
+      9.316555486,
+      51.962400432
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-32633",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      12.0,
+      0.0,
+      18.0,
+      84.0
+     ],
+     "native": [
+      166021.443080542,
+      0.0,
+      833978.556919462,
+      9329005.182447437
+     ],
+     "wgs84": [
+      -11.582877659,
+      0.0,
+      41.582877659,
+      84.00816353
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      14.4,
+      33.6,
+      15.6,
+      50.4
+     ],
+     "native": [
+      444332.543452228,
+      3717806.212399444,
+      555667.456547774,
+      5583278.11060983
+     ],
+     "wgs84": [
+      14.216744717,
+      33.598545208,
+      15.783255283,
+      50.401547219
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-32661",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      60.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -1371213.762542936,
+      -1405880.71737131,
+      5371213.762542935,
+      5405880.71737131
+     ],
+     "wgs84": [
+      -180.0,
+      48.656405653,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      72.0,
+      36.0,
+      78.0
+     ],
+     "native": [
+      815986.186193229,
+      -14364.615629423,
+      3184013.813806771,
+      918360.129618395
+     ],
+     "wgs84": [
+      -47.587159674,
+      69.177335422,
+      47.587159674,
+      80.280023172
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-32755",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      144.0,
+      -80.0,
+      150.0,
+      0.0
+     ],
+     "native": [
+      166021.443080543,
+      1116915.044051697,
+      833978.556919465,
+      10000000.0
+     ],
+     "wgs84": [
+      130.236467347,
+      -80.01343131,
+      163.763532653,
+      0.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      146.4,
+      -48.0,
+      147.6,
+      -32.0
+     ],
+     "native": [
+      443326.335580824,
+      4683525.617832161,
+      556673.664419184,
+      6459564.306717208
+     ],
+     "wgs84": [
+      146.240265194,
+      -48.001566929,
+      147.759734806,
+      -31.998581369
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3347",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -141.01,
+      38.21,
+      -40.73,
+      86.46
+     ],
+     "native": [
+      2093069.002145838,
+      200142.421865668,
+      10436930.849558635,
+      5740847.387925235
+     ],
+     "wgs84": [
+      173.510438561,
+      27.001611324,
+      2.917806927,
+      87.593395959
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -100.898,
+      57.51,
+      -80.842,
+      67.16
+     ],
+     "native": [
+      5673581.157369499,
+      2363201.639262121,
+      6841547.134490488,
+      3447658.6172786
+     ],
+     "wgs84": [
+      -104.406406619,
+      57.004898099,
+      -76.678747801,
+      67.530198872
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3375",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      98.02,
+      1.13,
+      105.82,
+      7.81
+     ],
+     "native": [
+      697.305203899,
+      124949.351892776,
+      869632.639652154,
+      866319.568638185
+     ],
+     "wgs84": [
+      97.963790611,
+      1.115616009,
+      105.834837615,
+      7.832622621
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      101.14,
+      3.802,
+      102.7,
+      5.138
+     ],
+     "native": [
+      349509.042780537,
+      420485.070330534,
+      522947.058362475,
+      568592.659684609
+     ],
+     "wgs84": [
+      101.135554137,
+      3.798506554,
+      102.701622141,
+      5.141477628
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3395",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -80.0,
+      180.0,
+      84.0
+     ],
+     "native": [
+      -20037508.342789244,
+      -15496570.739723718,
+      20037508.342789244,
+      18764656.231380563
+     ],
+     "wgs84": [
+      -180.0,
+      -80.0,
+      180.0,
+      84.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -14.4,
+      36.0,
+      18.4
+     ],
+     "native": [
+      -4007501.668557848,
+      -1609527.916488498,
+      4007501.668557848,
+      2070940.927116208
+     ],
+     "wgs84": [
+      -36.0,
+      -14.4,
+      36.0,
+      18.4
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3413",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      60.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -3314693.23913965,
+      -3314693.23913965,
+      3314693.23913965,
+      3314693.23913965
+     ],
+     "wgs84": [
+      -180.0,
+      48.559970158,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      72.0,
+      36.0,
+      78.0
+     ],
+     "native": [
+      204070.081311865,
+      -1941242.828715356,
+      1941242.828715356,
+      -204070.081311865
+     ],
+     "wgs84": [
+      -38.998912922,
+      65.043335616,
+      38.998912922,
+      87.336324814
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3460",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      176.81,
+      -20.81,
+      -178.15,
+      -12.42
+     ],
+     "native": [
+      1789039.748862052,
+      3575221.508657503,
+      2337149.40162364,
+      4506677.814743016
+     ],
+     "wgs84": [
+      176.723464069,
+      -20.838004391,
+      -178.012047389,
+      -12.402300332
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      178.826,
+      -17.454,
+      179.834,
+      -15.776
+     ],
+     "native": [
+      2008055.627189716,
+      3949431.782821959,
+      2116125.628552129,
+      4135425.174669547
+     ],
+     "wgs84": [
+      178.825344051,
+      -17.456937169,
+      179.843456179,
+      -15.773314449
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3577",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      112.85,
+      -43.7,
+      153.69,
+      -9.86
+     ],
+     "native": [
+      -2153255.275811878,
+      -4928351.639626698,
+      2436270.292794992,
+      -1033322.269507122
+     ],
+     "wgs84": [
+      106.216027207,
+      -45.137410127,
+      161.063587452,
+      -7.951718673
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      129.186,
+      -30.164,
+      137.354,
+      -23.396
+     ],
+     "native": [
+      -284760.321401539,
+      -3292390.90109024,
+      541678.669675452,
+      -2522988.099743738
+     ],
+     "wgs84": [
+      129.008732104,
+      -30.259242298,
+      137.687349466,
+      -23.294688543
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3832",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      98.69,
+      -60.0,
+      -68.0,
+      66.67
+     ],
+     "native": [
+      -5711803.072602868,
+      -8362698.548500747,
+      15807367.692644844,
+      10023392.492023032
+     ],
+     "wgs84": [
+      98.69,
+      -60.0,
+      -68.0,
+      66.67
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      176.014,
+      -9.332,
+      -145.324,
+      16.002
+     ],
+     "native": [
+      2895865.233496218,
+      -1036533.165829511,
+      7199699.386545762,
+      1793181.875697642
+     ],
+     "wgs84": [
+      176.014,
+      -9.332,
+      -145.324,
+      16.002
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3857",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -85.06,
+      180.0,
+      85.06
+     ],
+     "native": [
+      -20037508.342789244,
+      -20048966.104014594,
+      20037508.342789244,
+      20048966.104014594
+     ],
+     "wgs84": [
+      -180.0,
+      -85.06,
+      180.0,
+      85.06
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -17.012,
+      36.0,
+      17.012
+     ],
+     "native": [
+      -4007501.668557848,
+      -1922221.95559816,
+      4007501.668557848,
+      1922221.95559816
+     ],
+     "wgs84": [
+      -36.0,
+      -17.012,
+      36.0,
+      17.012
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-3995",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      60.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -3299207.529211401,
+      -3333134.027630276,
+      3299207.529211401,
+      3333134.027630276
+     ],
+     "wgs84": [
+      -180.0,
+      48.656405653,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      72.0,
+      36.0,
+      78.0
+     ],
+     "native": [
+      -1158724.294675115,
+      -1971339.515845068,
+      1158724.294675115,
+      -1058536.970840569
+     ],
+     "wgs84": [
+      -47.587159674,
+      69.177335422,
+      47.587159674,
+      80.280023172
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4087",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -20037508.342789244,
+      -10001965.729312722,
+      20037508.342789244,
+      10001965.729312722
+     ],
+     "wgs84": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -4007501.668557848,
+      -1990981.93487811,
+      4007501.668557848,
+      1990981.93487811
+     ],
+     "wgs84": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4167",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      160.6,
+      -55.95,
+      -171.2,
+      -25.88
+     ],
+     "native": [
+      160.6,
+      -55.95,
+      -171.2,
+      -25.88
+     ],
+     "wgs84": [
+      160.6,
+      -55.95,
+      -171.2,
+      -25.88
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      171.88,
+      -43.922,
+      177.52,
+      -37.908
+     ],
+     "native": [
+      171.88,
+      -43.922,
+      177.52,
+      -37.908
+     ],
+     "wgs84": [
+      171.88,
+      -43.922,
+      177.52,
+      -37.908
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4230",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -16.1,
+      25.71,
+      48.61,
+      84.73
+     ],
+     "native": [
+      -16.1,
+      25.71,
+      48.61,
+      84.73
+     ],
+     "wgs84": [
+      -16.102332581,
+      25.70878155,
+      48.610080171,
+      84.730840058
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      9.784,
+      49.318,
+      22.726,
+      61.122
+     ],
+     "native": [
+      9.785118395,
+      49.318716496,
+      22.727002084,
+      61.122414219
+     ],
+     "wgs84": [
+      9.783655837,
+      49.317894965,
+      22.726221132,
+      61.122118405
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4258",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -16.1,
+      33.26,
+      38.0,
+      84.73
+     ],
+     "native": [
+      -16.1,
+      33.26,
+      38.0,
+      84.73
+     ],
+     "wgs84": [
+      -16.1,
+      33.26,
+      38.0,
+      84.73
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      5.54,
+      53.848,
+      16.36,
+      64.142
+     ],
+     "native": [
+      5.54,
+      53.848,
+      16.36,
+      64.142
+     ],
+     "wgs84": [
+      5.54,
+      53.848,
+      16.36,
+      64.142
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4267",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      167.65,
+      7.15,
+      -43.99,
+      83.17
+     ],
+     "native": [
+      -180.0,
+      7.148642066,
+      180.0,
+      83.17
+     ],
+     "wgs84": [
+      -180.003745428,
+      7.148642066,
+      180.0,
+      83.171099739
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -133.006,
+      37.558,
+      -103.334,
+      52.762
+     ],
+     "native": [
+      -133.006,
+      37.557986177,
+      -103.333503256,
+      52.762304732
+     ],
+     "wgs84": [
+      -133.007618092,
+      37.557907349,
+      -103.333960396,
+      52.762378685
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4269",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      167.65,
+      14.92,
+      -40.73,
+      86.46
+     ],
+     "native": [
+      167.65,
+      14.92,
+      -40.73,
+      86.46
+     ],
+     "wgs84": [
+      167.65,
+      14.92,
+      -40.73,
+      86.46
+     ],
+     "crosses_antimeridian": true,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -131.702,
+      43.536,
+      -101.378,
+      57.844
+     ],
+     "native": [
+      -131.702,
+      43.535999791,
+      -101.378,
+      57.844
+     ],
+     "wgs84": [
+      -131.702,
+      43.535997982,
+      -101.378,
+      57.844
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4277",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -9.01,
+      49.75,
+      2.01,
+      61.01
+     ],
+     "native": [
+      -9.01,
+      49.75,
+      2.01,
+      61.01
+     ],
+     "wgs84": [
+      -9.01,
+      49.75,
+      2.01,
+      61.01
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -4.602,
+      54.254,
+      -2.398,
+      56.506
+     ],
+     "native": [
+      -4.60081949,
+      54.253845172,
+      -2.396448038,
+      56.506142308
+     ],
+     "wgs84": [
+      -4.602084154,
+      54.253971166,
+      -2.397899845,
+      56.506029574
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4283",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "native": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "wgs84": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "native": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "wgs84": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4326",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "wgs84": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "wgs84": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-4807",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -4.87,
+      41.31,
+      9.63,
+      51.14
+     ],
+     "native": [
+      -8.007049955,
+      45.899901288,
+      8.103571646,
+      56.822368113
+     ],
+     "wgs84": [
+      -4.870173755,
+      41.309920533,
+      9.630072868,
+      51.140093577
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      0.93,
+      45.242,
+      3.83,
+      47.208
+     ],
+     "native": [
+      -1.562777591,
+      50.26891208,
+      1.659347654,
+      52.453405257
+     ],
+     "wgs84": [
+      0.929973494,
+      45.241982872,
+      3.830022524,
+      47.208017695
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-5041",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      60.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -1371213.762542936,
+      -1405880.71737131,
+      5371213.762542935,
+      5405880.71737131
+     ],
+     "wgs84": [
+      -180.0,
+      48.656405653,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      72.0,
+      36.0,
+      78.0
+     ],
+     "native": [
+      815986.186193229,
+      -14364.615629423,
+      3184013.813806771,
+      918360.129618395
+     ],
+     "wgs84": [
+      -47.587159674,
+      69.177335422,
+      47.587159674,
+      80.280023172
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-5070",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -124.79,
+      24.41,
+      -66.91,
+      49.38
+     ],
+     "native": [
+      -2916311.100313346,
+      153628.722587422,
+      2945749.913010533,
+      3255274.793983828
+     ],
+     "wgs84": [
+      -135.151845929,
+      20.405148853,
+      -56.496730887,
+      52.369186253
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -101.638,
+      34.398,
+      -90.062,
+      39.392
+     ],
+     "native": [
+      -514028.816611977,
+      1259477.978575621,
+      541345.770555713,
+      1834671.128333402
+     ],
+     "wgs84": [
+      -102.027018808,
+      34.247069988,
+      -89.653615783,
+      39.533116418
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-5514",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      12.09,
+      47.73,
+      22.56,
+      51.06
+     ],
+     "native": [
+      -951499.372849434,
+      -1353306.147625991,
+      -159365.309700993,
+      -911041.248521758
+     ],
+     "wgs84": [
+      11.221322499,
+      47.04748965,
+      22.705987684,
+      51.705675631
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      16.278,
+      49.062,
+      18.372,
+      49.728
+     ],
+     "native": [
+      -623721.873655703,
+      -1187832.112110357,
+      -465201.532049879,
+      -1099225.523203261
+     ],
+     "wgs84": [
+      16.163854326,
+      48.927888621,
+      18.457190236,
+      49.860616252
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-6931",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      0.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -8918256.311258344,
+      -9009964.761231285,
+      8918256.311258344,
+      9009964.761231285
+     ],
+     "wgs84": [
+      -180.0,
+      -78.499115862,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      36.0,
+      36.0,
+      54.0
+     ],
+     "native": [
+      -3407292.39710889,
+      -5796832.063784874,
+      3407292.39710889,
+      -3195947.256168184
+     ],
+     "wgs84": [
+      -46.833198987,
+      26.400722373,
+      46.833198987,
+      61.056740101
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-7844",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "native": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "wgs84": [
+      93.41,
+      -60.55,
+      173.34,
+      -8.47
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "native": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "wgs84": [
+      125.382,
+      -39.718,
+      141.368,
+      -29.302
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "epsg-8857",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -17243959.062216945,
+      -8392927.598466454,
+      17243959.062216945,
+      8392927.598466454
+     ],
+     "wgs84": [
+      -180.0,
+      -89.999993416,
+      180.0,
+      89.999993416
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -3448791.812443389,
+      -2293588.063269415,
+      3448791.812443389,
+      2293588.063269415
+     ],
+     "wgs84": [
+      -36.857673947,
+      -18.0,
+      36.857673947,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "esri-102003",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -124.79,
+      24.41,
+      -66.91,
+      49.38
+     ],
+     "native": [
+      -2916311.100313346,
+      -1453157.537989914,
+      2945749.913010533,
+      1648488.533406492
+     ],
+     "wgs84": [
+      -135.151845929,
+      20.405148853,
+      -56.496730887,
+      52.369186253
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -101.638,
+      34.398,
+      -90.062,
+      39.392
+     ],
+     "native": [
+      -514028.816611977,
+      -347308.282001714,
+      541345.770555713,
+      227884.867756066
+     ],
+     "wgs84": [
+      -102.027018808,
+      34.247069988,
+      -89.653615783,
+      39.533116418
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "esri-54009",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -18040095.696147293,
+      -9020047.847897757,
+      18040095.696147293,
+      9020047.847897757
+     ],
+     "wgs84": [
+      0.0,
+      -90.0,
+      0.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -3608019.139229458,
+      -2211539.484542548,
+      3608019.139229458,
+      2211539.484542548
+     ],
+     "wgs84": [
+      -37.133405938,
+      -18.0,
+      37.133405938,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "esri-54030",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -17005833.33052523,
+      -8625155.128290867,
+      17005833.33052523,
+      8625155.128290867
+     ],
+     "wgs84": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -3401166.666105046,
+      -1925131.887141759,
+      3401166.666105046,
+      1925131.887141759
+     ],
+     "wgs84": [
+      -36.529627046,
+      -18.0,
+      36.529627046,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  },
+  {
+   "fixture": "esri-54034",
+   "boxes": [
+    {
+     "box": "area",
+     "lonlat": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "native": [
+      -20037508.342789244,
+      -6363885.33192604,
+      20037508.342789244,
+      6363885.33192604
+     ],
+     "wgs84": [
+      -180.0,
+      -90.0,
+      180.0,
+      90.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    },
+    {
+     "box": "inner",
+     "lonlat": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "native": [
+      -4007501.668557848,
+      -1958593.239018647,
+      4007501.668557848,
+      1958593.239018647
+     ],
+     "wgs84": [
+      -36.0,
+      -18.0,
+      36.0,
+      18.0
+     ],
+     "crosses_antimeridian": false,
+     "error": null
+    }
+   ]
+  }
+ ]
+}

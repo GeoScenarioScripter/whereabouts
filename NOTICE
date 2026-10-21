@@ -4,4 +4,33 @@ Copyright 2026 The Whereabouts contributors
 Licensed under either of the Apache License, Version 2.0 or the MIT license, at your option.
 
 Third-party data and software notices are added here as they are incorporated
-(e.g. EPSG Geodetic Parameter Dataset attribution, GeoNames and Natural Earth data).
+(e.g. GeoNames and Natural Earth data).
+
+-------------------------------------------------------------------------------
+EPSG Geodetic Parameter Dataset
+
+crates/crs/data/epsg.txt (the EPSG table embedded in whereabouts-crs) and the
+EPSG-derived CRS test fixtures in crates/crs/tests/data contain data from the
+EPSG Geodetic Parameter Dataset (https://epsg.org), version v12.029, owned by
+the International Association of Oil & Gas Producers (IOGP), used under the
+EPSG terms of use (https://epsg.org/terms-of-use.html). The data was extracted
+from the PROJ database (proj.db, PROJ 9.7.1 / PROJ-data 1.24), reduced to the
+fields Whereabouts needs and converted to degrees/metres; it is not presented
+as the EPSG Dataset itself. The EPSG Dataset is provided "as is", without
+warranty of any kind.
+
+-------------------------------------------------------------------------------
+Esri projection engine definitions
+
+The Esri CRS names (aliases) in crates/crs/data/epsg.txt and the ESRI WKT test
+fixtures (esri.prj, esri-* in crates/crs/tests/data) come from Esri's
+projection-engine-db-doc (https://github.com/Esri/projection-engine-db-doc),
+licensed under the Apache License, Version 2.0, as imported into PROJ.
+
+-------------------------------------------------------------------------------
+PROJ
+
+The EPSG table and the CRS fixtures were produced with PROJ
+(https://proj.org), Copyright (c) 2000, Frank Warmerdam and the PROJ
+contributors, MIT license. The native inverse projections in
+crates/crs/src/native.rs follow PROJ's implementations of those methods.
