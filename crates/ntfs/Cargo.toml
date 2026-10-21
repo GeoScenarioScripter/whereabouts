@@ -13,7 +13,8 @@ publish.workspace = true
 workspace = true
 
 [features]
-# Exposes `record::build` (synthetic USN record/enum-output builders) for other crates' tests.
+# Exposes `record::build` (synthetic USN record/enum-output builders) and, on Windows,
+# `testvol::TestVolume` (a throw-away VHD volume) for other crates' tests.
 # Enable only from `[dev-dependencies]`; not part of the production API.
 test-fixtures = []
 
@@ -35,3 +36,8 @@ windows = { workspace = true, features = [
   "Win32_System_ProcessStatus",
   "Win32_System_Threading",
 ] }
+
+[dev-dependencies]
+# Self dev-dependency: turns on `test-fixtures` (record builders, `testvol::TestVolume`) for this
+# crate's integration tests.
+whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }
