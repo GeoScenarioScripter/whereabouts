@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use whereabouts_core::{FileName, FileRecord, Frn};
 use whereabouts_ntfs::testvol::TestVolume;
-use whereabouts_ntfs::{Error, NtfsCheckpoint, NtfsVolumeSource, record};
+use whereabouts_ntfs::{Error, NtfsCheckpoint, NtfsVolumeSource, SourceOptions, record};
 use whereabouts_source::{ChangeBatch, Changes, Checkpoint, RescanReason, Source, SourceEvent};
 
 static ONE_VHD_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -32,13 +32,17 @@ struct Fixture {
 }
 
 fn fixture(journal_max: u64, journal_delta: u64) -> Fixture {
+    fixture_with(journal_max, journal_delta, SourceOptions::default())
+}
+
+fn fixture_with(journal_max: u64, journal_delta: u64, options: SourceOptions) -> Fixture {
     let lock = ONE_VHD_AT_A_TIME
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let started = Instant::now();
     let vol = TestVolume::create(64).unwrap();
     vol.create_journal(journal_max, journal_delta).unwrap();
-    let source = NtfsVolumeSource::open(&vol.volume()).unwrap();
+    let source = NtfsVolumeSource::open_with(&vol.volume(), options).unwrap();
     report(&format!(
         "vhd {} ready in {} ms ({})",
         vol.volume(),
@@ -141,6 +145,9 @@ fn identity_root_and_enumeration() {
     let file = records.iter().find(|r| r.name == name("a.shp")).unwrap();
     assert_eq!(file.parent, dir.frn);
     assert!(!file.is_dir());
+    let stats = f.source.last_enumerate_stats();
+    assert_eq!(stats.skipped, 0);
+    assert_eq!(stats.records, records.len() as u64);
     report(&format!(
         "enumerated {} records on the fresh VHD",
         records.len()
@@ -247,12 +254,96 @@ fn create_modify_rename_move_delete_produce_events() {
     );
     let cp = b.checkpoint;
 
-    // Nothing more happened: an empty batch, and the checkpoint stays usable.
+    // Nothing more happened to our file, and the checkpoint stays usable. Not asserted empty:
+    // Windows may still write to a freshly mounted volume (System Volume Information) on its
+    // own schedule; the batch is logged so CI shows what an idle VHD produces.
     let b = batch(&mut f.source, &cp);
+    log_batch("idle", &b, &f.source);
     assert!(
         b.events.iter().all(|e| e.record().frn != file),
         "{:#?}",
         b.events
+    );
+}
+
+#[test]
+#[ignore = "needs an elevated shell: creates and mounts a VHD test volume"]
+fn truncated_batches_carry_a_split_rename() {
+    // 200-character names make every record 464 bytes, so a 1 KiB read buffer returns exactly
+    // two records per reply; a 1-byte batch cap ends each batch after the first reply that
+    // produces an event.
+    let options = SourceOptions {
+        journal_buffer_size: 1 << 10,
+        max_batch_bytes: 1,
+        ..SourceOptions::default()
+    };
+    let mut f = fixture_with(8 << 20, 1 << 20, options);
+    let long = |c: char| format!("{c}{}", "x".repeat(199));
+    let (d, a, b) = (long('d'), long('a'), long('b'));
+    std::fs::create_dir(f.vol.path("t")).unwrap();
+    std::fs::write(f.vol.path(format!(r"t\{d}")), b"d").unwrap();
+    std::fs::write(f.vol.path(format!(r"t\{a}")), b"a").unwrap();
+    let (records, cp) = enumerate(&mut f.source);
+    let dir = records.iter().find(|r| r.name == name("t")).unwrap().frn;
+    let a_frn = records.iter().find(|r| r.name == name(&a)).unwrap().frn;
+
+    // One delete record, then the rename's old-name, new-name and close records:
+    // replies [delete d, old name a], [new name b, close b].
+    std::fs::remove_file(f.vol.path(format!(r"t\{d}"))).unwrap();
+    std::fs::rename(f.vol.path(format!(r"t\{a}")), f.vol.path(format!(r"t\{b}"))).unwrap();
+
+    let mut cp = cp;
+    let mut all = Vec::new();
+    let (mut truncated, mut carried) = (0, 0);
+    for round in 0.. {
+        assert!(round < 50, "never drained: {all:#?}");
+        let batch = batch(&mut f.source, &cp);
+        let stats = f.source.last_change_stats();
+        let pending = NtfsCheckpoint::from_checkpoint(&batch.checkpoint)
+            .unwrap()
+            .pending_renames;
+        log_batch(&format!("truncating round {round}"), &batch, &f.source);
+        report(&format!(
+            "  truncated={} pending={pending:?}",
+            stats.truncated
+        ));
+        if stats.truncated {
+            truncated += 1;
+            assert!(
+                !batch.events.is_empty(),
+                "a truncated batch must not be empty"
+            );
+        }
+        if let Some(p) = pending.iter().find(|p| p.frn == a_frn) {
+            carried += 1;
+            assert_eq!((p.old_parent, &p.old_name), (dir, &name(&a)));
+        }
+        let done = batch.events.is_empty() && !stats.truncated;
+        all.extend(batch.events);
+        cp = batch.checkpoint;
+        if done {
+            break;
+        }
+    }
+    assert!(truncated > 0, "the cap never truncated a batch");
+    assert!(
+        carried > 0,
+        "the rename was never carried across batches: {all:#?}"
+    );
+    let ours: Vec<_> = all.iter().filter(|e| e.record().parent == dir).collect();
+    assert!(
+        ours.iter()
+            .any(|e| matches!(e, SourceEvent::Deleted(r) if r.name == name(&d))),
+        "{ours:#?}"
+    );
+    let renamed: Vec<_> = ours.iter().filter(|e| e.record().frn == a_frn).collect();
+    assert!(
+        matches!(
+            renamed[..],
+            [SourceEvent::Renamed { record, old_parent, old_name }]
+                if record.name == name(&b) && *old_parent == dir && *old_name == name(&a)
+        ),
+        "{renamed:#?}"
     );
 }
 
@@ -385,31 +476,22 @@ fn deleted_and_recreated_journal_requires_rescan() {
         rescan_reason(&mut f.source, &cp),
         RescanReason::JournalMissing
     );
-    // Without a journal, enumeration either works (its checkpoint records "no journal") or
-    // fails cleanly; the CI log says which, for the session note.
-    let mut records = Vec::new();
-    let cp_none = match f.source.enumerate(&mut records) {
-        Ok(cp_none) => {
-            report(&format!(
-                "enumeration without a journal: ok, {} records",
-                records.len()
-            ));
-            assert!(!records.is_empty());
-            assert_eq!(
-                NtfsCheckpoint::from_checkpoint(&cp_none).unwrap().journal,
-                None
-            );
-            assert_eq!(
-                rescan_reason(&mut f.source, &cp_none),
-                RescanReason::JournalMissing
-            );
-            Some(cp_none)
-        }
-        Err(e) => {
-            report(&format!("enumeration without a journal: error: {e}"));
-            None
-        }
-    };
+    // Enumeration works without a journal; its checkpoint records that there was none.
+    let (records, cp_none) = enumerate(&mut f.source);
+    report(&format!(
+        "enumeration without a journal: {} records",
+        records.len()
+    ));
+    assert!(records.len() > 1, "more than the synthesised root");
+    assert_eq!(f.source.last_enumerate_stats().skipped, 0);
+    assert_eq!(
+        NtfsCheckpoint::from_checkpoint(&cp_none).unwrap().journal,
+        None
+    );
+    assert_eq!(
+        rescan_reason(&mut f.source, &cp_none),
+        RescanReason::JournalMissing
+    );
 
     f.vol.create_journal(8 << 20, 1 << 20).unwrap();
     let new_id = f
@@ -425,12 +507,10 @@ fn deleted_and_recreated_journal_requires_rescan() {
         rescan_reason(&mut f.source, &cp),
         RescanReason::JournalRecreated
     );
-    if let Some(cp_none) = cp_none {
-        assert_eq!(
-            rescan_reason(&mut f.source, &cp_none),
-            RescanReason::JournalRecreated
-        );
-    }
+    assert_eq!(
+        rescan_reason(&mut f.source, &cp_none),
+        RescanReason::JournalRecreated
+    );
 
     let (_, cp) = enumerate(&mut f.source);
     std::fs::write(f.vol.path("after.txt"), b"x").unwrap();

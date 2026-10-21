@@ -71,9 +71,25 @@ impl NtfsCheckpoint {
         let renames: Vec<&PendingRename> = self
             .pending_renames
             .iter()
-            .filter(|p| p.old_name.len() <= MAX_NAME_BYTES)
+            .filter(|p| {
+                let fits = p.old_name.len() <= MAX_NAME_BYTES;
+                if !fits {
+                    tracing::warn!(
+                        frn = %p.frn, name_bytes = p.old_name.len(),
+                        "pending rename's old name too long to carry; its new name will be \
+                         reported as Created"
+                    );
+                }
+                fits
+            })
             .collect();
         let skip = renames.len().saturating_sub(MAX_PENDING_RENAMES);
+        if skip > 0 {
+            tracing::warn!(
+                dropped = skip,
+                "too many pending renames to carry; their new names will be reported as Created"
+            );
+        }
         let renames = &renames[skip..];
         let mut out = Vec::with_capacity(FIXED_LEN + renames.len() * 32);
         out.extend_from_slice(&self.volume_serial.to_le_bytes());

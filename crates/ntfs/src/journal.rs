@@ -38,17 +38,31 @@
 //! between the two halves) is reported as `Created(final state)`, which consumers treat as an
 //! upsert of a known FRN, as D-29 replay already requires.
 //!
-//! **Hard links.** [`reason::HARD_LINK_CHANGE`] is reported as `Modified` with the name in the
-//! record, which is the link that was added or removed. The name index keeps one name per FRN,
-//! so extra links are not tracked (documented M0 limitation).
+//! **Hard links** (M0 limitation: one name per FRN). A record carrying
+//! [`reason::HARD_LINK_CHANGE`] without a create, delete or rename reason names the link that
+//! was added or removed, which may not be the name the consumer indexed (or may no longer
+//! exist). Such records never change the file's reported parent and name, and
+//! `HARD_LINK_CHANGE` is not a `Modified` reason. What consumers see:
+//!
+//! - adding or removing one link of a file: **nothing**;
+//! - removing the last link: `Deleted` (the kernel sets `FILE_DELETE`);
+//! - other changes in the same batch: reported under the parent and name from the file's other
+//!   records; if every record of the file in the batch is such a link record (for example a
+//!   write through the same handle that added a link), the file is **not reported** in that
+//!   batch, because no trustworthy name is known.
+//!
+//! **Batches** ([`read_batch`]): reading stops at the journal's end, or once
+//! `max_batch_bytes` have been read **and** the batch holds at least one event, so a truncated
+//! batch is never empty. Callers poll until a batch comes back empty. Malformed or stalled
+//! replies end the batch with a rescan request instead of an error that would repeat forever.
 
 use std::collections::HashMap;
 
 use whereabouts_core::{FileAttributes, FileName, FileRecord, Frn};
-use whereabouts_source::SourceEvent;
+use whereabouts_source::{RescanReason, SourceEvent};
 
 use crate::error::ParseError;
-use crate::record::{EnumStep, UsnRecord, enum_step};
+use crate::record::{EnumStep, RecordIter, UsnRecord, enum_step};
 
 /// `USN_REASON_*` flags (`winioctl.h`).
 pub mod reason {
@@ -102,8 +116,9 @@ pub mod reason {
     pub const CLOSE: u32 = 0x8000_0000;
 
     /// Reasons reported as `SourceEvent::Modified`: content, attributes/time stamps, streams,
-    /// links, compression, encryption, reparse data. Security descriptor, object ID, indexing
-    /// and storage-class changes don't affect what Whereabouts indexes and are ignored.
+    /// compression, encryption, reparse data. Security descriptor, object ID, indexing and
+    /// storage-class changes don't affect what Whereabouts indexes and are ignored; hard-link
+    /// changes are handled separately (see the module docs).
     pub const MODIFIED_MASK: u32 = DATA_OVERWRITE
         | DATA_EXTEND
         | DATA_TRUNCATION
@@ -112,11 +127,13 @@ pub mod reason {
         | NAMED_DATA_TRUNCATION
         | EA_CHANGE
         | BASIC_INFO_CHANGE
-        | HARD_LINK_CHANGE
         | COMPRESSION_CHANGE
         | ENCRYPTION_CHANGE
         | REPARSE_POINT_CHANGE
         | STREAM_CHANGE;
+
+    /// Reasons whose record names the file's own (new or last) location.
+    pub const PATH_MASK: u32 = FILE_CREATE | FILE_DELETE | RENAME_OLD_NAME | RENAME_NEW_NAME;
 }
 
 /// Size of `READ_USN_JOURNAL_DATA_V1` (44 bytes of fields, padded to the 8-byte alignment).
@@ -226,14 +243,175 @@ pub const MAX_PENDING_RENAMES: usize = 64;
 struct FileState {
     /// OR of every reason seen in this batch.
     reasons: u32,
-    /// State from the latest record.
+    /// State from the latest record (parent and name only from records that are not hard-link
+    /// records, once one has been seen).
     last: FileRecord,
+    /// `last` holds a parent and name from a record that is not a hard-link record.
+    name_trusted: bool,
     /// (parent, name) before the first rename in this batch (or carried from the previous one).
     old: Option<(Frn, FileName)>,
     /// The latest rename record was an old-name record: the new name is not known yet.
     awaiting_new_name: bool,
     /// A new-name record arrived with no old name to pair it with.
     unpaired_new_name: bool,
+}
+
+impl FileState {
+    /// Mirrors the decisions in [`Coalescer::finish`]: does this file produce an event?
+    fn emits(&self) -> bool {
+        let r = self.reasons;
+        if r & (reason::FILE_DELETE | reason::FILE_CREATE) != 0 {
+            return true;
+        }
+        if !self.name_trusted {
+            return false;
+        }
+        if self.awaiting_new_name {
+            return r & reason::MODIFIED_MASK != 0;
+        }
+        if self.unpaired_new_name || r & reason::MODIFIED_MASK != 0 {
+            return true;
+        }
+        matches!(&self.old, Some((p, n)) if *p != self.last.parent || *n != self.last.name)
+    }
+}
+
+/// What one `FSCTL_READ_USN_JOURNAL` reply means for the batch (see [`fold_reply`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplyOutcome {
+    /// Records were folded; read again from `next_usn`.
+    Records {
+        /// USN to start the next read from.
+        next_usn: i64,
+    },
+    /// Nothing to fold, but the cursor moved: read again from `next_usn`.
+    Advance {
+        /// USN to start the next read from.
+        next_usn: i64,
+    },
+    /// The journal's end has been reached.
+    CaughtUp,
+    /// The reply cannot be trusted (malformed header or record, stalled cursor). Reading on
+    /// would repeat the same failure on every poll, so the index must be rebuilt.
+    Rescan(RescanReason),
+    /// A record carries a 128-bit file ID, which does not fit a 64-bit FRN (#24).
+    Unsupported(String),
+}
+
+/// Interprets one journal reply read from `start_usn` and folds its records into `coalescer`.
+/// Pure; every failure mode of the reply bytes becomes a [`ReplyOutcome`], never a panic.
+///
+/// Records before a malformed one may already be folded when `Rescan` is returned; the caller
+/// discards the batch in that case.
+pub fn fold_reply(start_usn: i64, reply: &[u8], coalescer: &mut Coalescer) -> ReplyOutcome {
+    let rescan = |what: String| {
+        tracing::warn!(start_usn, "{what}; requesting a full rescan");
+        ReplyOutcome::Rescan(RescanReason::Other(what))
+    };
+    let next_usn = match read_step(start_usn, reply) {
+        Ok(ReadStep::Records { next_usn }) => next_usn,
+        Ok(ReadStep::Advance { next_usn }) => return ReplyOutcome::Advance { next_usn },
+        Ok(ReadStep::CaughtUp) => return ReplyOutcome::CaughtUp,
+        Ok(ReadStep::Stalled { next_usn }) => {
+            return rescan(format!(
+                "USN journal read stalled: started at {start_usn}, kernel returned {next_usn}"
+            ));
+        }
+        Err(e) => return rescan(format!("malformed USN journal reply at {start_usn}: {e}")),
+    };
+    for item in RecordIter::new(reply.get(8..).unwrap_or_default(), 8) {
+        match item {
+            Ok(rec) => coalescer.push(&rec),
+            Err(e @ ParseError::FileIdTooWide { .. }) => {
+                return ReplyOutcome::Unsupported(format!(
+                    "the volume returned a 128-bit file ID, which does not fit a 64-bit FRN ({e})"
+                ));
+            }
+            Err(e) => {
+                return rescan(format!(
+                    "malformed USN journal record in the reply read at {start_usn}: {e}"
+                ));
+            }
+        }
+    }
+    ReplyOutcome::Records { next_usn }
+}
+
+/// Source of journal replies for [`read_batch`]: the volume on Windows, canned replies in tests.
+pub trait JournalReader {
+    /// The I/O error type.
+    type Error;
+    /// One read from `start_usn`: the reply bytes (8-byte next USN, then records).
+    ///
+    /// # Errors
+    /// Whatever the underlying read reports.
+    fn read(&mut self, start_usn: i64) -> Result<&[u8], Self::Error>;
+}
+
+/// How [`read_batch`] ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BatchEnd {
+    /// Everything up to the journal's end was read.
+    CaughtUp,
+    /// Stopped at the size cap with at least one event in the batch; more is waiting.
+    Truncated,
+    /// See [`ReplyOutcome::Rescan`].
+    Rescan(RescanReason),
+    /// See [`ReplyOutcome::Unsupported`].
+    Unsupported(String),
+}
+
+/// Result of [`read_batch`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchRead {
+    /// How reading ended.
+    pub end: BatchEnd,
+    /// Where the next batch starts (meaningful for `CaughtUp` and `Truncated`).
+    pub next_usn: i64,
+    /// Read calls made.
+    pub reads: u64,
+    /// Reply bytes consumed (records only; header-only replies count 0).
+    pub bytes: u64,
+}
+
+/// Reads one batch from `start_usn` into `coalescer`: until the journal's end, or until at
+/// least `max_batch_bytes` have been read **and** the batch holds an event (so a truncated
+/// batch is never empty, and polling until an empty batch drains the journal).
+///
+/// # Errors
+/// The reader's error, unchanged (the caller maps OS failures).
+pub fn read_batch<R: JournalReader>(
+    reader: &mut R,
+    start_usn: i64,
+    max_batch_bytes: u64,
+    coalescer: &mut Coalescer,
+) -> Result<BatchRead, R::Error> {
+    let mut usn = start_usn;
+    let (mut reads, mut bytes) = (0_u64, 0_u64);
+    let end = loop {
+        let reply = reader.read(usn)?;
+        reads += 1;
+        let len = reply.len() as u64;
+        match fold_reply(usn, reply, coalescer) {
+            ReplyOutcome::Records { next_usn } => {
+                usn = next_usn;
+                bytes += len;
+                if bytes >= max_batch_bytes && coalescer.has_events() {
+                    break BatchEnd::Truncated;
+                }
+            }
+            ReplyOutcome::Advance { next_usn } => usn = next_usn,
+            ReplyOutcome::CaughtUp => break BatchEnd::CaughtUp,
+            ReplyOutcome::Rescan(reason) => break BatchEnd::Rescan(reason),
+            ReplyOutcome::Unsupported(what) => break BatchEnd::Unsupported(what),
+        }
+    };
+    Ok(BatchRead {
+        end,
+        next_usn: usn,
+        reads,
+        bytes,
+    })
 }
 
 /// Folds the journal records of one batch into [`SourceEvent`]s (see the module docs for the
@@ -278,6 +456,9 @@ impl Coalescer {
     pub fn push(&mut self, rec: &UsnRecord<'_>) {
         self.records += 1;
         let record = file_record(rec);
+        // A hard-link record names the link added or removed, not necessarily the indexed name.
+        let link_only =
+            rec.reason & reason::HARD_LINK_CHANGE != 0 && rec.reason & reason::PATH_MASK == 0;
         let state = match self.files.entry(rec.frn) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => {
@@ -289,6 +470,7 @@ impl Coalescer {
                 e.insert(FileState {
                     reasons: 0,
                     last: record.clone(),
+                    name_trusted: !link_only,
                     old,
                     awaiting_new_name: false,
                     unpaired_new_name: false,
@@ -309,7 +491,19 @@ impl Coalescer {
             }
             state.awaiting_new_name = false;
         }
-        state.last = record;
+        if link_only {
+            state.last.attrs = record.attrs;
+        } else {
+            state.last = record;
+            state.name_trusted = true;
+        }
+    }
+
+    /// `true` if [`Coalescer::finish`] would return at least one event now. Used to keep reading
+    /// past the batch size cap until the batch says something.
+    #[must_use]
+    pub fn has_events(&self) -> bool {
+        self.files.values().any(FileState::emits)
     }
 
     /// Ends the batch: the events in order, and the renames still waiting for their new-name
@@ -360,6 +554,13 @@ impl Coalescer {
                     });
                 }
                 events.push(SourceEvent::Created(st.last));
+                continue;
+            }
+            if !st.name_trusted {
+                tracing::debug!(
+                    frn = %st.last.frn, reasons = format_args!("{r:#x}"),
+                    "only hard-link records for this file in the batch; not reported"
+                );
                 continue;
             }
             if st.awaiting_new_name {
@@ -473,7 +674,11 @@ mod tests {
         for item in RecordIter::new(&bytes, 0) {
             c.push(&item.unwrap());
         }
-        c.finish()
+        // `has_events` must agree with what `finish` produces, for every test batch.
+        let predicted = c.has_events();
+        let (events, pending) = c.finish();
+        assert_eq!(predicted, !events.is_empty(), "{events:?}");
+        (events, pending)
     }
 
     fn events(specs: &[RecordSpec]) -> Vec<SourceEvent> {
@@ -501,11 +706,55 @@ mod tests {
             NAMED_DATA_EXTEND,
             BASIC_INFO_CHANGE,
             STREAM_CHANGE,
-            HARD_LINK_CHANGE,
         ] {
             let ev = events(&[spec(F, DIR, "a.prj", r), spec(F, DIR, "a.prj", r | CLOSE)]);
             assert_eq!(ev, [SourceEvent::Modified(rec(F, DIR, "a.prj"))], "{r:#x}");
         }
+    }
+
+    #[test]
+    fn hard_link_added_or_removed_reports_nothing() {
+        // `CreateHardLink(SUB\link, DIR\a.shp)`: a link record named after the new link.
+        let added = events(&[
+            spec(F, SUB, "link", HARD_LINK_CHANGE),
+            spec(F, SUB, "link", HARD_LINK_CHANGE | CLOSE),
+        ]);
+        assert!(added.is_empty(), "{added:?}");
+        // Deleting one of several links: a link record named after the removed link.
+        let removed = events(&[
+            spec(F, SUB, "link", HARD_LINK_CHANGE),
+            spec(F, SUB, "link", HARD_LINK_CHANGE | CLOSE),
+        ]);
+        assert!(removed.is_empty(), "{removed:?}");
+        // Deleting the last link is a delete.
+        let last = events(&[spec(F, SUB, "link", HARD_LINK_CHANGE | FILE_DELETE | CLOSE)]);
+        assert_eq!(last, [SourceEvent::Deleted(rec(F, SUB, "link"))]);
+    }
+
+    #[test]
+    fn hard_link_records_never_replace_the_known_name() {
+        // Written under its indexed name, then a link is added and removed: the Modified event
+        // carries the indexed name, not a link name.
+        let ev = events(&[
+            spec(F, DIR, "a.shp", DATA_EXTEND),
+            spec(F, DIR, "a.shp", DATA_EXTEND | CLOSE),
+            spec(F, SUB, "link", HARD_LINK_CHANGE | CLOSE),
+            spec(F, SUB, "gone-link", HARD_LINK_CHANGE | CLOSE),
+        ]);
+        assert_eq!(ev, [SourceEvent::Modified(rec(F, DIR, "a.shp"))]);
+        // A link record first, then a write in a new session: the write's name is used.
+        let ev = events(&[
+            spec(F, SUB, "link", HARD_LINK_CHANGE | CLOSE),
+            spec(F, DIR, "a.shp", DATA_OVERWRITE | CLOSE),
+        ]);
+        assert_eq!(ev, [SourceEvent::Modified(rec(F, DIR, "a.shp"))]);
+        // A write through the very handle that added the link: only link-tainted records, so
+        // no trustworthy name; not reported.
+        let ev = events(&[
+            spec(F, SUB, "link", HARD_LINK_CHANGE),
+            spec(F, SUB, "link", HARD_LINK_CHANGE | DATA_EXTEND | CLOSE),
+        ]);
+        assert!(ev.is_empty(), "{ev:?}");
     }
 
     #[test]
@@ -869,5 +1118,243 @@ mod tests {
             assert!(ev.len() <= 2 * frns.len());
             assert!(pending.len() <= frns.len());
         }
+    }
+
+    fn reply(next_usn: u64, specs: &[RecordSpec]) -> Vec<u8> {
+        let records: Vec<Vec<u8>> = specs.iter().map(record).collect();
+        crate::record::build::enum_output(next_usn, &records)
+    }
+
+    fn is_rescan(outcome: &ReplyOutcome) -> bool {
+        matches!(outcome, ReplyOutcome::Rescan(RescanReason::Other(_)))
+    }
+
+    #[test]
+    fn fold_reply_good_replies() {
+        let mut c = Coalescer::new(Vec::new());
+        let r = reply(300, &[spec(F, DIR, "a", FILE_CREATE | CLOSE)]);
+        assert_eq!(
+            fold_reply(100, &r, &mut c),
+            ReplyOutcome::Records { next_usn: 300 }
+        );
+        assert_eq!(c.records(), 1);
+        assert_eq!(
+            fold_reply(300, &reply(400, &[]), &mut c),
+            ReplyOutcome::Advance { next_usn: 400 }
+        );
+        assert_eq!(
+            fold_reply(400, &reply(400, &[]), &mut c),
+            ReplyOutcome::CaughtUp
+        );
+    }
+
+    #[test]
+    fn fold_reply_turns_bad_replies_into_rescans() {
+        let good = reply(300, &[spec(F, DIR, "a", CLOSE), spec(G, DIR, "b", CLOSE)]);
+        // Shorter than the 8-byte header (including empty).
+        for cut in 0..8 {
+            let mut c = Coalescer::new(Vec::new());
+            assert!(is_rescan(&fold_reply(100, &good[..cut], &mut c)), "{cut}");
+        }
+        // Truncated inside a record: BadRecordLength (structural).
+        let mut c = Coalescer::new(Vec::new());
+        assert!(is_rescan(&fold_reply(100, &good[..good.len() - 3], &mut c)));
+        // A record-local error (unsupported version).
+        let mut bad = good.clone();
+        bad[8 + 4] = 9;
+        let mut c = Coalescer::new(Vec::new());
+        assert!(is_rescan(&fold_reply(100, &bad, &mut c)));
+        // Stalled: records but the cursor did not move, or went backwards.
+        let mut c = Coalescer::new(Vec::new());
+        assert!(is_rescan(&fold_reply(300, &good, &mut c)));
+        assert!(is_rescan(&fold_reply(500, &good, &mut c)));
+        // A 128-bit file ID.
+        let mut wide = spec(F, DIR, "a", CLOSE);
+        wide.major = 3;
+        let mut bytes = reply(300, &[wide]);
+        bytes[8 + 20] = 1; // upper half of the V3 file ID
+        let mut c = Coalescer::new(Vec::new());
+        assert!(matches!(
+            fold_reply(100, &bytes, &mut c),
+            ReplyOutcome::Unsupported(_)
+        ));
+    }
+
+    #[test]
+    fn fold_reply_never_panics_on_mutations() {
+        let base = reply(
+            900,
+            &[
+                spec(F, DIR, "a.shp", FILE_CREATE),
+                spec(G, SUB, "東京", CLOSE),
+            ],
+        );
+        let mut rng = XorShift(0x1234_5678_9ABC_DEF0);
+        for _ in 0..20_000 {
+            let mut buf = base.clone();
+            for _ in 0..1 + rng.next() % 4 {
+                let at = (rng.next() as usize) % buf.len();
+                buf[at] = rng.next() as u8;
+            }
+            let mut c = Coalescer::new(Vec::new());
+            let _ = fold_reply(100, &buf, &mut c);
+            let _ = c.finish();
+        }
+    }
+
+    /// Canned replies by start USN.
+    struct Canned(HashMap<i64, Vec<u8>>);
+
+    impl JournalReader for Canned {
+        type Error = String;
+        fn read(&mut self, start_usn: i64) -> Result<&[u8], String> {
+            self.0
+                .get(&start_usn)
+                .map(Vec::as_slice)
+                .ok_or_else(|| format!("no reply for {start_usn}"))
+        }
+    }
+
+    /// A journal of one-record replies: USN 100 → 200 → … (each reply holds the next record).
+    fn journal(records: &[RecordSpec]) -> Canned {
+        let mut map = HashMap::new();
+        let mut usn = 100;
+        for s in records {
+            map.insert(usn, reply((usn + 100) as u64, std::slice::from_ref(s)));
+            usn += 100;
+        }
+        map.insert(usn, reply(usn as u64, &[]));
+        Canned(map)
+    }
+
+    #[test]
+    fn read_batch_reads_to_the_end_without_a_cap() {
+        let mut j = journal(&[
+            spec(F, DIR, "a", FILE_CREATE | CLOSE),
+            spec(G, DIR, "b", DATA_EXTEND | CLOSE),
+        ]);
+        let mut c = Coalescer::new(Vec::new());
+        let read = read_batch(&mut j, 100, u64::MAX, &mut c).unwrap();
+        assert_eq!(read.end, BatchEnd::CaughtUp);
+        assert_eq!((read.next_usn, read.reads), (300, 3));
+        assert_eq!(c.finish().0.len(), 2);
+    }
+
+    #[test]
+    fn truncated_batches_are_never_empty_and_drain_the_journal() {
+        // Silent records first: a cap of 1 byte must not end a batch before an event exists.
+        let mut j = journal(&[
+            spec(F, DIR, "a", SECURITY_CHANGE | CLOSE),
+            spec(F, DIR, "a", OBJECT_ID_CHANGE | CLOSE),
+            spec(G, DIR, "b", FILE_CREATE | CLOSE),
+            spec(F, DIR, "a", RENAME_OLD_NAME),
+            spec(F, SUB, "c", RENAME_NEW_NAME),
+            spec(F, SUB, "c", RENAME_NEW_NAME | CLOSE),
+        ]);
+        let mut usn = 100;
+        let mut carried = Vec::new();
+        let mut all = Vec::new();
+        let mut batches = 0;
+        loop {
+            let mut c = Coalescer::new(std::mem::take(&mut carried));
+            let read = read_batch(&mut j, usn, 1, &mut c).unwrap();
+            let (events, pending) = c.finish();
+            batches += 1;
+            usn = read.next_usn;
+            carried = pending;
+            match read.end {
+                BatchEnd::Truncated => assert!(!events.is_empty(), "truncated but empty"),
+                BatchEnd::CaughtUp => {}
+                other => panic!("{other:?}"),
+            }
+            let done = events.is_empty() && read.end == BatchEnd::CaughtUp;
+            all.extend(events);
+            if done {
+                break;
+            }
+            assert!(batches < 20);
+        }
+        // With one record per reply, the rename's close record lands in a later batch, where it
+        // cannot be paired: it is reported as Created (the documented upsert fallback). Real
+        // replies are 64 KiB, so a rename's records normally share one reply.
+        assert_eq!(
+            all,
+            [
+                SourceEvent::Created(rec(G, DIR, "b")),
+                SourceEvent::Renamed {
+                    record: rec(F, SUB, "c"),
+                    old_parent: Frn(DIR),
+                    old_name: FileName::from("a"),
+                },
+                SourceEvent::Created(rec(F, SUB, "c")),
+            ]
+        );
+        assert!(carried.is_empty());
+    }
+
+    #[test]
+    fn cap_can_split_a_rename_which_the_carry_pairs() {
+        // Two records per reply: [create b, old name a], [new name c, close].
+        let mut map = HashMap::new();
+        map.insert(
+            100,
+            reply(
+                200,
+                &[
+                    spec(G, DIR, "b", FILE_CREATE | CLOSE),
+                    spec(F, DIR, "a", RENAME_OLD_NAME),
+                ],
+            ),
+        );
+        map.insert(
+            200,
+            reply(
+                300,
+                &[
+                    spec(F, SUB, "c", RENAME_NEW_NAME),
+                    spec(F, SUB, "c", RENAME_NEW_NAME | CLOSE),
+                ],
+            ),
+        );
+        map.insert(300, reply(300, &[]));
+        let mut j = Canned(map);
+        let mut c = Coalescer::new(Vec::new());
+        let first = read_batch(&mut j, 100, 1, &mut c).unwrap();
+        assert_eq!(
+            (first.end.clone(), first.next_usn),
+            (BatchEnd::Truncated, 200)
+        );
+        let (events, pending) = c.finish();
+        assert_eq!(events, [SourceEvent::Created(rec(G, DIR, "b"))]);
+        assert_eq!(pending.len(), 1);
+        let mut c = Coalescer::new(pending);
+        let second = read_batch(&mut j, 200, 1, &mut c).unwrap();
+        assert_eq!(second.end, BatchEnd::Truncated);
+        let (events, pending) = c.finish();
+        assert!(pending.is_empty());
+        assert_eq!(
+            events,
+            [SourceEvent::Renamed {
+                record: rec(F, SUB, "c"),
+                old_parent: Frn(DIR),
+                old_name: FileName::from("a"),
+            }]
+        );
+    }
+
+    #[test]
+    fn read_batch_stops_on_bad_replies_and_passes_errors_through() {
+        let mut map = HashMap::new();
+        map.insert(100, reply(200, &[spec(F, DIR, "a", CLOSE)]));
+        map.insert(200, vec![1, 2, 3]); // shorter than the header
+        let mut j = Canned(map);
+        let mut c = Coalescer::new(Vec::new());
+        let read = read_batch(&mut j, 100, u64::MAX, &mut c).unwrap();
+        assert!(matches!(read.end, BatchEnd::Rescan(RescanReason::Other(_))));
+        let mut c = Coalescer::new(Vec::new());
+        assert_eq!(
+            read_batch(&mut j, 7, u64::MAX, &mut c),
+            Err("no reply for 7".to_owned())
+        );
     }
 }

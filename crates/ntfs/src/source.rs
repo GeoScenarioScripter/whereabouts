@@ -4,14 +4,19 @@
 //!   then streams a synthesised root record followed by every `FSCTL_ENUM_USN_DATA` record.
 //! - [`Source::changes`] checks the checkpoint against the volume and journal
 //!   ([`checkpoint::assess`]), reads the journal with non-blocking `FSCTL_READ_USN_JOURNAL`
-//!   calls and folds the records into events ([`Coalescer`]).
+//!   calls ([`read_batch`], pure) and folds the records into events ([`Coalescer`]).
 //!
 //! Nothing here writes to the volume; in particular no journal is ever created (D-31). A volume
 //! without an active journal can be enumerated, but every `changes` call then asks for a full
 //! rescan until someone creates a journal.
+//!
+//! Only genuine OS failures become `SourceError::Io`. Anything wrong with the journal's
+//! *content* (malformed or stalled replies) becomes `FullRescanRequired(Other)`, because the
+//! same read would fail again on every poll.
 
 use std::io;
 use std::ops::ControlFlow;
+use std::time::Duration;
 
 use whereabouts_core::{FileAttributes, FileName, FileRecord, Frn};
 use whereabouts_source::{
@@ -20,9 +25,9 @@ use whereabouts_source::{
 };
 
 use crate::checkpoint::{self, JournalPosition, NtfsCheckpoint};
-use crate::error::{Error, ParseError, Result};
-use crate::journal::{Coalescer, ReadStep, file_record, read_step};
-use crate::record::{JournalInfo, RecordIter};
+use crate::error::{Error, ParseError, Result, win32};
+use crate::journal::{BatchEnd, Coalescer, JournalReader, file_record, read_batch};
+use crate::record::JournalInfo;
 use crate::volume::{EnumOptions, Volume};
 
 /// `SourceIdentity::kind` of NTFS volumes.
@@ -33,11 +38,13 @@ pub const SOURCE_KIND: &str = "ntfs";
 pub struct SourceOptions {
     /// Output buffer for `FSCTL_ENUM_USN_DATA` (see [`EnumOptions::buffer_size`]).
     pub enum_buffer_size: usize,
-    /// Output buffer per `FSCTL_READ_USN_JOURNAL` call in bytes (clamped to 4 KiB ..= 16 MiB).
+    /// Output buffer per `FSCTL_READ_USN_JOURNAL` call in bytes, clamped to 1 KiB ..= 16 MiB
+    /// (1 KiB holds the largest `USN_RECORD_V2` plus the reply header).
     pub journal_buffer_size: usize,
-    /// One [`Source::changes`] call stops reading once it has consumed this many bytes of
-    /// journal records, so a long backlog arrives as several batches of bounded size. Call
-    /// again until a batch comes back empty.
+    /// Soft cap per [`Source::changes`] call: once this many bytes of journal records have been
+    /// read **and** the batch holds at least one event, the batch ends and the rest waits for
+    /// the next call. A truncated batch is therefore never empty; call `changes` again until a
+    /// batch comes back empty.
     pub max_batch_bytes: u64,
 }
 
@@ -51,19 +58,34 @@ impl Default for SourceOptions {
     }
 }
 
-/// Counters from the last [`Source::changes`] call (for logs and benchmarks).
+/// Counters from the last [`Source::changes`] call (for logs and benchmarks). Reset at the start
+/// of every call, so after a rescan or an error they describe that call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ChangeStats {
     /// `FSCTL_READ_USN_JOURNAL` calls.
     pub reads: u64,
     /// Journal records folded.
     pub records: u64,
-    /// Bytes of journal output consumed.
+    /// Bytes of journal records consumed.
     pub bytes: u64,
     /// Events produced.
     pub events: u64,
     /// `true` when the batch stopped at [`SourceOptions::max_batch_bytes`] (more is waiting).
     pub truncated: bool,
+}
+
+/// Counters from the last [`Source::enumerate`] call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EnumerateStats {
+    /// Records passed to the sink (the synthesised root included).
+    pub records: u64,
+    /// Records skipped because the kernel returned them malformed (logged at `error`). A
+    /// non-zero count means the enumeration is incomplete.
+    pub skipped: u64,
+    /// `FSCTL_ENUM_USN_DATA` calls that returned data.
+    pub batches: u64,
+    /// Time spent inside the kernel.
+    pub kernel_time: Duration,
 }
 
 /// The [`Source`] for one local NTFS volume, addressed by drive letter (mount points and
@@ -75,6 +97,23 @@ pub struct NtfsVolumeSource {
     identity: SourceIdentity,
     options: SourceOptions,
     last_changes: ChangeStats,
+    last_enumerate: EnumerateStats,
+}
+
+/// [`JournalReader`] over the volume, with one reusable 8-byte-aligned buffer.
+struct VolumeReader<'v> {
+    volume: &'v Volume,
+    journal_id: u64,
+    buf: Vec<u64>,
+}
+
+impl JournalReader for VolumeReader<'_> {
+    type Error = Error;
+
+    fn read(&mut self, start_usn: i64) -> Result<&[u8]> {
+        self.volume
+            .read_journal(start_usn, self.journal_id, &mut self.buf)
+    }
 }
 
 impl NtfsVolumeSource {
@@ -105,6 +144,7 @@ impl NtfsVolumeSource {
             identity,
             options,
             last_changes: ChangeStats::default(),
+            last_enumerate: EnumerateStats::default(),
         })
     }
 
@@ -120,6 +160,12 @@ impl NtfsVolumeSource {
         self.last_changes
     }
 
+    /// Counters from the last [`Source::enumerate`] call, including skipped malformed records.
+    #[must_use]
+    pub fn last_enumerate_stats(&self) -> EnumerateStats {
+        self.last_enumerate
+    }
+
     /// The record reported for the root directory, which enumeration never returns (D-31): its
     /// own parent, an empty name, the directory attribute.
     #[must_use]
@@ -130,6 +176,10 @@ impl NtfsVolumeSource {
             name: FileName::from(""),
             attrs: FileAttributes(FileAttributes::DIRECTORY),
         }
+    }
+
+    fn label(&self) -> String {
+        format!("{}:", self.volume.letter())
     }
 
     /// The current journal state; a journal being deleted counts as none.
@@ -150,74 +200,99 @@ impl NtfsVolumeSource {
         .map_err(checkpoint_error)
     }
 
-    /// Reads the journal from `pos`, folding records into `coalescer`. Returns the USN to resume
-    /// from, or the reason a rescan is required.
-    fn read_from(
-        &mut self,
-        pos: JournalPosition,
-        coalescer: &mut Coalescer,
-    ) -> Result<std::result::Result<i64, RescanReason>, SourceError> {
-        let words = self.options.journal_buffer_size.clamp(4 << 10, 16 << 20) / 8;
-        let mut buf = vec![0_u64; words];
-        let mut usn = pos.next_usn;
-        let mut stats = ChangeStats::default();
-        let volume = format!("{}:", self.volume.letter());
-        loop {
-            let reply = match self.volume.read_journal(usn, pos.journal_id, &mut buf) {
-                Ok(reply) => reply,
-                Err(Error::JournalEntryDeleted { .. }) => {
-                    return Ok(Err(RescanReason::JournalWrapped));
-                }
-                Err(Error::JournalNotActive { .. } | Error::JournalDeleteInProgress { .. }) => {
-                    return Ok(Err(RescanReason::JournalMissing));
-                }
-                Err(e) => return Err(source_error(e)),
-            };
-            stats.reads += 1;
-            let parse = |source| Error::Parse {
-                what: "FSCTL_READ_USN_JOURNAL output",
-                volume: volume.clone(),
-                source,
-            };
-            match read_step(usn, reply).map_err(|e| source_error(parse(e)))? {
-                ReadStep::Records { next_usn } => {
-                    for item in RecordIter::new(&reply[8..], 8) {
-                        match item {
-                            Ok(rec) => coalescer.push(&rec),
-                            Err(e @ ParseError::FileIdTooWide { .. }) => {
-                                return Err(wide_file_id(&volume, &e));
-                            }
-                            Err(e) if e.is_record_local() => {
-                                // Skipping it would lose a change; the index converges only
-                                // through a rescan. Never seen from a real kernel.
-                                tracing::warn!(%volume, error = %e, "malformed journal record");
-                                return Ok(Err(RescanReason::Other(format!(
-                                    "malformed USN journal record on {volume}: {e}"
-                                ))));
-                            }
-                            Err(e) => return Err(source_error(parse(e))),
-                        }
-                    }
-                    usn = next_usn;
-                    stats.bytes += reply.len() as u64;
-                    if stats.bytes >= self.options.max_batch_bytes {
-                        stats.truncated = true;
-                        break;
-                    }
-                }
-                ReadStep::Advance { next_usn } => usn = next_usn,
-                ReadStep::CaughtUp => break,
-                ReadStep::Stalled { next_usn } => {
-                    return Err(SourceError::Io(io::Error::other(format!(
-                        "reading the USN journal of {volume} stalled at USN {next_usn} \
-                         (started at {usn})"
-                    ))));
-                }
+    /// Maps a failed journal read: lost history becomes a rescan reason, anything else stays an
+    /// error. `ERROR_INVALID_PARAMETER` is what the read returns when `journal_id` is no longer
+    /// the active journal (re-created between `assess` and the read), so the journal is queried
+    /// again to tell that apart from a genuine failure.
+    fn read_failure(&self, e: Error, journal_id: u64) -> Result<RescanReason, SourceError> {
+        match e {
+            Error::JournalEntryDeleted { .. } => Ok(RescanReason::JournalWrapped),
+            Error::JournalNotActive { .. } | Error::JournalDeleteInProgress { .. } => {
+                Ok(RescanReason::JournalMissing)
+            }
+            Error::Os {
+                code: win32::ERROR_INVALID_PARAMETER,
+                ..
+            } => match self.journal() {
+                Ok(None) => Ok(RescanReason::JournalMissing),
+                Ok(Some(j)) if j.journal_id != journal_id => Ok(RescanReason::JournalRecreated),
+                _ => Err(source_error(e)),
+            },
+            other => Err(source_error(other)),
+        }
+    }
+
+    /// The body of [`Source::changes`] once the checkpoint is decoded.
+    fn changes_since(&mut self, checkpoint: NtfsCheckpoint) -> Result<Changes, SourceError> {
+        let journal = self.journal().map_err(source_error)?;
+        let serial = self.volume.info().serial_number;
+        let pos = match checkpoint::assess(&checkpoint, serial, journal.as_ref()) {
+            Ok(pos) => pos,
+            Err(reason) => return Ok(Changes::FullRescanRequired(reason)),
+        };
+        let mut coalescer = Coalescer::new(checkpoint.pending_renames);
+        let words = self.options.journal_buffer_size.clamp(1 << 10, 16 << 20) / 8;
+        let mut reader = VolumeReader {
+            volume: &self.volume,
+            journal_id: pos.journal_id,
+            buf: vec![0_u64; words],
+        };
+        let read = match read_batch(
+            &mut reader,
+            pos.next_usn,
+            self.options.max_batch_bytes,
+            &mut coalescer,
+        ) {
+            Ok(read) => read,
+            Err(e) => {
+                return self
+                    .read_failure(e, pos.journal_id)
+                    .map(Changes::FullRescanRequired);
+            }
+        };
+        self.last_changes.reads = read.reads;
+        self.last_changes.bytes = read.bytes;
+        self.last_changes.records = coalescer.records();
+        match read.end {
+            BatchEnd::CaughtUp => {}
+            BatchEnd::Truncated => self.last_changes.truncated = true,
+            BatchEnd::Rescan(reason) => return Ok(Changes::FullRescanRequired(reason)),
+            BatchEnd::Unsupported(what) => {
+                return Err(SourceError::Unsupported(format!(
+                    "{}: {what} (#24)",
+                    self.label()
+                )));
             }
         }
-        stats.records = coalescer.records();
-        self.last_changes = stats;
-        Ok(Ok(usn))
+        // StartUsn = 0 is special to the kernel: "from the first record still in the journal",
+        // with no ERROR_JOURNAL_ENTRY_DELETED if the journal wrapped after `assess` saw
+        // FirstUsn = 0. For any other start the kernel itself refuses purged USNs, so only this
+        // case needs the second look.
+        if pos.next_usn == 0 {
+            match self.journal().map_err(source_error)? {
+                None => return Ok(Changes::FullRescanRequired(RescanReason::JournalMissing)),
+                Some(j) if j.journal_id != pos.journal_id => {
+                    return Ok(Changes::FullRescanRequired(RescanReason::JournalRecreated));
+                }
+                Some(j) if j.first_usn > pos.next_usn => {
+                    return Ok(Changes::FullRescanRequired(RescanReason::JournalWrapped));
+                }
+                Some(_) => {}
+            }
+        }
+        let (events, pending_renames) = coalescer.finish();
+        self.last_changes.events = events.len() as u64;
+        let checkpoint = NtfsCheckpoint {
+            volume_serial: serial,
+            journal: Some(JournalPosition {
+                journal_id: pos.journal_id,
+                next_usn: read.next_usn,
+            }),
+            pending_renames,
+        }
+        .to_checkpoint()
+        .map_err(checkpoint_error)?;
+        Ok(Changes::Batch(ChangeBatch { events, checkpoint }))
     }
 }
 
@@ -231,6 +306,7 @@ impl Source for NtfsVolumeSource {
     }
 
     fn enumerate(&mut self, sink: &mut dyn RecordSink) -> Result<Checkpoint, SourceError> {
+        self.last_enumerate = EnumerateStats::default();
         // The checkpoint is the journal position *before* enumeration (D-29).
         let journal = self.journal().map_err(source_error)?;
         let checkpoint = self.checkpoint_for(journal.map(|j| JournalPosition {
@@ -240,43 +316,65 @@ impl Source for NtfsVolumeSource {
         if sink.accept(self.root_record()).is_break() {
             return Err(SourceError::Cancelled);
         }
-        let volume = format!("{}:", self.volume.letter());
+        let volume = self.label();
         let root = self.root.0;
+        let mut stats = EnumerateStats {
+            records: 1,
+            ..EnumerateStats::default()
+        };
         let mut enumerator = self.volume.enumerate_with(EnumOptions {
             buffer_size: self.options.enum_buffer_size,
             ..EnumOptions::default()
         });
-        let (mut records, mut skipped) = (0_u64, 0_u64);
-        while let Some(batch) = enumerator.next_batch().map_err(source_error)? {
-            for item in batch {
-                match item {
-                    Ok(rec) if rec.frn == root => {}
-                    Ok(rec) => {
-                        records += 1;
-                        if let ControlFlow::Break(()) = sink.accept(file_record(&rec)) {
-                            return Err(SourceError::Cancelled);
+        let outcome = (|| {
+            while let Some(batch) = enumerator.next_batch().map_err(source_error)? {
+                for item in batch {
+                    match item {
+                        Ok(rec) if rec.frn == root => {}
+                        Ok(rec) => {
+                            stats.records += 1;
+                            if let ControlFlow::Break(()) = sink.accept(file_record(&rec)) {
+                                return Err(SourceError::Cancelled);
+                            }
                         }
-                    }
-                    Err(e @ ParseError::FileIdTooWide { .. }) => {
-                        return Err(wide_file_id(&volume, &e));
-                    }
-                    Err(e) if e.is_record_local() => {
-                        skipped += 1;
-                        tracing::warn!(%volume, error = %e, "skipping USN record");
-                    }
-                    Err(source) => {
-                        return Err(source_error(Error::Parse {
-                            what: "FSCTL_ENUM_USN_DATA record",
-                            volume,
-                            source,
-                        }));
+                        Err(e @ ParseError::FileIdTooWide { .. }) => {
+                            return Err(SourceError::Unsupported(format!(
+                                "{volume} returned a 128-bit file ID, which does not fit a \
+                                 64-bit FRN ({e}) (#24)"
+                            )));
+                        }
+                        Err(e) if e.is_record_local() => {
+                            stats.skipped += 1;
+                            tracing::error!(
+                                %volume, error = %e,
+                                "skipping a malformed record: this entry is missing from the index"
+                            );
+                        }
+                        Err(source) => {
+                            return Err(source_error(Error::Parse {
+                                what: "FSCTL_ENUM_USN_DATA record",
+                                volume: volume.clone(),
+                                source,
+                            }));
+                        }
                     }
                 }
             }
+            Ok(())
+        })();
+        let kernel = enumerator.stats();
+        stats.batches = kernel.batches;
+        stats.kernel_time = kernel.kernel_time;
+        self.last_enumerate = stats;
+        outcome?;
+        if stats.skipped > 0 {
+            tracing::error!(
+                %volume, skipped = stats.skipped,
+                "enumeration skipped malformed records; the index is incomplete"
+            );
         }
-        let stats = enumerator.stats();
         tracing::info!(
-            %volume, records, skipped, batches = stats.batches,
+            %volume, records = stats.records, skipped = stats.skipped, batches = stats.batches,
             kernel_ms = stats.kernel_time.as_millis() as u64,
             journal = journal.is_some(), "enumerated volume"
         );
@@ -284,39 +382,16 @@ impl Source for NtfsVolumeSource {
     }
 
     fn changes(&mut self, since: &Checkpoint) -> Result<Changes, SourceError> {
-        let checkpoint = match NtfsCheckpoint::from_checkpoint(since) {
-            Ok(cp) => cp,
+        self.last_changes = ChangeStats::default();
+        match NtfsCheckpoint::from_checkpoint(since) {
+            Ok(cp) => self.changes_since(cp),
             Err(e) => {
                 tracing::info!(error = %e, "checkpoint not usable; full rescan");
-                return Ok(Changes::FullRescanRequired(
+                Ok(Changes::FullRescanRequired(
                     RescanReason::CheckpointMismatch,
-                ));
+                ))
             }
-        };
-        let journal = self.journal().map_err(source_error)?;
-        let serial = self.volume.info().serial_number;
-        let pos = match checkpoint::assess(&checkpoint, serial, journal.as_ref()) {
-            Ok(pos) => pos,
-            Err(reason) => return Ok(Changes::FullRescanRequired(reason)),
-        };
-        let mut coalescer = Coalescer::new(checkpoint.pending_renames);
-        let next_usn = match self.read_from(pos, &mut coalescer)? {
-            Ok(usn) => usn,
-            Err(reason) => return Ok(Changes::FullRescanRequired(reason)),
-        };
-        let (events, pending_renames) = coalescer.finish();
-        self.last_changes.events = events.len() as u64;
-        let checkpoint = NtfsCheckpoint {
-            volume_serial: serial,
-            journal: Some(JournalPosition {
-                journal_id: pos.journal_id,
-                next_usn,
-            }),
-            pending_renames,
         }
-        .to_checkpoint()
-        .map_err(checkpoint_error)?;
-        Ok(Changes::Batch(ChangeBatch { events, checkpoint }))
     }
 }
 
@@ -330,14 +405,6 @@ fn source_error(e: Error) -> SourceError {
         | Error::Unsupported { .. } => SourceError::Unsupported(e.to_string()),
         other => SourceError::Io(io::Error::other(other)),
     }
-}
-
-/// 128-bit file IDs (ReFS-style `FILE_ID_128`) do not fit `Frn(u64)` (#24): refuse the volume
-/// rather than truncate IDs.
-fn wide_file_id(volume: &str, e: &ParseError) -> SourceError {
-    SourceError::Unsupported(format!(
-        "{volume} returned a 128-bit file ID, which does not fit a 64-bit FRN ({e})"
-    ))
 }
 
 fn checkpoint_error(e: CheckpointError) -> SourceError {

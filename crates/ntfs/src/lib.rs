@@ -102,7 +102,7 @@ pub use record::{JournalInfo, RawRecord, RecordIter, UsnRecord};
 #[cfg(windows)]
 pub use process::{ProcessMemory, process_memory};
 #[cfg(windows)]
-pub use source::{ChangeStats, NtfsVolumeSource, SOURCE_KIND, SourceOptions};
+pub use source::{ChangeStats, EnumerateStats, NtfsVolumeSource, SOURCE_KIND, SourceOptions};
 #[cfg(windows)]
 pub use volume::{
     EnumOptions, EnumStats, Enumerator, Volume, VolumeInfo, ensure_local, volume_info,

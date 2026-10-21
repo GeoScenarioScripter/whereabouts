@@ -167,15 +167,17 @@ impl Drop for TestVolume {
         let _guard = DISKPART
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Test-only code: failures go to stderr so they show in the test output (tests have no
+        // tracing subscriber), but never panic in drop.
         let file = self.vhd.display();
-        let script = format!("select vdisk file=\"{file}\"\ndetach vdisk noerr\n");
+        let script = format!("select vdisk file=\"{file}\"\ndetach vdisk\n");
         if let Err(e) = run_diskpart(&script) {
-            tracing::warn!(error = %e, vhd = %file, "could not detach the test VHD");
+            eprintln!("[testvol] could not detach the test VHD {file}: {e}");
         }
         if let Err(e) = std::fs::remove_file(&self.vhd)
             && e.kind() != io::ErrorKind::NotFound
         {
-            tracing::warn!(error = %e, vhd = %file, "could not delete the test VHD");
+            eprintln!("[testvol] could not delete the test VHD {file}: {e}");
         }
     }
 }
