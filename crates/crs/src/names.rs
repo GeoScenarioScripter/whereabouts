@@ -286,6 +286,8 @@ const METHOD_ALIASES: &[(&str, ProjectionMethod)] = {
         ("krovaknorthoriented", M::KrovakNorthOrientated),
         ("newzealandmapgrid", M::NewZealandMapGrid),
         ("cylindricalequalarea", M::LambertCylindricalEqualArea),
+        // ESRI: cylindrical equal area with a standard parallel of 30° (written or implied).
+        ("behrmann", M::LambertCylindricalEqualArea),
         (
             "lambertcylindricalequalarea",
             M::LambertCylindricalEqualArea,
@@ -330,7 +332,7 @@ impl ProjectionMethod {
     pub fn from_epsg(code: u32) -> Option<Self> {
         use ProjectionMethod as M;
         Some(match code {
-            9807 => M::TransverseMercator,
+            9807 | 1111 => M::TransverseMercator, // 1111: Transverse Mercator 3D
             9808 => M::TransverseMercatorSouthOrientated,
             9801 => M::LambertConicConformal1Sp,
             9802 => M::LambertConicConformal2Sp,
