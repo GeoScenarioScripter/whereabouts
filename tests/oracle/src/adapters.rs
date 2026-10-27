@@ -6,6 +6,9 @@
 //! line** to [`ADAPTERS`] plus its `read` function (in its own module here), listing only the
 //! [`Check`]s it is ready to be held to.
 
+mod native;
+mod shapefile;
+
 use std::path::{Path, PathBuf};
 
 use crate::compare::Check;
@@ -69,9 +72,13 @@ pub struct Adapter {
 
 /// The registry. One line per format; keep sorted by format.
 pub static ADAPTERS: &[Adapter] = &[
-    // 2.6: Adapter { format: "shapefile", checks: &[...], read: shapefile::read },
     // 3.1: Adapter { format: "geopackage", checks: &[...], read: geopackage::read },
     // 3.2: Adapter { format: "geotiff", checks: &[...], read: geotiff::read },
+    Adapter {
+        format: "shapefile",
+        checks: shapefile::CHECKS,
+        read: shapefile::read,
+    },
 ];
 
 /// The registered adapters.

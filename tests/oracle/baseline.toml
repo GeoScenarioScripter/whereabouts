@@ -29,3 +29,10 @@ raster = 0.98
 # Q-14: EPSG identification and WGS84 agreement targets are set by sessions 2.4 / 4.3.
 epsg = 0.0
 wgs84_extent = 0.0
+
+[format.shapefile.min_rate]
+# stage01/2.6: the native shapefile reader agrees on every non-corrupt case (18/18 committed,
+# 19/19 with the external sample), so any regression fails CI.
+geometry_type = 1.0
+feature_count = 1.0
+native_extent = 1.0
