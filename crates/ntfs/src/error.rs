@@ -78,6 +78,12 @@ pub enum ParseError {
         /// The full 128-bit identifier.
         id: u128,
     },
+    /// A reply header carries a USN that does not fit the signed 64-bit USN range.
+    #[error("USN {value:#x} returned by the file system is out of range")]
+    UsnOutOfRange {
+        /// The raw value.
+        value: u64,
+    },
 }
 
 impl ParseError {
@@ -136,6 +142,19 @@ pub enum Error {
         /// The volume, e.g. `C:`.
         volume: String,
     },
+    /// The volume has no active change journal (`ERROR_JOURNAL_NOT_ACTIVE`) while reading it.
+    #[error("the USN change journal on {volume} is not active")]
+    JournalNotActive {
+        /// The volume, e.g. `C:`.
+        volume: String,
+    },
+    /// The requested USN is no longer in the change journal (`ERROR_JOURNAL_ENTRY_DELETED`): the
+    /// journal wrapped past it, so the history since then is lost.
+    #[error("the requested USN is no longer in the change journal on {volume}")]
+    JournalEntryDeleted {
+        /// The volume, e.g. `C:`.
+        volume: String,
+    },
     /// The change journal is being deleted (`ERROR_JOURNAL_DELETE_IN_PROGRESS`); retry later.
     #[error("the USN change journal on {volume} is being deleted")]
     JournalDeleteInProgress {
@@ -187,10 +206,14 @@ pub mod win32 {
     pub const ERROR_ACCESS_DENIED: u32 = 5;
     /// `ERROR_HANDLE_EOF`: `FSCTL_ENUM_USN_DATA` has no more records.
     pub const ERROR_HANDLE_EOF: u32 = 38;
+    /// `ERROR_INVALID_PARAMETER` (e.g. a journal ID that no longer matches the active journal).
+    pub const ERROR_INVALID_PARAMETER: u32 = 87;
     /// `ERROR_JOURNAL_DELETE_IN_PROGRESS`.
     pub const ERROR_JOURNAL_DELETE_IN_PROGRESS: u32 = 1178;
     /// `ERROR_JOURNAL_NOT_ACTIVE`: the volume has no active USN change journal.
     pub const ERROR_JOURNAL_NOT_ACTIVE: u32 = 1179;
+    /// `ERROR_JOURNAL_ENTRY_DELETED`: the requested USN has been purged from the journal.
+    pub const ERROR_JOURNAL_ENTRY_DELETED: u32 = 1181;
 
     /// Extracts the Win32 error code from an `HRESULT` built by `HRESULT_FROM_WIN32`
     /// (facility 7, severity bit set). Other `HRESULT`s are returned as their raw bits.
@@ -223,6 +246,10 @@ mod tests {
         assert_eq!(
             win32::code_from_hresult(0x8007_049B_u32 as i32),
             win32::ERROR_JOURNAL_NOT_ACTIVE
+        );
+        assert_eq!(
+            win32::code_from_hresult(0x8007_049D_u32 as i32),
+            win32::ERROR_JOURNAL_ENTRY_DELETED
         );
         // A non-Win32 HRESULT (E_NOTIMPL) is passed through untouched.
         assert_eq!(
