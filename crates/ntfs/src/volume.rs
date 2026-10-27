@@ -10,14 +10,18 @@ use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAGS_AND_ATTRIBUTES,
     FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, GetDriveTypeW,
-    GetFileInformationByHandle, GetVolumeInformationW, OPEN_EXISTING, QueryDosDeviceW,
+    GetFileInformationByHandle, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    OPEN_EXISTING, QueryDosDeviceW,
 };
 use windows::Win32::System::IO::DeviceIoControl;
-use windows::Win32::System::Ioctl::{FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL};
+use windows::Win32::System::Ioctl::{
+    FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL,
+};
 use windows::core::HSTRING;
 
 use crate::drive::{check_local, device_path, parse_drive_letter, root_path};
 use crate::error::{Error, Result, win32};
+use crate::journal;
 use crate::record::{
     self, EnumStep, JournalInfo, MFT_ENUM_DATA_V1_SIZE, RawRecord, RecordIter,
     USN_JOURNAL_DATA_V2_SIZE,
@@ -311,6 +315,88 @@ impl Volume {
             })
     }
 
+    /// The volume GUID path (`\\?\Volume{…}\`), via `GetVolumeNameForVolumeMountPointW`. Stable
+    /// across reboots and drive-letter changes, so it identifies the volume in the catalog.
+    ///
+    /// # Errors
+    /// [`Error::Os`] if the mount point cannot be resolved.
+    pub fn volume_guid_path(&self) -> Result<String> {
+        let letter = self.letter();
+        let root = HSTRING::from(root_path(letter));
+        // `\\?\Volume{GUID}\` is 49 characters plus NUL; the docs recommend 50.
+        let mut name = [0_u16; 64];
+        // SAFETY: `root` is a NUL-terminated wide string that outlives the call; `name` is a
+        // live, writable buffer passed as a slice (the wrapper passes its exact length).
+        unsafe { GetVolumeNameForVolumeMountPointW(&root, &mut name) }
+            .map_err(|e| os_error("GetVolumeNameForVolumeMountPointW", letter, &e))?;
+        Ok(wide_to_string(&name))
+    }
+
+    /// One non-blocking `FSCTL_READ_USN_JOURNAL` call from `start_usn` on journal `journal_id`
+    /// (see [`crate::journal::encode_read_usn_journal_data_v1`] for the fixed options).
+    ///
+    /// Returns the reply bytes inside `buf`: the next USN to read (8 bytes), then
+    /// `USN_RECORD_V2` records. Interpret it with [`crate::journal::read_step`] and
+    /// [`RecordIter`]. At the end of the journal the reply is the 8-byte header only.
+    ///
+    /// `start_usn == 0` is special to the kernel: it means "from the first record still in the
+    /// journal" and never fails with `ERROR_JOURNAL_ENTRY_DELETED`, even after a wrap. Callers
+    /// must compare their position with `JournalInfo::first_usn` first, as
+    /// `crate::checkpoint::assess` does.
+    ///
+    /// # Errors
+    /// [`Error::JournalEntryDeleted`] when `start_usn` has been purged (the journal wrapped),
+    /// [`Error::JournalNotActive`], [`Error::JournalDeleteInProgress`], [`Error::Unsupported`],
+    /// or [`Error::Os`] (e.g. `ERROR_INVALID_PARAMETER` when `journal_id` is no longer the
+    /// active journal).
+    pub fn read_journal<'b>(
+        &self,
+        start_usn: i64,
+        journal_id: u64,
+        buf: &'b mut [u64],
+    ) -> Result<&'b [u8]> {
+        let letter = self.letter();
+        let input = AlignedReadInput(journal::encode_read_usn_journal_data_v1(
+            start_usn, journal_id,
+        ));
+        let out_len = std::mem::size_of_val(&*buf);
+        let mut returned = 0_u32;
+        // SAFETY: METHOD_NEITHER control code: the kernel reads `input` (a live, 8-byte aligned
+        // READ_USN_JOURNAL_DATA_V1 of the size passed) and writes at most `out_len` bytes into
+        // `buf` (live, 8-byte aligned, exactly `out_len` bytes, exclusively borrowed for the
+        // call). `returned` is a live `u32`. Synchronous call (no OVERLAPPED).
+        let result = unsafe {
+            DeviceIoControl(
+                self.handle.0,
+                FSCTL_READ_USN_JOURNAL,
+                Some(input.0.as_ptr().cast()),
+                journal::READ_USN_JOURNAL_DATA_V1_SIZE as u32,
+                Some(buf.as_mut_ptr().cast()),
+                u32::try_from(out_len).unwrap_or(u32::MAX),
+                Some(&raw mut returned),
+                None,
+            )
+        };
+        if let Err(e) = result {
+            let volume = letter_str(letter);
+            return Err(match win32::code_from_hresult(e.code().0) {
+                win32::ERROR_JOURNAL_ENTRY_DELETED => Error::JournalEntryDeleted { volume },
+                win32::ERROR_JOURNAL_NOT_ACTIVE => Error::JournalNotActive { volume },
+                win32::ERROR_JOURNAL_DELETE_IN_PROGRESS => {
+                    Error::JournalDeleteInProgress { volume }
+                }
+                win32::ERROR_INVALID_FUNCTION => Error::Unsupported {
+                    op: "FSCTL_READ_USN_JOURNAL",
+                    volume,
+                },
+                _ => os_error("DeviceIoControl(FSCTL_READ_USN_JOURNAL)", letter, &e),
+            });
+        }
+        let bytes = u64s_as_bytes(buf);
+        let len = (returned as usize).min(bytes.len());
+        Ok(&bytes[..len])
+    }
+
     /// Enumerates every file and directory record on the volume with default options.
     #[must_use]
     pub fn enumerate(&self) -> Enumerator<'_> {
@@ -537,6 +623,10 @@ impl Enumerator<'_> {
 /// `MFT_ENUM_DATA_V1` bytes with the alignment of the C struct (it starts with a `u64`).
 #[repr(C, align(8))]
 struct AlignedInput([u8; MFT_ENUM_DATA_V1_SIZE]);
+
+/// `READ_USN_JOURNAL_DATA_V1` bytes with the alignment of the C struct (it starts with a `u64`).
+#[repr(C, align(8))]
+struct AlignedReadInput([u8; journal::READ_USN_JOURNAL_DATA_V1_SIZE]);
 
 impl Iterator for Enumerator<'_> {
     type Item = Result<RawRecord>;
