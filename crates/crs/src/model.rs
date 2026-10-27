@@ -41,6 +41,9 @@ pub enum Dialect {
     Wkt2_2019,
     /// PROJ's JSON encoding of WKT2:2019.
     ProjJson,
+    /// Not parsed from text: built from the embedded EPSG table for a bare EPSG code
+    /// ([`crate::epsg_crs`]).
+    EpsgTable,
 }
 
 /// An authority citation such as `AUTHORITY["EPSG","4326"]` or `ID["EPSG",4326]`.

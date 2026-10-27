@@ -13,6 +13,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# default-features = false: the `aeqd` default feature builds C code (proj4rs-geodesic + cc).
+proj4rs = { workspace = true }
 serde_json.workspace = true
 thiserror.workspace = true
 whereabouts-core.workspace = true
