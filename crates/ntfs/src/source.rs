@@ -232,10 +232,9 @@ impl NtfsVolumeSource {
         let root = self.root.0;
         let checkpoint = self.checkpoint_for(journal.map(|j| JournalPosition {
             journal_id: j.journal_id,
-            next_usn: checkpoint::replay_start(
-                j.first_usn,
-                j.next_usn,
-                self.options.raw_replay_margin,
+            next_usn: self.replay_boundary(
+                &j,
+                checkpoint::replay_start(j.first_usn, j.next_usn, self.options.raw_replay_margin),
             ),
         }))?;
         // The root record has been sent already.
@@ -312,6 +311,47 @@ impl NtfsVolumeSource {
             read_ms = scan.read_time.as_millis() as u64, "enumerated volume from $MFT"
         );
         Ok(checkpoint)
+    }
+
+    /// The USN of the last journal record at or before `target`, or `first_usn` if there is none
+    /// (or the journal cannot be walked). `FSCTL_READ_USN_JOURNAL` rejects a start USN that is
+    /// not a record boundary (`ERROR_INVALID_PARAMETER`, seen on a VHD), so a replay position
+    /// derived by subtraction has to be snapped to a record. Walks the journal from `first_usn`
+    /// in 64 KiB reads; replaying more than needed is harmless, so any trouble falls back to
+    /// `first_usn`.
+    fn replay_boundary(&self, j: &JournalInfo, target: i64) -> i64 {
+        if target <= j.first_usn {
+            return j.first_usn;
+        }
+        let mut buf = vec![0_u64; 8192];
+        let mut start = j.first_usn;
+        let mut best = j.first_usn;
+        // 64 KiB per read: a 32 MiB journal takes about 500 reads.
+        for _ in 0..1_000_000 {
+            let Ok(reply) = self.volume.read_journal(start, j.journal_id, &mut buf) else {
+                return j.first_usn;
+            };
+            let Some(head) = reply.get(..8) else {
+                return best;
+            };
+            let next = i64::from_le_bytes(head.try_into().unwrap_or([0; 8]));
+            let mut any = false;
+            for rec in crate::record::RecordIter::new(&reply[8..], 8) {
+                let Ok(rec) = rec else {
+                    return j.first_usn;
+                };
+                any = true;
+                if rec.usn > target {
+                    return best;
+                }
+                best = rec.usn;
+            }
+            if !any || next <= start {
+                return best;
+            }
+            start = next;
+        }
+        best
     }
 
     /// The current journal state; a journal being deleted counts as none.

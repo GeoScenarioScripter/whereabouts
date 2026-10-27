@@ -246,8 +246,9 @@ pub const RAW_SCAN_REPLAY_MARGIN: u64 = 1 << 20;
 ///
 /// Raw volume reads can miss changes NTFS has not written to disk yet, so changes from just
 /// before the scan are replayed by the next `changes` call. Replay is idempotent for consumers
-/// (upserts, delete wins, D-29). `next_usn - margin` need not fall on a record boundary: NTFS
-/// starts reading at the first record at or after the given USN.
+/// (upserts, delete wins, D-29). The result is arithmetic only: it need **not** be a record
+/// boundary, and `FSCTL_READ_USN_JOURNAL` rejects a start USN that is not one
+/// (`ERROR_INVALID_PARAMETER`, seen on a VHD), so the source snaps it to a record first.
 #[must_use]
 pub fn replay_start(first_usn: i64, next_usn: i64, margin: u64) -> i64 {
     let available = u64::try_from(next_usn.saturating_sub(first_usn).max(0)).unwrap_or(0);

@@ -569,10 +569,11 @@ fn foreign_or_garbage_checkpoints_require_rescan() {
 fn raw_mft_enumeration_matches_usn_and_replays_a_margin() {
     use whereabouts_ntfs::EnumerationMethod;
 
-    // 100 bytes of replay margin is not a record boundary: the kernel must accept it.
+    // 700 bytes of replay margin is (almost surely) not a record boundary: the source must snap
+    // it to a record the kernel accepts, and the replay must report something from before the scan.
     let raw_options = SourceOptions {
         enumeration: EnumerationMethod::RawMft,
-        raw_replay_margin: 100,
+        raw_replay_margin: 700,
         ..SourceOptions::default()
     };
     let mut f = fixture_with(1 << 20, 64 << 10, raw_options);
@@ -605,12 +606,14 @@ fn raw_mft_enumeration_matches_usn_and_replays_a_margin() {
     // (not an error, not a rescan) and report the files created just before the scan.
     let replayed = batch(&mut f.source, &cp);
     report(&format!("replayed {} events", replayed.events.len()));
+    assert!(!replayed.events.is_empty(), "nothing replayed");
+    // Every replayed event is about a file the scan already listed (idempotent upserts).
+    let listed: std::collections::HashSet<Frn> = raw.iter().map(|r| r.frn).collect();
     assert!(
         replayed
             .events
             .iter()
-            .any(|e| e.record().name.to_string_lossy() == "layer29.shp"
-                || e.record().name.to_string_lossy() == "gis"),
+            .all(|e| listed.contains(&e.record().frn)),
         "{:#?}",
         replayed.events
     );
