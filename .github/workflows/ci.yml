@@ -41,7 +41,7 @@ jobs:
       # because they need admin) can run here. See AGENTS.md "Testing".
       - name: NTFS volume tests (elevated)
         if: runner.os == 'Windows'
-        run: cargo test -p whereabouts-ntfs -- --ignored
+        run: cargo test -p whereabouts-ntfs --no-fail-fast -- --ignored
       # Release-build timings of both enumeration methods on C: (read-only), for Q-16 / #29.
       - name: enum_volume, USN API vs raw $MFT (release, elevated)
         if: runner.os == 'Windows'
