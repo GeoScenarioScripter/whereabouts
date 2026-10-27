@@ -72,7 +72,7 @@
 //!   are rejected with [`Error::NotLocal`] before anything is opened.
 //! - **Raw `$MFT` reads are untrusted input** too: every length, offset and count is validated,
 //!   allocations are bounded, and a damaged record is counted and skipped, never a panic. The
-//!   raw method is an internal option ([`EnumerationMethod::RawMft`]); the default stays the
+//!   raw method is an internal option (`EnumerationMethod::RawMft`, Windows); the default stays the
 //!   USN API until Q-16 is decided.
 //! - **Malformed kernel output** never panics: it becomes [`Error::Parse`] or a skipped record.
 //! - **Fixture builders** (`record::build`) exist only for this crate's tests or with the
