@@ -11,17 +11,20 @@ use windows::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAGS_AND_ATTRIBUTES,
     FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, GetDriveTypeW,
     GetFileInformationByHandle, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
-    OPEN_EXISTING, QueryDosDeviceW,
+    OPEN_EXISTING, QueryDosDeviceW, ReadFile,
 };
-use windows::Win32::System::IO::DeviceIoControl;
+use windows::Win32::System::IO::{DeviceIoControl, OVERLAPPED};
 use windows::Win32::System::Ioctl::{
-    FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL,
+    FSCTL_ENUM_USN_DATA, FSCTL_GET_NTFS_VOLUME_DATA, FSCTL_QUERY_USN_JOURNAL,
+    FSCTL_READ_USN_JOURNAL,
 };
 use windows::core::HSTRING;
 
 use crate::drive::{check_local, device_path, parse_drive_letter, root_path};
 use crate::error::{Error, Result, win32};
 use crate::journal;
+use crate::mft::{self, VolumeGeometry};
+use crate::mft_scan::{ByteSource, MftError, MftScanner};
 use crate::record::{
     self, EnumStep, JournalInfo, MFT_ENUM_DATA_V1_SIZE, RawRecord, RecordIter,
     USN_JOURNAL_DATA_V2_SIZE,
@@ -397,6 +400,148 @@ impl Volume {
         Ok(&bytes[..len])
     }
 
+    /// Volume geometry from `FSCTL_GET_NTFS_VOLUME_DATA`: sector, cluster and `FILE` record
+    /// sizes and where `$MFT` starts. Needed to read `$MFT` directly.
+    ///
+    /// # Errors
+    /// [`Error::Unsupported`], [`Error::Os`], or [`Error::Mft`] if the reply is malformed.
+    pub fn geometry(&self) -> Result<VolumeGeometry> {
+        let letter = self.letter();
+        // NTFS_VOLUME_DATA_BUFFER (96 bytes) is followed by NTFS_EXTENDED_VOLUME_DATA when the
+        // buffer is large enough; 128 bytes holds both.
+        let mut out = [0_u64; 16];
+        let mut returned = 0_u32;
+        // SAFETY: METHOD_BUFFERED control code with no input buffer; `out` is a live, 8-byte
+        // aligned buffer of exactly the size passed; `returned` is a live `u32`. Synchronous.
+        let result = unsafe {
+            DeviceIoControl(
+                self.handle.0,
+                FSCTL_GET_NTFS_VOLUME_DATA,
+                None,
+                0,
+                Some(out.as_mut_ptr().cast()),
+                std::mem::size_of_val(&out) as u32,
+                Some(&raw mut returned),
+                None,
+            )
+        };
+        if let Err(e) = result {
+            return Err(match win32::code_from_hresult(e.code().0) {
+                win32::ERROR_INVALID_FUNCTION => Error::Unsupported {
+                    op: "FSCTL_GET_NTFS_VOLUME_DATA",
+                    volume: letter_str(letter),
+                },
+                _ => os_error("DeviceIoControl(FSCTL_GET_NTFS_VOLUME_DATA)", letter, &e),
+            });
+        }
+        let bytes = u64s_as_bytes(&out);
+        let len = (returned as usize).min(bytes.len());
+        mft::parse_volume_data(&bytes[..len]).map_err(|e| Error::Mft {
+            volume: letter_str(letter),
+            source: MftError::Parse(e),
+        })
+    }
+
+    /// Reads exactly `buf.len()` bytes from the raw volume at byte `offset`.
+    ///
+    /// Raw volume reads must be sector aligned; an unaligned request is widened to 4 KiB
+    /// boundaries (a multiple of every sector size NTFS supports), read into a scratch buffer
+    /// and copied out. Aligned requests (the large `$MFT` chunks) are read straight into `buf`.
+    ///
+    /// # Errors
+    /// Any OS error, or [`std::io::ErrorKind::UnexpectedEof`] if the volume ends first.
+    pub fn read_raw(&self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+        const ALIGN: u64 = 4096;
+        let len = buf.len() as u64;
+        if len == 0 {
+            return Ok(());
+        }
+        if offset.is_multiple_of(ALIGN) && len.is_multiple_of(ALIGN) {
+            return self.read_aligned(offset, buf);
+        }
+        let start = offset - offset % ALIGN;
+        let end = offset
+            .checked_add(len)
+            .and_then(|e| e.checked_next_multiple_of(ALIGN))
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        let mut scratch = vec![0_u8; (end - start) as usize];
+        match self.read_aligned(start, &mut scratch) {
+            Ok(()) => {}
+            // The widened tail may run past the end of the volume: retry with sector-sized
+            // rounding only (512 covers every NTFS volume whose size is a sector multiple).
+            Err(_) => {
+                let end = offset
+                    .checked_add(len)
+                    .and_then(|e| e.checked_next_multiple_of(512))
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+                let start = offset - offset % 512;
+                scratch.truncate((end - start) as usize);
+                self.read_aligned(start, &mut scratch)?;
+                let skip = (offset - start) as usize;
+                buf.copy_from_slice(&scratch[skip..skip + buf.len()]);
+                return Ok(());
+            }
+        }
+        let skip = (offset - start) as usize;
+        buf.copy_from_slice(&scratch[skip..skip + buf.len()]);
+        Ok(())
+    }
+
+    /// `ReadFile` at an explicit offset until `buf` is full.
+    fn read_aligned(&self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+        let mut done = 0_usize;
+        while done < buf.len() {
+            let pos = offset + done as u64;
+            let mut overlapped = OVERLAPPED::default();
+            overlapped.Anonymous.Anonymous.Offset = pos as u32;
+            overlapped.Anonymous.Anonymous.OffsetHigh = (pos >> 32) as u32;
+            let window = &mut buf[done..];
+            // ReadFile counts bytes in a u32; stay below 2 GiB per call.
+            let want = window.len().min(1 << 30);
+            let mut read = 0_u32;
+            // SAFETY: `self.handle.0` is a valid, open, synchronous (non-overlapped) volume
+            // handle; `window[..want]` is a live, exclusively borrowed buffer of exactly `want`
+            // bytes that the call fills; `read` and `overlapped` are live locals. For a
+            // synchronous handle the OVERLAPPED only supplies the file offset, and the call
+            // completes before returning, so neither is used after this statement.
+            let result = unsafe {
+                ReadFile(
+                    self.handle.0,
+                    Some(&mut window[..want]),
+                    Some(&raw mut read),
+                    Some(&raw mut overlapped),
+                )
+            };
+            if let Err(e) = result {
+                let code = win32::code_from_hresult(e.code().0);
+                return Err(if code == win32::ERROR_HANDLE_EOF {
+                    std::io::Error::from(std::io::ErrorKind::UnexpectedEof)
+                } else {
+                    std::io::Error::from_raw_os_error(code as i32)
+                });
+            }
+            if read == 0 {
+                return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof));
+            }
+            done += read as usize;
+        }
+        Ok(())
+    }
+
+    /// Opens `$MFT` for a raw scan (see [`crate::mft_scan`]): geometry, then `$MFT`'s own
+    /// record, runlist and bitmap. Read-only.
+    ///
+    /// # Errors
+    /// [`Error::Mft`] if `$MFT` cannot be read or is malformed; geometry errors as
+    /// [`Volume::geometry`].
+    pub fn open_mft(&self) -> Result<MftScanner<'_, Volume>> {
+        let geometry = self.geometry()?;
+        MftScanner::open(self, geometry).map_err(|source| Error::Mft {
+            volume: letter_str(self.letter()),
+            source,
+        })
+    }
+
     /// Enumerates every file and directory record on the volume with default options.
     #[must_use]
     pub fn enumerate(&self) -> Enumerator<'_> {
@@ -417,6 +562,12 @@ impl Volume {
             done: false,
             stats: EnumStats::default(),
         }
+    }
+}
+
+impl ByteSource for Volume {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+        self.read_raw(offset, buf)
     }
 }
 

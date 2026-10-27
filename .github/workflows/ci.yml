@@ -42,6 +42,14 @@ jobs:
       - name: NTFS volume tests (elevated)
         if: runner.os == 'Windows'
         run: cargo test -p whereabouts-ntfs -- --ignored
+      # Release-build timings of both enumeration methods on C: (read-only), for Q-16 / #29.
+      - name: enum_volume, USN API vs raw $MFT (release, elevated)
+        if: runner.os == 'Windows'
+        run: |
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --count-only
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C:
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft
 
   deny:
     name: cargo-deny (licenses, advisories, bans incl. no-GDAL)

@@ -13,6 +13,8 @@
 //! | [`record`] | all | Pure parsers: `USN_RECORD_V2/V3`, `FSCTL_ENUM_USN_DATA` output, `USN_JOURNAL_DATA`, `MFT_ENUM_DATA_V1` encoding; fixture builders |
 //! | [`journal`] | all | `FSCTL_READ_USN_JOURNAL` input/output; `USN_REASON_*` → `SourceEvent` folding ([`Coalescer`]) |
 //! | [`checkpoint`] | all | [`NtfsCheckpoint`] payload (volume serial, journal ID, next USN, pending renames) and the rescan decision |
+//! | [`mft`] | all | Pure parsers for the raw `$MFT`: volume geometry, `FILE` records and fixups, attributes, runlists, `$FILE_NAME` |
+//! | [`mft_scan`] | all | [`MftScanner`]: enumerate by reading `$MFT` in large chunks, yielding the same [`RawRecord`] as the USN API (2.7) |
 //! | [`name`] | all | [`NtfsName`]: lossless (WTF-8) file names |
 //! | [`chain`] | all | [`ParentChainReport`]: do parent links resolve to the root? |
 //! | [`drive`] | all | Drive-letter parsing |
@@ -68,6 +70,10 @@
 //!   hard-linked file's names. Other names are not reported (documented M0 limitation).
 //! - **Local volumes only** (D-03): network drives and `SUBST` aliases (which can report NTFS)
 //!   are rejected with [`Error::NotLocal`] before anything is opened.
+//! - **Raw `$MFT` reads are untrusted input** too: every length, offset and count is validated,
+//!   allocations are bounded, and a damaged record is counted and skipped, never a panic. The
+//!   raw method is an internal option ([`EnumerationMethod::RawMft`]); the default stays the
+//!   USN API until Q-16 is decided.
 //! - **Malformed kernel output** never panics: it becomes [`Error::Parse`] or a skipped record.
 //! - **Fixture builders** (`record::build`) exist only for this crate's tests or with the
 //!   `test-fixtures` feature (enable it from `[dev-dependencies]`).
@@ -79,8 +85,15 @@ pub mod checkpoint;
 pub mod drive;
 pub mod error;
 pub mod journal;
+pub mod mft;
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod mft_build;
+pub mod mft_scan;
 pub mod name;
 pub mod record;
+
+#[cfg(test)]
+mod mft_tests;
 
 #[cfg(windows)]
 mod process;
@@ -96,13 +109,17 @@ pub use checkpoint::{JournalPosition, NtfsCheckpoint};
 pub use drive::parse_drive_letter;
 pub use error::{Error, ParseError, Result};
 pub use journal::{Coalescer, PendingRename};
+pub use mft::{MftParseError, VolumeGeometry};
+pub use mft_scan::{ByteSource, MftError, MftScanOptions, MftScanStats, MftScanner};
 pub use name::NtfsName;
 pub use record::{JournalInfo, RawRecord, RecordIter, UsnRecord};
 
 #[cfg(windows)]
 pub use process::{ProcessMemory, process_memory};
 #[cfg(windows)]
-pub use source::{ChangeStats, EnumerateStats, NtfsVolumeSource, SOURCE_KIND, SourceOptions};
+pub use source::{
+    ChangeStats, EnumerateStats, EnumerationMethod, NtfsVolumeSource, SOURCE_KIND, SourceOptions,
+};
 #[cfg(windows)]
 pub use volume::{
     EnumOptions, EnumStats, Enumerator, Volume, VolumeInfo, ensure_local, volume_info,

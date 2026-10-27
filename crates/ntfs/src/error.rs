@@ -182,6 +182,15 @@ pub enum Error {
         /// The system message for `code`.
         message: String,
     },
+    /// Reading `$MFT` directly failed or found it malformed (`crate::mft_scan`).
+    #[error("raw $MFT scan of {volume} failed")]
+    Mft {
+        /// The volume, e.g. `C:`.
+        volume: String,
+        /// What went wrong.
+        #[source]
+        source: crate::mft_scan::MftError,
+    },
     /// The file system returned bytes that do not match the documented layout.
     #[error("malformed {what} returned for {volume}")]
     Parse {
