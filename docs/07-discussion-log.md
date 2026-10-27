@@ -90,6 +90,26 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 12 — stage01 wave 2 close and gate G2 (2026-10-27)
+- **What ran:** six sessions, all merged on 2026-10-27: 2.1 nameindex (#35, V1), 2.2 ntfs-journal-source (#34, V3), 2.6 reader-shapefile (#33, V2), 2.3 dataset-grouper (#38, V1), 2.5 catalog (#36, V1) and 2.4 crs-epsg-transform (#37, V2). 2.7 (raw `$MFT`, #31, PR #39) is still in review. Each PR got a review and fixes before merging; the reviews found, among others, swapped LCC parallels and a geographic box at ±90° (2.4), an unpaired directory rename (2.3), a path-mode depth disagreement with `path()` (2.1), a savepoint cost that doubled bulk insert time (2.5), and an unbounded read on untrusted offsets (2.6).
+- **Merge order:** 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4, as each became ready, against the planned 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6. The only shared file was `Cargo.lock`, so the order made no difference (as in wave 1).
+- **Gate G2 (owner, 2026-10-27): go.** Pure Rust, no PROJ fallback → D-34 (Q-14 resolved; targets 0.98 / 0.98 enforced from 4.3). Evidence: corpus 40/40 identification and 38/38 WGS84; 246 fixtures 99.2% / 99.1%; EPSG-wide sweep 99.0% WGS84 and 99.9% own-code identification. The 60 misses are rare methods (Polyconic, AEQD, …), added natively only if real data needs them (#45).
+- **Other owner answers (2026-10-27):**
+  - `rusqlite` `bundled` (SQLite compiled from C) is part of storage → D-35, amending D-10.
+  - On the 2.5 design concern (non-ok statuses drop layers, so a transient failure would hide a dataset from spatial search): 3.3 keeps the stored record and retries through a queue, with no core change → D-36 and a 3.3 hand-off.
+- **Orchestrator review decision:** shapefile feature count takes the `.shx`, then the `.dbf`, and record presence is decided by the `.shp` alone, matching GDAL → D-42 (Proposed).
+- **Decisions proposed by the sessions:** D-37 (name index, incl. #26: no `RecordSink` change now), D-38 (journal source), D-39 (grouper), D-40 (CRS layer), D-41 (catalog), D-42 (shapefile reader), all Proposed.
+- **Docs:** schema delta table folded into `03` §4, USN behaviours into §3.2, crate rows updated. `proj4rs`'s workspace entry was already fixed in 2.4's review (`default-features = false`).
+- **Follow-up issues:** #40 oracle error/partial reasons, #41 oracle `cargo doc` clash, #42 CP437/CP850 tables, #43 shapefile corpus cases, #44 CRS-family corpus cases, #45 unsupported CRS methods, #46 partial-extent interior holes, #47 catalog re-upsert/`PRAGMA optimize`, #48 name index path memo and snapshot v2, #49 EPSG sweep in CI, #50 core `LayerRecord::validate` and non-finite raster floats. Items already owned by a planned session (3.1–3.3, 4.1–4.3) went into the wave 2 hand-offs in the stage plan. A new `stage02` milestone holds the items beyond M0. #25 stays open.
+- **Process lessons:**
+  - API rate limits stopped all running agents several times; they were resumed with their context and no work was lost.
+  - Sub-agents now run on Sonnet 5.5, at the owner's request (2026-10-27).
+  - A PR whose CI never starts usually conflicts with `develop`; rebase before waiting on checks.
+  - The merge order was relaxed for PRs that share only `Cargo.lock`: merge as they become ready, rebase the rest.
+- **Open:** wave 3 opens now that G2 is a go; 2.7 must merge first or run alongside (it only touches `crates/ntfs`). Q-16 still waits on the owner's D: runs and 2.7. Q-18 numbers are accumulating in `06`.
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).

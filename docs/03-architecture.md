@@ -35,11 +35,11 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 | `whereabouts-core` | Shared types (contracts summary at the top of `core/src/lib.rs`): identities `VolumeId`/`Frn`/`DatasetId`/`LayerId` (D-27), `FileRecord`/`FileName` (WTF-8, D-28), `Format`/`DatasetKind`, `Dataset`/`Member`, `Bounds`/`Wgs84Extent`, `CrsDefinition`/`ResolvedCrs`, `LayerMetadata`/`DatasetMetadata`, `DatasetRecord`/`LayerRecord`, `ExtractionStatus`, the `FormatReader` trait, errors |
 | `whereabouts-source` | `Source` trait, `SourceEvent` (Created/Deleted/Renamed/Modified), `Changes::{Batch, FullRescanRequired}`, opaque versioned `Checkpoint` (D-29) |
 | `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL`; local NTFS drive letters only (D-31) |
-| `whereabouts-nameindex` | Compact in-memory filename index, path reconstruction, substring/wildcard/regex scan, snapshot I/O |
-| `whereabouts-datasets` | Dataset grouping rules (file sets → datasets/layers) |
-| `whereabouts-readers` | Native format readers (header/metadata; later full-geometry reads for previews) |
-| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKey parsing, EPSG identification, bounds → WGS84 (proj4rs) |
-| `whereabouts-catalog` | SQLite schema, migrations, R*Tree, query building |
+| `whereabouts-nameindex` | Compact in-memory filename index (struct-of-arrays, string pool plus folded pool, FRN map), upsert/tombstone/`compact()`, path reconstruction with orphan/cycle guards, substring/wildcard/extension/path search with a rayon scan (regex is out), checksummed snapshot v1 with an embedded `Checkpoint`; `synth` feature for synthetic volumes (D-37) |
+| `whereabouts-datasets` | Stateful per-volume `Grouper` over a `DirectoryView`: sidecar/folder rules, `full_scan`, `apply_batch` → `GroupDelta`, `is_relevant_name`; names only, no file contents (D-39) |
+| `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile and lone-DBF readers (D-42); GPKG and GeoTIFF arrive in wave 3; later full-geometry reads for previews |
+| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON parsing (GeoKeys in 3.2), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
+| `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41) |
 | `whereabouts-query` | Search syntax parser → name-index scan + catalog query plan |
 | `whereabouts-tiles` | MVT encoder, raster warping, tile cache |
 | `whereabouts-ipc` | Named-pipe protocol (serde messages) |
@@ -62,6 +62,11 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 - Apply to the name index; emit `Source` events; the grouper maps events to affected datasets and enqueues re-extraction.
 - Persist snapshot + last processed USN + journal ID. On restart, replay from the saved USN.
 - **Full rescan** when the journal ID changed, the journal was deleted/disabled, or the saved USN has been overwritten (journal wrapped).
+- **Behaviours verified on real volumes (stage01/2.2, D-38):**
+  - `StartUsn = 0` is special: the kernel reads from the first record instead of failing with `ERROR_JOURNAL_ENTRY_DELETED`. The source compares the checkpoint with `FirstUsn` before reading, and re-queries after a read that started at 0.
+  - Enumeration (`FSCTL_ENUM_USN_DATA`) works without a journal. The checkpoint records "no journal", `changes` asks for a rescan until one exists, and the source never creates one.
+  - Records are coalesced per file per batch (delete, create, rename, modify); a rename split across batches is carried in the checkpoint (up to 64 pending). Debouncing across batches is the pipeline's job.
+  - NTFS keeps more than the requested maximum before trimming (a 1 MiB journal reached `FirstUsn` 41M after 20k create/delete cycles).
 
 ### 3.3 Edge cases to handle
 - **Hard links:** one file, several names/parents.
@@ -134,14 +139,20 @@ CREATE TABLE crs (
 CREATE VIRTUAL TABLE layer_extents USING rtree(id, minx, maxx, miny, maxy);
 ```
 
-**Deltas proposed in stage01 wave 1 (2.5 decides and records the final schema here):**
-- `datasets.anchor_frn` + `UNIQUE(volume_id, anchor_frn)` (D-27); `layers.ordinal`.
-- `crs.def_kind` gains `'epsg'`; `crs.authority`/`crs.auth_code` and `crs.status`.
-- `rasters.geotransform` (JSON) and an overview count in place of `has_overviews`.
-- `layer_extents` gets one row per antimeridian part, plus an auxiliary `layer_id`.
-- A `volumes` table (`VolumeId`, `SourceIdentity`, checkpoint bytes).
-- `datasets.kind` codes also include `table` and `unknown`.
-- `layers.footprint` stays NULL until M1 (D-16).
+**Schema as built in stage01/2.5 (schema v1; deltas against the sketch above, D-41):**
+
+| Table | Change |
+|---|---|
+| `volumes` (new) | `id INTEGER PK AUTOINCREMENT` (= `VolumeId`, catalog-assigned), `kind`, `key`, `label` (= `SourceIdentity`), `checkpoint BLOB` (`Checkpoint::to_bytes()`), `checkpoint_at INTEGER` (ns); `UNIQUE(kind, key)` |
+| `datasets` | + `anchor_frn INTEGER NOT NULL`, `UNIQUE(volume_id, anchor_frn)` (D-27); `volume_id` is an FK to `volumes ON DELETE CASCADE`; `kind` codes include `table` and `unknown`; indexes `(format)`, `(status, mtime)` |
+| `dataset_files` | `PRIMARY KEY (dataset_id, frn)`; FK `ON DELETE CASCADE`; index `(frn)`; role codes per `MemberRole` (`main`, `shx`, `dbf`, `prj`, `cpg`, `sbn`, `sbx`, `qix`, `xml`, `qmd`, `aux_xml`, `ovr`, `msk`, `world_file`, `internal`, `other`) |
+| `layers` | + `ordinal INTEGER NOT NULL`, `UNIQUE(dataset_id, ordinal)`; + `wgs84_parts INTEGER` (R*Tree rows for the layer); `name` and `fields_json` NOT NULL; FK `ON DELETE CASCADE`; index `(crs_id)`; `footprint` stays NULL until M1 (D-16) |
+| `rasters` | `has_overviews` becomes `overview_count INTEGER`; + `geotransform TEXT` (JSON array of 6, GDAL order); FK `ON DELETE CASCADE` |
+| `crs` | + `def_hash INTEGER` (indexed; stable FNV-1a), `authority`, `auth_code`, `status` (`identified`/`unidentified`/`unparsed`); `def_kind` adds `'epsg'`; index `(epsg)`; rows are de-duplicated and pruned when unused |
+| `layer_extents` | `rtree(id, minx, maxx, miny, maxy, +layer_id, +west, +south, +east, +north)`: one row per `Wgs84Extent` part (at most 4), `id = layer_id * 4 + part`; the auxiliary columns hold exact f64 edges |
+| trigger | `layers_delete_extents`: deleting a layer (also by cascade) deletes its R*Tree rows by rowid |
+
+Connection settings: `journal_mode = WAL`, `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, `busy_timeout = 5 s`; writers use `BEGIN IMMEDIATE`. Migrations are an append-only list keyed by `PRAGMA user_version`, and a newer version is refused.
 
 Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_mtime, z, x, y, format, data)`.
 

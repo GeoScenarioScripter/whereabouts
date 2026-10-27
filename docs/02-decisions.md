@@ -44,6 +44,15 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-31 | NTFS enumeration: V2 records, root FRN from the root handle, local fixed/removable drives only | Agreed (2026-10-20) |
 | D-32 | CRS parsing: crate-local model, EPSG/PROJ vocabulary, GDAL's WKT1 conventions, bounded input, lenient datum shifts | Agreed (2026-10-20) |
 | D-33 | Oracle comparison rules: tolerances, baseline, true-extent convention, pinned GDAL image, drift check on PRs | Agreed (2026-10-20) |
+| D-34 | Gate G2: pure-Rust CRS stands, no PROJ fallback; Q-14 targets 0.98 / 0.98 | Agreed (2026-10-27, owner) |
+| D-35 | Bundled SQLite (`rusqlite` `bundled`, built from C with `cc`) is accepted as part of the D-10 storage choice | Agreed (2026-10-27, owner) |
+| D-36 | A transient extraction failure keeps the stored record; 3.3 retries via a queue (no core contract change) | Agreed (2026-10-27, owner) |
+| D-37 | Name index conventions: 1:1 case folding, volume-relative paths, orphans by name only, snapshot v1, upsert semantics | Proposed |
+| D-38 | USN journal source behaviours: per-file per-batch coalescing, carried renames, rescan on bad content, soft batch cap, no journal creation | Proposed |
+| D-39 | Dataset grouper semantics: order-independent folding per batch, `GroupDelta` classes, hard-link and unknown-`Modified` handling | Proposed |
+| D-40 | CRS layer: EPSG table generated from `proj.db`, `proj4rs` without default features, native inverses, GIS axis order, Helmert-only shifts | Proposed |
+| D-41 | Catalog conventions: R*Tree row ids, exact f64 post-filter, CRS latest-write-wins, same-layer filters, `set_status` drops layers, `synchronous = NORMAL` | Proposed |
+| D-42 | Shapefile reader conventions: `.shx`-then-`.dbf` count, `.shp` decides record presence, corrupt `.dbf` is `partial`, `measure` meter, `encoding_rs`, limits | Proposed |
 
 ---
 
@@ -100,6 +109,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Rationale:** For a search index, bbox error of metres (ignoring datum grid shifts) is irrelevant. Projection math is enough; full PROJ machinery is not needed.
 - **Fallback option:** Keep PROJ via the `proj` crate (C++ dependency, lighter than GDAL) if pure-Rust coverage proves insufficient.
 - **Consequences:** Densify bbox edges before transforming; handle antimeridian-crossing extents explicitly; validate projection coverage against real data.
+- **Update (2026-10-27):** gate G2 confirmed this choice and the PROJ fallback is not adopted. See D-34.
 
 ## D-10 — Storage
 - **Status:** Agreed (2026-10-19 — owner confirmed the whole proposed stack)
@@ -109,6 +119,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - Spatial index: **SQLite R*Tree** on WGS84 bboxes; optional in-memory `rstar` tree if more speed is needed.
   - Tile cache: separate SQLite file (MBTiles-style), keyed by dataset + mtime.
 - **Rationale:** Workload is millions of names + tens/hundreds of thousands of extents — in-process SQLite answers bbox queries in well under a millisecond.
+- **Amendment (2026-10-27):** SQLite is compiled from source through `rusqlite`'s `bundled` feature (a C build). See D-35.
 
 ## D-11 — No PostgreSQL in the desktop product
 - **Status:** Agreed (2026-10-19 — owner confirmed the whole proposed stack)
@@ -265,3 +276,115 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - `oracle-golden.yml` also runs on PRs touching corpus scripts, data, goldens or the manifest, and fails on drift.
 - **Rationale:** 0.01° leaves room for proj4rs vs PROJ without grid shifts (D-09). The span check stops a collapsed box at ±180° matching the full globe. The true-extent convention measures what users need, not what files claim.
 - **Consequences:** stale GPKG bounds need the R-tree fallback (3.1); PixelIsPoint needs a half-pixel shift (3.2). Changing corpus scripts needs Docker or the workflow artifact. 4.3 raises the EPSG/WGS84 rates once Q-14 is set.
+
+## D-34 — Gate G2: pure-Rust CRS, no PROJ fallback
+- **Status:** Agreed (2026-10-27, owner — at gate G2)
+- **Context:** D-09 left a PROJ fallback open until the pure-Rust CRS layer was measured (Q-14). stage01/2.4 ([note](stages/stage01/sessions/2.4-crs-epsg-transform.md)) reports against GDAL 3.13.3 / PROJ 9.8.1 (D-33 tolerances):
+  - corpus: identification 40/40, WGS84 agreement 38/38;
+  - 246 CRS fixtures: identification 241/243 (99.2%), WGS84 426/430 (99.1%);
+  - all non-deprecated EPSG geographic and projected CRSs (5,947): WGS84 of an inner box 99.0%, own code from the Esri `.prj` export 99.9%.
+
+  Every implemented projection method agrees with PROJ on every CRS. The 60 failures are rare national methods with no implementation (Colombia Urban, AEQD, Polyconic, LCC Michigan and 1SP variant B, Krovak Modified, Laborde, …).
+- **Decision:**
+  - Gate G2 is **go**: the CRS layer stays pure Rust (`proj4rs`, the embedded EPSG table and native inverses). D-09 stands and the PROJ fallback is not adopted.
+  - Missing projection methods (Polyconic and AEQD first) are added natively only if real data needs them (#45). Until then the dataset stays name-searchable and the CRS is identified by name (`UnsupportedMethod`).
+  - Q-14 targets, enforced from 4.3 through `tests/oracle/baseline.toml`: **EPSG identification 0.98** and **WGS84 agreement 0.98** on the corpus.
+- **Rationale:** The evidence covers every family in `04` §4 and the whole EPSG registry. PROJ would bring a C++ dependency and `proj.db` packaging (D-07's motive) for about 1% of CRSs that are rare. Native inverses are small, pure and checkable against PROJ.
+- **Consequences:** 4.3 raises the baseline from 0.0 to 0.98 for both rates (D-33) and may raise it further as measured. The EPSG-wide sweep stays a local tool for now, because it needs Docker (#49).
+
+## D-35 — Bundled SQLite is part of the storage choice
+- **Status:** Agreed (2026-10-27, owner)
+- **Context:** D-10 chose SQLite through `rusqlite`. The root `Cargo.toml` has used `features = ["bundled"]` since bootstrap, so `libsqlite3-sys` compiles the SQLite amalgamation (3.53.2, `SQLITE_ENABLE_RTREE`) with `cc`. That is a C build dependency, and AGENTS.md rules those out without a decision. stage01/2.5 asked ([note](stages/stage01/sessions/2.5-catalog.md)).
+- **Decision:** The bundled SQLite build is accepted as part of D-10, as the one sanctioned C build dependency of the storage layer. It amends D-10 and does not replace it.
+- **Rationale:** The SQLite version and R*Tree support are the same on every platform, and Windows has no system SQLite to link. A C toolchain (MSVC) is required anyway. A system SQLite would make R*Tree support and version depend on the machine.
+- **Consequences:** Builds need a C compiler (already true for the MSVC toolchain). `cargo-deny` allows the new crates (`rusqlite`, `libsqlite3-sys`, `cc`; MIT or Apache-2.0). This decision covers SQLite only; `proj4rs`'s `aeqd` feature stays off (D-40).
+
+## D-36 — Transient extraction failures keep the stored record
+- **Status:** Agreed (2026-10-27, owner)
+- **Context:** The core `DatasetRecord` invariant says only an `ok` or `partial` dataset carries layers. The catalog therefore drops layers on `set_status(Pending | Unsupported | Error)` ([2.5 note](stages/stage01/sessions/2.5-catalog.md)). A transient failure on a re-read (a file locked by the tool that is writing it) or a `Pending` re-queue would hide a previously good dataset from spatial search, and `error` datasets are never re-queued.
+- **Decision:** The pipeline (3.3) keeps the **stored record** when a re-extraction fails transiently, and retries through a queue. The `DatasetRecord` invariant stays; there is no core contract change. Permanent failures (malformed content, unsupported format) are recorded as today.
+- **Rationale:** Relaxing the invariant to keep last-good layers beside a `last_error` would be a core change that every consumer must understand. Holding the record is local to 3.3.
+- **Consequences:** 3.3 needs a retry queue and a rule that separates transient from permanent errors (`ReadError::Io` against `Malformed`). It is in 3.3's spec as a wave-2 hand-off ([PLAN.md](stages/stage01/PLAN.md)). 4.2 should test it.
+
+## D-37 — Name index conventions
+- **Status:** Proposed
+- **Context:** stage01/2.1 ([note](stages/stage01/sessions/2.1-nameindex.md)).
+- **Decision:**
+  - **Case folding** is a 1:1 code-point map, `lower(upper(c))` with single-character fallbacks. It is not the NTFS upcase table and not full Unicode folding (which turns `ß` into `ss` and would make `?` count characters that are not there). Queries are folded the same way.
+  - **Paths** are volume-relative, with a leading `\` and `\` separators (`\data\roads.shp`, root `\`). Consumers add the drive. In path mode `*` also matches `\`.
+  - **Orphans** (entries whose parent chain does not reach the root) are searchable by name and never by path; `path()` reports `Orphan`. The query layer (4.1) decides whether to hide them.
+  - **Snapshot v1** stores entries by FRN and reloads them through the normal upsert path, instead of dumping columns. Loading validates everything and costs about 1.1 s at 5M entries.
+  - **Every event is an upsert** (Created, Modified, Renamed). `EntryId`s are stable until `compact()`; FRNs are the durable identity. Hard links keep one name per FRN (last upsert wins), the M0 limitation.
+  - **#26:** the `RecordSink` contract does not change now. A borrowed record view saves about 82 ns per record (31% of ingestion, roughly 0.1 s per 1.34M records). Revisit if 2.7 brings enumeration down to about 1 s per million records, as an additive provided method.
+- **Rationale:** Full Unicode folding changes string lengths, which breaks `?` and the offset maps. A reload through upsert gives validation for free and survives layout changes, at a load-time cost that a column dump (v2, #48) can reduce if Q-18 demands it.
+- **Consequences:** 4.1 hides or marks orphans and loads the snapshot at startup. 3.3 calls `compact()` when `needs_compaction()` and treats `EntryId`s as invalid afterwards. Numbers for Q-18 are in the note (5M entries: 92 B/entry compacted, 2–5 ms for terms of 2+ characters, 25 ms for one character).
+
+## D-38 — USN journal source behaviours
+- **Status:** Proposed
+- **Context:** stage01/2.2 ([note](stages/stage01/sessions/2.2-ntfs-journal-source.md)); contract in D-29, enumeration specifics in D-31. Verified at V3 on VHD volumes.
+- **Decision:**
+  - **Coalescing is per file per batch**, not per close session. Precedence: delete (even for a file created in the same batch), create, rename (first old name to final name), modify (after rename), with security, object ID and indexing reasons ignored. A file still open at a batch end is reported with what is known, and again later.
+  - **Renames split across batches** are carried in the checkpoint (up to 64 pending). A new-name record that cannot be paired becomes `Created(final)`, which D-29 consumers apply as an upsert.
+  - **Bad journal content** (malformed or truncated records, stalled cursors) returns `FullRescanRequired(Other)`. Skipping would silently corrupt the index, and an error would repeat on every poll.
+  - **The batch cap is soft** (`max_batch_bytes`, 32 MiB). A batch ends past the cap only once it holds an event, so polling until a batch is empty drains the journal.
+  - **`StartUsn = 0` is special in the kernel:** it reads from the first record instead of failing. The post-check that asks again for `FirstUsn` applies only to reads that start at 0.
+  - **No journal, no history.** Enumeration works without a journal. The checkpoint records the absence and `changes` asks for a rescan until one exists. The source never creates a journal (D-31).
+  - **Hard links:** adding or removing one link of a file reports nothing. Removing the last link is `Deleted`. A file whose only records in a batch are link records is not reported in that batch.
+- **Rationale:** Per-batch coalescing matches the `Modified` contract ("once per batch") and keeps the source stateless apart from the checkpoint. Rescanning on bad data is safe because a rescan's checkpoint is taken after the bad data.
+- **Consequences:** 3.3 polls until empty, commits the checkpoint only after applying a batch, debounces across batches and decides when to create a journal. A rename whose records straddle batches is reported as `Created`, pinned by a unit test. #25 (mount points) is unchanged.
+
+## D-39 — Dataset grouper semantics
+- **Status:** Proposed
+- **Context:** stage01/2.3 ([note](stages/stage01/sessions/2.3-dataset-grouper.md)); dataset identity in D-27, USN behaviour in D-38.
+- **Decision:**
+  - Events are folded **per FRN per batch** and are order-independent. A child may arrive before its parent directory. `Created` for a known FRN is an upsert, which covers an unpaired rename.
+  - `GroupDelta` separates three actions: `changed` (membership changed, re-extract), `modified` (content changed on an existing member, re-extract) and `renamed` (anchor renamed or moved only, update the catalog row, no extraction). `added`, `removed` and `moved_dirs` complete it.
+  - A `Created` for a known directory with a new parent or name is a move (`moved_dirs`). Deleting a directory drops every dataset below it, whatever the order of deletions.
+  - A `Modified` for an unknown relevant file is treated as a missed `Created`.
+  - One FRN is one name (the first by sort order), matching the source's hard-link behaviour (D-38). `*.vat.dbf` is not a lone table.
+- **Rationale:** The USN source can deliver events in any order, and 3.3 needs a direct mapping from delta to action.
+- **Consequences:** 3.3 calls `is_relevant_name` before listing directories and maps `GroupDelta` to actions. GPKG layers are not enumerated here; readers produce them. Grouper memory at 10M files is not benchmarked (4.3).
+
+## D-40 — CRS layer implementation choices
+- **Status:** Proposed
+- **Context:** stage01/2.4 ([note](stages/stage01/sessions/2.4-crs-epsg-transform.md)); policy in D-09 and D-34, parsing model in D-32.
+- **Decision:**
+  - **EPSG table** generated from PROJ's `proj.db` (EPSG v12.029) by `crates/crs/scripts/gen_epsg.py` in the pinned GDAL image, committed as `crates/crs/data/epsg.txt` (1.16 MB, parsed once on first use). It is not the `crs-definitions` crate, which lacks Esri aliases, datum aliases and Helmert parameters. Licences (EPSG terms of use, Esri names Apache-2.0, PROJ MIT) are in `NOTICE`. Bumping the GDAL image bumps EPSG; the diff is reviewed.
+  - **`proj4rs` without default features.** Its `aeqd` feature builds C (`proj4rs-geodesic`, `cc`), which needs its own decision (D-35 covers SQLite only). Cost: no Azimuthal Equidistant (7 EPSG CRSs).
+  - **Native inverses** for methods `proj4rs` lacks or has only spherically: Cassini-Soldner, Hotine Oblique Mercator A/B, NZMG, Equal Earth, Robinson, Sinusoidal, ellipsoidal Equidistant Cylindrical. They follow PROJ's formulas and are checked against it.
+  - **Axis order for file data is GDAL's traditional GIS order** (`AxisPolicy::TraditionalGis`, default); `AxisPolicy::Authority` is available.
+  - **Datum shifts are Helmert only**, from the definition or else the table's most accurate one to WGS 84. No grids (D-09).
+  - **Identification confidence** follows PROJ (100 authority or name, 70 parameters), plus 90 for name-only matches on methods that cannot be transformed. Ambiguity means unidentified, never a guess. A bare code outside the table is `Unidentified`, unless it is a known vertical or geocentric code.
+  - **Partial extents:** only boundary points outside the domain make an extent partial, and the extent is widened to the domain edge by bisection. Interior domain holes are not detected (#46).
+  - API shape: `identify` returns `Option<Identification>` and `transform_bounds` returns `Result<TransformedBounds, TransformError>`, both richer than the spec's wording.
+- **Rationale:** Agreeing with GDAL on axis order and identification avoids spurious oracle mismatches. The generated table gives name-based identification of Esri `.prj` files, which the `crs-definitions` crate cannot.
+- **Consequences:** 3.2 feeds GeoKey codes into `resolve`. 3.3 caches `resolve` and `Transformer` per definition hash. `proj4rs` upstream issues (spherical `eqc`, hard-coded `krovak`) are worth filing (#45).
+
+## D-41 — Catalog conventions
+- **Status:** Proposed
+- **Context:** stage01/2.5 ([note](stages/stage01/sessions/2.5-catalog.md)); schema deltas are in `03-architecture.md` §4, storage choice in D-10 and D-35.
+- **Decision:**
+  - **R*Tree row ids encode the layer:** `id = layer_id * 4 + part`, at most 4 parts per layer. A delete trigger and the read-back are rowid lookups. An extent with more than 4 parts is stored as the union of its parts (a superset), with a `warn`.
+  - **Exact bbox test in SQL.** R*Tree coordinates are f32 rounded outwards; auxiliary `west/south/east/north` columns keep exact f64 values and each probe compares them. A query box that crosses the antimeridian is a `UNION` of probes, not an `OR`.
+  - **A CRS resolution belongs to its definition and the latest write wins.** `crs` rows are keyed by (kind, text, authority) through a stable FNV-1a hash plus a full compare, so better identification upgrades every layer that shares the definition.
+  - **`epsg` and `bbox` in `DatasetFilter` must hold for the same layer.**
+  - **`set_status` keeps stored records valid:** `pending`, `unsupported` and `error` drop the dataset's layers (the `DatasetRecord` invariant). D-36 keeps 3.3 from using it on transient failures.
+  - **`synchronous = NORMAL` in WAL mode.** Commits stay atomic, but the last commits can be lost on power failure. The plan reconciles a catalog/snapshot checkpoint mismatch (3.3, 4.2). Also `temp_store = MEMORY`, `foreign_keys = ON`, writers `BEGIN IMMEDIATE`.
+  - **Non-finite raster floats are stored as absent** (#50 proposes rejecting them in core). An out-of-range integer is an `OutOfRange` error.
+  - Writes (`upsert_dataset`, `delete_dataset`, `delete_volume`, `set_status`) are atomic through a savepoint; `volumes.id` is `AUTOINCREMENT`, so ids are never reused.
+- **Rationale:** Rowid arithmetic avoids a scan on delete. Exact f64 edges avoid f32 false positives and negatives at box boundaries. A stable hash is needed because `std::hash` changes between Rust releases.
+- **Consequences:** Re-upsert costs about 2x a first insert, and planner statistics need `PRAGMA optimize` (#47). Benchmarks (100k datasets): first insert 7.9 s, bbox p50 62 µs, member lookup 12 µs.
+
+## D-42 — Shapefile reader conventions
+- **Status:** Proposed (the count rule is the orchestrator's review decision)
+- **Context:** stage01/2.6 ([note](stages/stage01/sessions/2.6-reader-shapefile.md)); oracle rules in D-33.
+- **Decision:**
+  - **Feature count** comes from the `.shx`, then the `.dbf`, as in GDAL. A disagreement is `partial` and reports the `.shx` count. **Record presence** is decided by the `.shp` alone (declared length above 100), so an empty `.shp` has no extent and a sidecar can never erase a valid bbox. Orchestrator decision at review (2026-10-27).
+  - **A corrupt `.dbf` with an intact `.shp` is `partial`**, not `error`: geometry type, extent and CRS stay usable, the count falls back to the `.shx` and the fields are dropped. Any `.shp` header problem, including a declared length beyond EOF, stays `error`.
+  - **The counting reader is a thread-local meter** (`readers::measure`), not a wrapper type. Readers are synchronous and stateless, so a per-thread delta equals one dataset.
+  - **`encoding_rs`** decodes DBF field names and non-UTF-8 `.prj` text. DOS code pages that the Encoding Standard lacks (437, 850, 852, …) fall back to UTF-8 or Windows-1252, and are flagged `partial` when a name has non-ASCII bytes (#42).
+  - **Limits:** `.prj` up to 16 KiB (larger: CRS ignored, `partial`), up to 1,024 DBF fields (more: list truncated, `partial`), `.cpg` up to 64 B. Worst case about 49 KB read per dataset.
+  - **DBF version allow-list:** dBase III, FoxPro and Visual FoxPro flavours. Others are not parsed (`Unsupported`, or fields dropped with `partial` inside a shapefile).
+  - All file access goes through `io::SourceFile`, which checks the path is a regular file before opening, validates offset and length before allocating, and charges the per-dataset budget (`ReadLimits::max_bytes`).
+- **Rationale:** GDAL opens the corrupt-`.dbf` corpus case as `ok`, so `partial` keeps the usable metadata without claiming perfection. Validating before allocating means untrusted lengths cannot cause large allocations (guardrail 5).
+- **Consequences:** 3.1 and 3.2 add one `READERS` line and one oracle `Adapter` line each, and reuse `SourceFile`, `measure` and `adapters::native`. `ReadLimits::time_budget` is not checked by this reader.
