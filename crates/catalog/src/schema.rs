@@ -15,7 +15,8 @@ pub(crate) const EXTENT_STRIDE: i64 = 4;
 /// Schema version 1 — stage01 (`docs/03-architecture.md` §4 plus the stage01 delta).
 const V1: &str = r#"
 CREATE TABLE volumes (
-  id            INTEGER PRIMARY KEY,          -- VolumeId (u32), catalog-assigned
+  -- AUTOINCREMENT: a deleted volume's id is never reused (snapshots/checkpoints key on it).
+  id            INTEGER PRIMARY KEY AUTOINCREMENT, -- VolumeId (u32), catalog-assigned
   kind          TEXT NOT NULL,                -- SourceIdentity.kind, e.g. 'ntfs'
   key           TEXT NOT NULL,                -- SourceIdentity.key (NTFS: volume GUID path)
   label         TEXT NOT NULL,                -- SourceIdentity.label, e.g. 'D:'
@@ -120,7 +121,22 @@ pub(crate) fn user_version(conn: &Connection) -> Result<i64> {
 }
 
 /// Applies every pending migration, each in its own immediate transaction.
+///
+/// The version is read without a lock first: an up-to-date catalog (the common case, e.g. a
+/// second read-write connection while the indexer is mid-batch) never waits for the write lock.
+/// When a migration is needed, the version is re-read under the lock, so concurrent openers
+/// don't apply a migration twice.
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
+    let current = user_version(conn)?;
+    if current == SCHEMA_VERSION {
+        return Ok(());
+    }
+    if !(0..=SCHEMA_VERSION).contains(&current) {
+        return Err(CatalogError::UnsupportedSchema {
+            found: current,
+            supported: SCHEMA_VERSION,
+        });
+    }
     loop {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current = user_version(&tx)?;

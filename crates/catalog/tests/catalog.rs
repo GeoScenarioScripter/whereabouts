@@ -450,6 +450,67 @@ fn failed_write_rolls_back() {
 }
 
 #[test]
+fn failed_upsert_leaves_the_batch_untouched() {
+    let mut d = db();
+    let v = volume(&mut d.cat, "a");
+    let good = shapefile(v, 10, vector_layer("a", 2193, wsen(1.0, 1.0, 2.0, 2.0)));
+    // The bad version changes members, layers and the CRS (resolution of a new definition, and
+    // of the shared one) before the out-of-range feature count of its second layer.
+    let mut bad = good.clone();
+    bad.dataset.remove_member(Frn(13)).unwrap();
+    bad.name = "bad".into();
+    bad.layers[0].crs = Some(ResolvedCrs::Unidentified { name: None });
+    let mut second = vector_layer("b", 3857, wsen(5.0, 5.0, 6.0, 6.0));
+    second.metadata.feature_count = Some(u64::MAX);
+    bad.layers.push(second);
+    let other = shapefile(v, 20, vector_layer("c", 4326, wsen(3.0, 3.0, 4.0, 4.0)));
+
+    d.cat
+        .write(|tx| {
+            tx.upsert_dataset(&good)?;
+            let err = tx.upsert_dataset(&bad).unwrap_err();
+            assert!(matches!(err, CatalogError::OutOfRange(_)), "{err:?}");
+            // The batch carries on after a per-dataset error.
+            tx.upsert_dataset(&other)
+        })
+        .unwrap();
+
+    assert_eq!(d.cat.get_dataset(good.dataset.id()).unwrap().unwrap(), good);
+    assert_eq!(
+        d.cat.get_dataset(other.dataset.id()).unwrap().unwrap(),
+        other
+    );
+    let s = d.cat.stats().unwrap();
+    assert_eq!(
+        (s.datasets, s.files, s.layers, s.crs, s.extents),
+        (2, 8, 2, 2, 2),
+        "no orphan crs row from the failed upsert"
+    );
+    // Same for a raster width out of range.
+    let mut bad_raster = good.clone();
+    bad_raster.layers[0].metadata.geometry_type = None;
+    bad_raster.layers[0].metadata.raster = Some(RasterInfo {
+        width: u64::MAX,
+        height: 1,
+        bands: 1,
+        dtype: RasterDataType::Byte,
+        res_x: None,
+        res_y: None,
+        nodata: None,
+        overview_count: 0,
+        geotransform: None,
+    });
+    d.cat
+        .write(|tx| {
+            assert!(tx.upsert_dataset(&bad_raster).is_err());
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(d.cat.get_dataset(good.dataset.id()).unwrap().unwrap(), good);
+    assert_eq!(d.cat.stats().unwrap(), s);
+}
+
+#[test]
 fn rejects_unknown_volume_and_out_of_range_values() {
     let mut d = db();
     let rec = shapefile(
@@ -1092,6 +1153,47 @@ fn volumes_and_checkpoints() {
         d.cat.write(|tx| tx.set_checkpoint(VolumeId(99), &newer)),
         Err(CatalogError::UnknownVolume(VolumeId(99)))
     ));
+}
+
+#[test]
+fn deleted_volume_ids_are_never_reused() {
+    let mut d = db();
+    let _a = volume(&mut d.cat, "a");
+    let b = volume(&mut d.cat, "b");
+    assert!(d.cat.write(|tx| tx.delete_volume(b)).unwrap());
+    let c = volume(&mut d.cat, "c");
+    assert!(c.0 > b.0, "{c:?} reuses {b:?}");
+    // Re-registering the deleted source also gets a fresh id.
+    let b2 = volume(&mut d.cat, "b");
+    assert!(b2.0 > c.0);
+}
+
+#[test]
+fn second_open_does_not_wait_for_the_writer() {
+    let mut d = db();
+    let v = volume(&mut d.cat, "a");
+    let tx = d.cat.transaction().unwrap();
+    tx.upsert_dataset(&shapefile(
+        v,
+        10,
+        vector_layer("a", 2193, wsen(1.0, 1.0, 2.0, 2.0)),
+    ))
+    .unwrap();
+    // The write lock is held; an up-to-date catalog opens without it (the busy timeout is 5 s).
+    let t = std::time::Instant::now();
+    let other = Catalog::open(&d.path).unwrap();
+    assert!(
+        t.elapsed() < std::time::Duration::from_secs(2),
+        "{:?}",
+        t.elapsed()
+    );
+    assert_eq!(
+        other.stats().unwrap().datasets,
+        0,
+        "uncommitted data is invisible"
+    );
+    tx.commit().unwrap();
+    assert_eq!(other.stats().unwrap().datasets, 1);
 }
 
 #[test]

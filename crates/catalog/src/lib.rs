@@ -156,7 +156,9 @@ impl Catalog {
         if !mode.eq_ignore_ascii_case("wal") {
             tracing::warn!(mode, "catalog is not in WAL mode");
         }
-        conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;")?;
+        conn.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL; PRAGMA temp_store = MEMORY;",
+        )?;
         schema::migrate(&mut conn)?;
         Ok(Catalog { conn })
     }
