@@ -48,6 +48,8 @@ jobs:
         run: |
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --count-only
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only --chunk-mib 1
+          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only --chunk-mib 32
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C:
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft
 

@@ -883,6 +883,9 @@ fn emit(
 /// reports; only the low 16 bits are kept.
 const ATTRIBUTE_MASK: u32 = 0x0000_FFFF;
 
+/// `FILE_ATTRIBUTE_NORMAL`.
+const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
 /// Builds the record for a file whose names are all known, or counts why not.
 fn finalize(
     number: u64,
@@ -907,6 +910,10 @@ fn finalize(
     let mut attributes = info.map_or(0, |i| i.attributes) & ATTRIBUTE_MASK;
     if directory {
         attributes |= FILE_ATTRIBUTE_DIRECTORY;
+    }
+    // The Win32 view of "no attribute bits" is FILE_ATTRIBUTE_NORMAL, which the USN API reports.
+    if attributes == 0 {
+        attributes = FILE_ATTRIBUTE_NORMAL;
     }
     Some((
         RawRecord {
