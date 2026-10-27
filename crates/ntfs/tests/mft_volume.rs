@@ -258,7 +258,7 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
     let mut note = |name: &str, line: String| {
         let entry = categories.iter_mut().find(|c| c.0 == name).unwrap();
         entry.2 += 1;
-        if entry.1.len() < 12 {
+        if !line.is_empty() && entry.1.len() < 12 {
             entry.1.push(line);
         }
     };
@@ -270,6 +270,9 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
     };
     for u in &usn_records {
         let frn = u.frn.0;
+        if record_number(frn) == 5 {
+            continue; // the Source synthesises the root (empty name)
+        }
         let Some(&mi) = mft_index.get(&frn) else {
             let line = format!(
                 "{frn:#x} {}",
@@ -314,7 +317,7 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
         }
     }
     for m in &mft_records {
-        if usn_index.contains_key(&m.frn) {
+        if record_number(m.frn) == 5 || usn_index.contains_key(&m.frn) {
             continue;
         }
         let line = format!(
@@ -322,7 +325,9 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
             m.frn,
             describe(m.parent_frn, m.name.as_wtf8(), m.is_directory())
         );
-        if record_number(m.frn) < 16 {
+        let metadata =
+            m.name.as_wtf8().starts_with(b"$") && matches!(record_number(m.parent_frn), 11 | 0x1b);
+        if record_number(m.frn) < 16 || metadata {
             note("only_mft:reserved_record", line);
         } else if churn.contains(&record_number(m.frn)) {
             note("only_mft:churn", line);
@@ -336,7 +341,7 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
         for s in samples {
             report(&format!("  e.g. {s}"));
         }
-        if name.contains("UNEXPLAINED") {
+        if name.contains("UNEXPLAINED") || name.contains("attributes_only") {
             unexplained += count;
         }
     }
@@ -349,7 +354,10 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
     // The Source wiring must agree with the direct scan (modulo reserved records and churn).
     let direct_non_reserved = mft_records
         .iter()
-        .filter(|r| record_number(r.frn) >= 16 || record_number(r.frn) == 5)
+        .filter(|r| {
+            let rn = record_number(r.frn);
+            rn == 5 || (rn >= 16 && record_number(r.parent_frn) != 11)
+        })
         .count();
     let wired = raw_source_records.len();
     report(&format!(

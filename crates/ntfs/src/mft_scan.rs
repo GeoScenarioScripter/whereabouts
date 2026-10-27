@@ -30,6 +30,7 @@
 //! validated geometry, from [`MftScanOptions`] clamps, or from limits in [`crate::mft`], never
 //! from a length read out of an attribute without a limit.
 
+use std::collections::HashMap;
 use std::io;
 use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
@@ -37,7 +38,7 @@ use std::time::{Duration, Instant};
 use crate::mft::{
     ATTR_ATTRIBUTE_LIST, ATTR_BITMAP, ATTR_DATA, ATTR_FILE_NAME, ATTR_STANDARD_INFORMATION,
     AttrBody, AttrListEntries, Attrs, MAX_LOADED_STREAM, MAX_RECORDS, MftParseError, NAMESPACE_DOS,
-    NAMESPACE_POSIX, Run, StandardInfo, VolumeGeometry, apply_fixups, decode_runlist,
+    NAMESPACE_POSIX, RecordHeader, Run, StandardInfo, VolumeGeometry, apply_fixups, decode_runlist,
     parse_file_name, parse_record_header, parse_standard_info, reference_record_number,
     runs_clusters,
 };
@@ -100,6 +101,9 @@ pub struct MftScanOptions {
     /// Collect the FRNs of hard-linked files in [`MftScanStats::hard_link_frns`] (for
     /// comparisons; 8 bytes per such file). Default `false`.
     pub list_hard_links: bool,
+    /// Most bytes of extension-record names remembered during the sequential pass (the rest are
+    /// read again on demand with one random read each). Default 128 MiB.
+    pub ext_cache_bytes: usize,
 }
 
 impl Default for MftScanOptions {
@@ -108,6 +112,7 @@ impl Default for MftScanOptions {
             chunk_bytes: 4 << 20,
             skip_reserved: false,
             list_hard_links: false,
+            ext_cache_bytes: 128 << 20,
         }
     }
 }
@@ -484,8 +489,12 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             .is_none_or(|b| b >> (number % 8) & 1 == 1)
     }
 
-    /// Reads the whole `$MFT` and passes every in-use base record to `sink` (in record order).
-    /// The sink may return [`ControlFlow::Break`] to stop early.
+    /// Reads the whole `$MFT` and passes every in-use base record to `sink`. The sink may return
+    /// [`ControlFlow::Break`] to stop early.
+    ///
+    /// Records come in `$MFT` order, except files whose `$FILE_NAME` attributes live in
+    /// extension records that come *later* in the table: those are held back and delivered after
+    /// the sequential pass, when their extension records have been seen (no random reads).
     ///
     /// Per-record problems (torn writes, malformed attributes) are counted in the returned
     /// stats and logged at `debug`; they do not fail the scan.
@@ -503,15 +512,22 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
         let chunk = (chunk / unit).max(1) * unit;
         let per_chunk = (chunk / rec_size) as u64;
         let mut buf = vec![0_u8; chunk.min(self.record_count as usize * rec_size)];
-        let mut ext_buf = vec![0_u8; rec_size];
-        let mut scratch = Scratch::default();
-        let mut stats = MftScanStats::default();
+        let mut ctx = Ctx {
+            ext_buf: vec![0_u8; rec_size],
+            scratch: Scratch::default(),
+            ext_names: HashMap::new(),
+            ext_bytes: 0,
+            ext_cache_limit: options.ext_cache_bytes,
+            skip_extend_children: options.skip_reserved,
+            stats: MftScanStats::default(),
+        };
+        let mut pending: Vec<Pending> = Vec::new();
 
         let mut first = 0_u64;
         while first < self.record_count {
             let n = per_chunk.min(self.record_count - first);
             if !self.bitmap.is_empty() && (first..first + n).all(|r| !self.marked_in_use(r)) {
-                stats.chunks_skipped += 1;
+                ctx.stats.chunks_skipped += 1;
                 first += n;
                 continue;
             }
@@ -524,89 +540,108 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
                 first * rec_size as u64,
                 &mut buf[..bytes],
             )?;
-            stats.read_time += started.elapsed();
-            stats.reads += 1;
-            stats.bytes += bytes as u64;
+            ctx.stats.read_time += started.elapsed();
+            ctx.stats.reads += 1;
+            ctx.stats.bytes += bytes as u64;
 
             for (i, rec) in buf[..bytes].chunks_exact_mut(rec_size).enumerate() {
                 let number = first + i as u64;
                 if !self.marked_in_use(number) {
-                    stats.unused += 1;
+                    ctx.stats.unused += 1;
                     continue;
                 }
                 if options.skip_reserved && number < 16 && number != 5 {
                     continue;
                 }
-                stats.examined += 1;
-                if let Some(raw) = self.process(number, rec, &mut ext_buf, &mut scratch, &mut stats)
-                {
-                    stats.yielded += 1;
-                    if options.list_hard_links && scratch.links > 1 {
-                        stats.hard_link_frns.push(raw.frn);
+                ctx.stats.examined += 1;
+                match self.process(number, rec, &mut ctx) {
+                    Outcome::Skip => {}
+                    Outcome::Done(raw, multi) => {
+                        if emit(options, sink, &mut ctx.stats, raw, multi).is_break() {
+                            return Ok(ctx.stats);
+                        }
                     }
-                    if sink(raw).is_break() {
-                        stats.cancelled = true;
-                        return Ok(stats);
-                    }
+                    Outcome::Defer(p) => pending.push(p),
                 }
             }
             first += n;
         }
-        Ok(stats)
+
+        // Files whose names are partly in extension records that came after them.
+        for p in pending {
+            let mut choice = p.choice;
+            for ext in p.wanted {
+                self.apply_extension(
+                    p.number,
+                    ext,
+                    &ctx.ext_names,
+                    &mut ctx.ext_buf,
+                    &mut choice,
+                    &mut ctx.stats,
+                );
+            }
+            if let Some((raw, multi)) = finalize(
+                p.number,
+                p.sequence,
+                p.directory,
+                p.info,
+                &choice,
+                ctx.skip_extend_children,
+                &mut ctx.stats,
+            ) && emit(options, sink, &mut ctx.stats, raw, multi).is_break()
+            {
+                break;
+            }
+        }
+        Ok(ctx.stats)
     }
 
     /// Turns one record slot into a [`RawRecord`], or counts why not.
-    fn process(
-        &self,
-        number: u64,
-        rec: &mut [u8],
-        ext_buf: &mut [u8],
-        scratch: &mut Scratch,
-        stats: &mut MftScanStats,
-    ) -> Option<RawRecord> {
+    fn process(&self, number: u64, rec: &mut [u8], ctx: &mut Ctx) -> Outcome {
         match apply_fixups(rec) {
             Ok(()) => {}
             Err(MftParseError::NotFileRecord) => {
-                stats.not_file += 1;
-                return None;
+                ctx.stats.not_file += 1;
+                return Outcome::Skip;
             }
             Err(MftParseError::TornWrite { .. }) => {
-                stats.torn += 1;
+                ctx.stats.torn += 1;
                 tracing::debug!(record = number, "torn $MFT record skipped");
-                return None;
+                return Outcome::Skip;
             }
             Err(e) => {
-                stats.malformed += 1;
+                ctx.stats.malformed += 1;
                 tracing::debug!(record = number, error = %e, "malformed $MFT record skipped");
-                return None;
+                return Outcome::Skip;
             }
         }
         let header = match parse_record_header(rec) {
             Ok(h) => h,
             Err(e) => {
-                stats.malformed += 1;
+                ctx.stats.malformed += 1;
                 tracing::debug!(record = number, error = %e, "malformed $MFT record skipped");
-                return None;
+                return Outcome::Skip;
             }
         };
         if !header.in_use() {
-            stats.unused += 1;
-            return None;
+            ctx.stats.unused += 1;
+            return Outcome::Skip;
         }
         if header.is_extension() {
-            stats.extension += 1;
-            return None;
+            ctx.stats.extension += 1;
+            ctx.remember_extension(number, rec, &header);
+            return Outcome::Skip;
         }
 
-        scratch.reset();
+        ctx.scratch.reset();
         let mut info: Option<StandardInfo> = None;
         for attr in Attrs::new(rec, &header) {
             let attr = match attr {
                 Ok(a) => a,
                 Err(e) => {
-                    stats.malformed += 1;
+                    ctx.stats.malformed += 1;
                     tracing::debug!(record = number, error = %e, "malformed attribute chain");
-                    return None;
+                    return Outcome::Skip;
                 }
             };
             match (attr.type_code, attr.body) {
@@ -615,51 +650,59 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
                 }
                 (ATTR_FILE_NAME, AttrBody::Resident { value }) => {
                     if let Ok(name) = parse_file_name(value) {
-                        scratch.consider(name.parent, name.namespace, name.name);
+                        ctx.scratch
+                            .choice
+                            .consider(name.parent, name.namespace, name.name);
                     }
                 }
                 (ATTR_ATTRIBUTE_LIST, body) => {
-                    scratch.list = Stream::from_body(body, self.geom.total_clusters).ok();
+                    ctx.scratch.list = Stream::from_body(body, self.geom.total_clusters).ok();
                 }
                 _ => {}
             }
         }
 
-        if let Some(list) = scratch.list.take() {
-            self.names_from_extensions(number, &list, ext_buf, scratch, stats);
+        let wanted = match ctx.scratch.list.take() {
+            Some(list) => self.extensions_wanted(number, &list, &mut ctx.stats),
+            None => Vec::new(),
+        };
+        // An extension record further down the table has not been read yet: hold this file back.
+        if wanted.iter().any(|&ext| ext > number) {
+            return Outcome::Defer(Pending {
+                number,
+                sequence: header.sequence,
+                directory: header.is_directory(),
+                info,
+                choice: std::mem::take(&mut ctx.scratch.choice),
+                wanted,
+            });
         }
-
-        if scratch.links > 1 {
-            stats.hard_link_files += 1;
+        for ext in wanted {
+            self.apply_extension(
+                number,
+                ext,
+                &ctx.ext_names,
+                &mut ctx.ext_buf,
+                &mut ctx.scratch.choice,
+                &mut ctx.stats,
+            );
         }
-        if !scratch.has_name {
-            stats.no_name += 1;
-            return None;
+        match finalize(
+            number,
+            header.sequence,
+            header.is_directory(),
+            info,
+            &ctx.scratch.choice,
+            ctx.skip_extend_children,
+            &mut ctx.stats,
+        ) {
+            Some((raw, multi)) => Outcome::Done(raw, multi),
+            None => Outcome::Skip,
         }
-        let mut attributes = info.map_or(0, |i| i.attributes);
-        if header.is_directory() {
-            attributes |= FILE_ATTRIBUTE_DIRECTORY;
-        }
-        Some(RawRecord {
-            frn: u64::from(header.sequence) << 48 | number,
-            parent_frn: scratch.parent,
-            file_attributes: attributes,
-            usn: info.map_or(0, |i| i.usn),
-            timestamp: info.map_or(0, |i| i.modified as i64),
-            name: NtfsName::from_utf16le_bytes(&scratch.name),
-        })
     }
 
-    /// Reads the extension records that an `$ATTRIBUTE_LIST` places `$FILE_NAME` attributes in.
-    fn names_from_extensions(
-        &self,
-        number: u64,
-        list: &Stream,
-        ext_buf: &mut [u8],
-        scratch: &mut Scratch,
-        stats: &mut MftScanStats,
-    ) {
-        let rec_size = ext_buf.len() as u64;
+    /// The extension records an `$ATTRIBUTE_LIST` places `$FILE_NAME` attributes in.
+    fn extensions_wanted(&self, number: u64, list: &Stream, stats: &mut MftScanStats) -> Vec<u64> {
         let list = match load_stream(
             self.src,
             &self.geom,
@@ -671,7 +714,7 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             Err(e) => {
                 stats.extension_errors += 1;
                 tracing::debug!(record = number, error = %e, "unreadable $ATTRIBUTE_LIST");
-                return;
+                return Vec::new();
             }
         };
         let mut wanted: Vec<u64> = Vec::new();
@@ -693,43 +736,194 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
                 wanted.push(record);
             }
         }
-        for record in wanted {
-            let started = Instant::now();
-            let read = read_runs(self.src, &self.geom, &self.runs, record * rec_size, ext_buf);
-            stats.read_time += started.elapsed();
-            stats.reads += 1;
-            stats.bytes += rec_size;
-            stats.extension_reads += 1;
-            let usable = read.is_ok()
-                && apply_fixups(ext_buf).is_ok()
-                && parse_record_header(ext_buf).is_ok_and(|h| {
-                    h.in_use() && reference_record_number(h.base_reference) == number
-                });
-            let Some(header) = usable
-                .then(|| parse_record_header(ext_buf))
-                .and_then(Result::ok)
-            else {
-                stats.extension_errors += 1;
-                continue;
-            };
-            for attr in Attrs::new(ext_buf, &header) {
-                let Ok(attr) = attr else {
-                    stats.extension_errors += 1;
-                    break;
-                };
-                if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body)
-                    && let Ok(name) = parse_file_name(value)
-                {
-                    scratch.consider(name.parent, name.namespace, name.name);
+        wanted
+    }
+
+    /// Adds the `$FILE_NAME` attributes of extension record `ext` (of file `base`) to `choice`:
+    /// from the names remembered during the sequential pass, else with one random read.
+    fn apply_extension(
+        &self,
+        base: u64,
+        ext: u64,
+        ext_names: &HashMap<u64, ExtNames>,
+        ext_buf: &mut [u8],
+        choice: &mut NameChoice,
+        stats: &mut MftScanStats,
+    ) {
+        if let Some(known) = ext_names.get(&ext) {
+            if known.base == base {
+                for (parent, namespace, name) in &known.names {
+                    choice.consider(*parent, *namespace, name);
                 }
+            } else {
+                stats.extension_errors += 1; // claims another base record
+            }
+            return;
+        }
+        let rec_size = ext_buf.len() as u64;
+        let started = Instant::now();
+        let read = read_runs(self.src, &self.geom, &self.runs, ext * rec_size, ext_buf);
+        stats.read_time += started.elapsed();
+        stats.reads += 1;
+        stats.bytes += rec_size;
+        stats.extension_reads += 1;
+        let header = read
+            .ok()
+            .and_then(|()| apply_fixups(ext_buf).ok())
+            .and_then(|()| parse_record_header(ext_buf).ok())
+            .filter(|h| h.in_use() && reference_record_number(h.base_reference) == base);
+        let Some(header) = header else {
+            stats.extension_errors += 1;
+            return;
+        };
+        for attr in Attrs::new(ext_buf, &header) {
+            let Ok(attr) = attr else {
+                stats.extension_errors += 1;
+                break;
+            };
+            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body)
+                && let Ok(name) = parse_file_name(value)
+            {
+                choice.consider(name.parent, name.namespace, name.name);
             }
         }
     }
 }
 
-/// Per-record working state, reused across records to avoid allocation.
+/// The `$FILE_NAME` attributes of one extension record, remembered while scanning past it.
+#[derive(Debug)]
+struct ExtNames {
+    /// Record number of the base file the extension record belongs to.
+    base: u64,
+    /// `(parent, namespace, name UTF-16LE)` of the non-DOS names.
+    names: Vec<(u64, u8, Vec<u8>)>,
+}
+
+/// A file held back until the extension records after it have been scanned.
+#[derive(Debug)]
+struct Pending {
+    number: u64,
+    sequence: u16,
+    directory: bool,
+    info: Option<StandardInfo>,
+    choice: NameChoice,
+    wanted: Vec<u64>,
+}
+
+enum Outcome {
+    Skip,
+    /// The record, and whether the file has several hard links.
+    Done(RawRecord, bool),
+    Defer(Pending),
+}
+
+/// State of one scan.
+struct Ctx {
+    ext_buf: Vec<u8>,
+    scratch: Scratch,
+    ext_names: HashMap<u64, ExtNames>,
+    ext_bytes: usize,
+    ext_cache_limit: usize,
+    skip_extend_children: bool,
+    stats: MftScanStats,
+}
+
+impl Ctx {
+    /// Remembers the names in extension record `number` so its base file need not read it again.
+    fn remember_extension(&mut self, number: u64, rec: &[u8], header: &RecordHeader) {
+        if self.ext_bytes >= self.ext_cache_limit {
+            return;
+        }
+        let mut names = Vec::new();
+        let mut bytes = 64;
+        for attr in Attrs::new(rec, header) {
+            let Ok(attr) = attr else {
+                return; // malformed: let the base file's on-demand read count it
+            };
+            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body)
+                && let Ok(name) = parse_file_name(value)
+                && name.namespace != NAMESPACE_DOS
+            {
+                bytes += name.name.len() + 48;
+                names.push((name.parent, name.namespace, name.name.to_vec()));
+            }
+        }
+        self.ext_bytes += bytes;
+        self.ext_names.insert(
+            number,
+            ExtNames {
+                base: reference_record_number(header.base_reference),
+                names,
+            },
+        );
+    }
+}
+
+/// Hands a record to the sink and updates the counters. `Break` means the sink cancelled.
+fn emit(
+    options: &MftScanOptions,
+    sink: &mut dyn FnMut(RawRecord) -> ControlFlow<()>,
+    stats: &mut MftScanStats,
+    raw: RawRecord,
+    multi_link: bool,
+) -> ControlFlow<()> {
+    stats.yielded += 1;
+    if options.list_hard_links && multi_link {
+        stats.hard_link_frns.push(raw.frn);
+    }
+    let flow = sink(raw);
+    if flow.is_break() {
+        stats.cancelled = true;
+    }
+    flow
+}
+
+/// The attribute bits NTFS stores in `$STANDARD_INFORMATION` beyond the Win32 ones (directory
+/// index flags in the top nibble, and reparse/recall bits) are not part of what the USN API
+/// reports; only the low 16 bits are kept.
+const ATTRIBUTE_MASK: u32 = 0x0000_FFFF;
+
+/// Builds the record for a file whose names are all known, or counts why not.
+fn finalize(
+    number: u64,
+    sequence: u16,
+    directory: bool,
+    info: Option<StandardInfo>,
+    choice: &NameChoice,
+    skip_extend_children: bool,
+    stats: &mut MftScanStats,
+) -> Option<(RawRecord, bool)> {
+    if choice.links > 1 {
+        stats.hard_link_files += 1;
+    }
+    if !choice.has_name {
+        stats.no_name += 1;
+        return None;
+    }
+    // The USN API leaves out the metadata files under `$Extend` (record 11).
+    if skip_extend_children && reference_record_number(choice.parent) == 11 {
+        return None;
+    }
+    let mut attributes = info.map_or(0, |i| i.attributes) & ATTRIBUTE_MASK;
+    if directory {
+        attributes |= FILE_ATTRIBUTE_DIRECTORY;
+    }
+    Some((
+        RawRecord {
+            frn: u64::from(sequence) << 48 | number,
+            parent_frn: choice.parent,
+            file_attributes: attributes,
+            usn: info.map_or(0, |i| i.usn),
+            timestamp: info.map_or(0, |i| i.modified as i64),
+            name: NtfsName::from_utf16le_bytes(&choice.name),
+        },
+        choice.links > 1,
+    ))
+}
+
+/// The name chosen so far for one file.
 #[derive(Debug, Default)]
-struct Scratch {
+struct NameChoice {
     has_name: bool,
     /// Rank of the chosen name: 0 = Win32 / Win32+DOS, 1 = POSIX.
     rank: u8,
@@ -737,19 +931,9 @@ struct Scratch {
     name: Vec<u8>,
     /// Non-DOS `$FILE_NAME` attributes seen.
     links: u32,
-    list: Option<Stream>,
 }
 
-impl Scratch {
-    fn reset(&mut self) {
-        self.has_name = false;
-        self.rank = u8::MAX;
-        self.parent = 0;
-        self.name.clear();
-        self.links = 0;
-        self.list = None;
-    }
-
+impl NameChoice {
     /// Considers one `$FILE_NAME`: DOS-only names are ignored; Win32 beats POSIX; the first of
     /// equal rank wins.
     fn consider(&mut self, parent: u64, namespace: u8, name: &[u8]) {
@@ -765,5 +949,23 @@ impl Scratch {
             self.name.clear();
             self.name.extend_from_slice(name);
         }
+    }
+}
+
+/// Per-record working state, reused across records to avoid allocation.
+#[derive(Debug, Default)]
+struct Scratch {
+    choice: NameChoice,
+    list: Option<Stream>,
+}
+
+impl Scratch {
+    fn reset(&mut self) {
+        self.choice.has_name = false;
+        self.choice.rank = u8::MAX;
+        self.choice.parent = 0;
+        self.choice.name.clear();
+        self.choice.links = 0;
+        self.list = None;
     }
 }

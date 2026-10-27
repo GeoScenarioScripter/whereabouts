@@ -706,8 +706,105 @@ fn names_in_extension_records_are_found_through_the_attribute_list() {
     assert_eq!(spilled.parent_frn, reference(6, 2));
     assert_eq!(by_name(&records, "own-name").frn, reference(11, 1));
     assert!(records.iter().all(|r| r.name.to_string_lossy() != "stolen"));
-    assert_eq!(stats.extension_reads, 2);
+    // The extension records come after their base files, so the sequential pass has seen them
+    // by the time the held-back files are finished: no random reads.
+    assert_eq!(stats.extension_reads, 0);
     assert_eq!(stats.extension_errors, 1);
+
+    // With the remember-as-you-go cache disabled, each extension record is read on demand and
+    // the result is the same.
+    let no_cache = MftScanOptions {
+        ext_cache_bytes: 0,
+        ..MftScanOptions::default()
+    };
+    let (records2, stats2) = scan_with(&img, &b, &no_cache).unwrap();
+    assert_eq!(stats2.extension_reads, 2);
+    assert_eq!(stats2.extension_errors, 1);
+    let mut a: Vec<_> = records
+        .iter()
+        .map(|r| (r.frn, r.parent_frn, r.name.clone()))
+        .collect();
+    let mut c: Vec<_> = records2
+        .iter()
+        .map(|r| (r.frn, r.parent_frn, r.name.clone()))
+        .collect();
+    a.sort_by_key(|r| r.0);
+    c.sort_by_key(|r| r.0);
+    assert_eq!(a, c);
+}
+
+#[test]
+fn an_extension_record_before_its_base_is_used_without_deferring() {
+    let mut b = tree();
+    b.put(
+        9,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            reference(10, 1),
+            &[resident_attr(
+                ATTR_FILE_NAME,
+                "",
+                &file_name_value(reference(6, 2), NAMESPACE_WIN32, "early.txt"),
+            )],
+        ),
+    );
+    let list = attr_list_entry(ATTR_FILE_NAME, 0, reference(9, 1));
+    b.put(
+        10,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            0,
+            &[
+                resident_attr(ATTR_STANDARD_INFORMATION, "", &standard_info(1, 0x20, 0)),
+                resident_attr(ATTR_ATTRIBUTE_LIST, "", &list),
+            ],
+        ),
+    );
+    let img = b.build();
+    let (records, stats) = scan_image(&img, &b).unwrap();
+    assert_eq!(by_name(&records, "early.txt").frn, reference(10, 1));
+    assert_eq!(stats.extension_reads, 0);
+    assert_eq!(stats.extension_errors, 0);
+}
+
+#[test]
+fn skip_reserved_also_hides_the_children_of_extend() {
+    let mut b = ImageBuilder::new(4096, 1024, 64, 8);
+    b.put(5, simple_file(1024, 5, true, ROOT, ".", 0x10));
+    b.put(
+        20,
+        simple_file(1024, 1, false, reference(11, 1), "$ObjId", 0x20),
+    );
+    b.put(21, simple_file(1024, 1, false, ROOT, "keep.txt", 0x20));
+    let img = b.build();
+    let opts = MftScanOptions {
+        skip_reserved: true,
+        ..MftScanOptions::default()
+    };
+    let (records, stats) = scan_with(&img, &b, &opts).unwrap();
+    let names: Vec<_> = records
+        .iter()
+        .map(|r| r.name.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, [".", "keep.txt"]);
+    assert_eq!(stats.lost(), 0);
+}
+
+#[test]
+fn only_win32_attribute_bits_are_reported() {
+    let mut b = tree();
+    // NTFS-internal bits (directory-index flag 0x1000_0000, 0x8000_0000, 0x4_0000) are dropped.
+    b.put(
+        9,
+        simple_file(1024, 1, false, ROOT, "bits.txt", 0x9004_0027),
+    );
+    let img = b.build();
+    let (records, _) = scan_image(&img, &b).unwrap();
+    assert_eq!(by_name(&records, "bits.txt").file_attributes, 0x27);
 }
 
 #[test]
