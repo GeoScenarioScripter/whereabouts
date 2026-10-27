@@ -1,13 +1,13 @@
 # Stages — v1 Delivery Plan
 
-Active stage: stage01 — M0 CLI indexer prototype (wave 1 merged; gate G1 go 2026-10-20; wave 2 next, now with 2.7)
+Active stage: stage01 — M0 CLI indexer prototype (wave 2 merged + closed; G1 + G2 go; wave 3 next)
 
 How stages, waves and sessions work: [`../08-development-workflow.md`](../08-development-workflow.md).
 Only the active stage is planned in detail; the next one is sketched here and detailed when the active stage closes.
 
 | Stage | Milestone ([roadmap](../05-roadmap.md)) | Objective | Plan | Status |
 |---|---|---|---|---|
-| [stage01](stage01/PLAN.md) | M0 | CLI indexer prototype: NTFS enumeration + USN, name index, dataset grouping, SHP/GPKG/GeoTIFF readers, CRS → WGS84, SQLite catalog, GDAL oracle, benchmarks | Detailed | 🟡 active — wave 1 done, G1 go; wave 2 next |
+| [stage01](stage01/PLAN.md) | M0 | CLI indexer prototype: NTFS enumeration + USN, name index, dataset grouping, SHP/GPKG/GeoTIFF readers, CRS → WGS84, SQLite catalog, GDAL oracle, benchmarks | Detailed | 🟡 active — waves 1–2 done, G1 and G2 go; wave 3 next |
 | stage02 | M1 | Elevated indexer service + named-pipe IPC; remaining Tier 1 readers; footprints + two-stage spatial query; extraction queue polish; hard links | Sketch below | ⏳ |
 | stage03 | M2 | Desktop UI: Tauri + MapLibre, search syntax (Q-11), results list, map footprints, offline basemap + gazetteer, hand-off actions | Roadmap only | ⏳ |
 | stage04 | M3 | Previews via the local tile server: vector MVT, raster warping, point clouds | Roadmap only | ⏳ |
