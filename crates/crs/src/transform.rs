@@ -23,6 +23,11 @@ use crate::spec::{Method, ProjSpec, normalize_lon};
 /// oracle goldens use.
 pub const DEFAULT_DENSIFY: u32 = 21;
 
+/// Lower bound on [`TransformOptions::densify`]. The longitude walk takes each ring step as the
+/// shorter way round, so steps must stay well under 180°: with 8 points per edge a box as wide
+/// as the world still has steps of 40°. Smaller requests are raised to this.
+pub const MIN_DENSIFY: u32 = 8;
+
 /// Upper bound on [`TransformOptions::densify`] (keeps a call's work bounded).
 pub const MAX_DENSIFY: u32 = 1000;
 
@@ -43,7 +48,8 @@ pub enum AxisPolicy {
 /// Options for [`transform_bounds_with`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TransformOptions {
-    /// Points added along each edge between the corners (clamped to [`MAX_DENSIFY`]).
+    /// Points added along each edge between the corners (clamped to
+    /// [`MIN_DENSIFY`]..=[`MAX_DENSIFY`]).
     pub densify: u32,
     /// Axis interpretation of the input bounds.
     pub axis_policy: AxisPolicy,
@@ -91,8 +97,10 @@ pub struct TransformedBounds {
     /// The extent, split at the antimeridian when it crosses it.
     pub extent: Wgs84Extent,
     /// `Some(reason)` when part of the boundary could not be transformed (outside the
-    /// projection's domain) or latitudes had to be clamped; the extent then covers the points
-    /// that did transform (catalog status `partial`).
+    /// projection's domain; catalog status `partial`). The extent then covers the points that did
+    /// transform plus the places where the boundary leaves the domain (found by bisection), so
+    /// it reaches the domain edge along the box but not beyond. Latitudes that exceed ±90° by
+    /// rounding noise (1e-7°) are clamped silently and do not make an extent partial.
     pub partial: Option<String>,
 }
 
@@ -244,7 +252,7 @@ impl Transformer {
         bounds: &Bounds,
         densify: u32,
     ) -> Result<TransformedBounds, TransformError> {
-        let n = densify.min(MAX_DENSIFY) as usize + 1; // segments per edge
+        let n = densify.clamp(MIN_DENSIFY, MAX_DENSIFY) as usize + 1; // segments per edge
         let (x0, y0, x1, y1) = (
             bounds.min_x(),
             bounds.min_y(),
@@ -272,11 +280,29 @@ impl Transformer {
         }
         let points: Vec<Option<(f64, f64)>> =
             ring.iter().map(|&(x, y)| self.relative(x, y)).collect();
-        let valid: Vec<(f64, f64)> = points.iter().flatten().copied().collect();
+        let failed = points.iter().filter(|p| p.is_none()).count();
+        // Ring-ordered transformed points. Where the ring crosses the edge of the projection's
+        // domain (a valid sample next to a failed one) the crossing is found by bisection and
+        // added, so a box that runs past the domain (Mercator beyond ±85°) is widened to the
+        // domain edge rather than stopping at the last sample.
+        let mut valid: Vec<(f64, f64)> = Vec::with_capacity(points.len());
+        for i in 0..points.len() {
+            let j = (i + 1) % points.len();
+            match (points[i], points[j]) {
+                (Some(p), None) if i != j => {
+                    valid.push(p);
+                    valid.extend(self.domain_edge(ring[i], ring[j]));
+                }
+                (None, Some(_)) if i != j => {
+                    valid.extend(self.domain_edge(ring[j], ring[i]));
+                }
+                (Some(p), _) => valid.push(p),
+                _ => {}
+            }
+        }
         if valid.is_empty() {
             return Err(TransformError::OutOfDomain);
         }
-        let failed = points.len() - valid.len();
         let partial = (failed > 0).then(|| {
             format!(
                 "{failed} of {} boundary points are outside the projection's domain",
@@ -293,29 +319,33 @@ impl Transformer {
 
         // A pole inside the box: the ring winds once around it. A pole on the boundary: a
         // sampled point sits on it. Either way every longitude is covered.
-        let touches_pole = valid.iter().any(|p| p.1.abs() >= 90.0 - 1e-9);
+        // (Not for plain longitude/latitude: a geographic box up to 90° stays as wide as it is.)
+        let projected = self.spec.method != Method::LongLat;
+        let touches_pole = projected && valid.iter().any(|p| p.1.abs() >= 90.0 - 1e-9);
         let winding = winding_degrees(&valid);
         let mut full_longitude = touches_pole;
-        if self.spec.method != Method::LongLat && winding.abs() > 180.0 {
+        if projected && winding.abs() > 180.0 {
             full_longitude = true;
             // Which pole: the one the box's interior gets closest to. (The boundary alone can
             // mislead: a hemisphere in polar LAEA has corners far into the other hemisphere.)
-            let mut interior_lat = 0.0_f64;
+            let mut interior_lat: Option<f64> = None;
             for i in 1..=3 {
                 for j in 1..=3 {
                     let x = x0 + (x1 - x0) * f64::from(i) / 4.0;
                     let y = y0 + (y1 - y0) * f64::from(j) / 4.0;
                     if let Some((_, lat)) = self.relative(x, y)
-                        && lat.abs() > interior_lat.abs()
+                        && interior_lat.is_none_or(|best| lat.abs() > best.abs())
                     {
-                        interior_lat = lat;
+                        interior_lat = Some(lat);
                     }
                 }
             }
-            if interior_lat >= 0.0 {
-                north = 90.0;
-            } else {
-                south = -90.0;
+            // No interior sample transformed: the pole is unknown, so leave the latitudes alone
+            // rather than guess north.
+            match interior_lat {
+                Some(lat) if lat >= 0.0 => north = 90.0,
+                Some(_) => south = -90.0,
+                None => {}
             }
         }
         if east - west >= 360.0 - 1e-9 {
@@ -341,6 +371,28 @@ impl Transformer {
         let extent = Wgs84Extent::from_west_south_east_north(w, s, e, n)
             .map_err(|err| TransformError::invalid(err.to_string()))?;
         Ok(TransformedBounds { extent, partial })
+    }
+
+    /// The last point that transforms on the segment from `good` (transforms) to `bad` (does
+    /// not), by bisection: the boundary of the projection's domain along the segment.
+    fn domain_edge(&self, good: (f64, f64), bad: (f64, f64)) -> Option<(f64, f64)> {
+        let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
+        let mut found = self.relative(good.0, good.1)?;
+        for _ in 0..40 {
+            let mid = 0.5 * (lo + hi);
+            let (x, y) = (
+                good.0 + (bad.0 - good.0) * mid,
+                good.1 + (bad.1 - good.1) * mid,
+            );
+            match self.relative(x, y) {
+                Some(p) => {
+                    lo = mid;
+                    found = p;
+                }
+                None => hi = mid,
+            }
+        }
+        Some(found)
     }
 }
 
@@ -526,5 +578,84 @@ mod tests {
         let (lon, lat) = t.to_wgs84(500_000.0, 5_000_000.0).unwrap();
         assert!((lon - 15.0).abs() < 1e-9, "{lon}");
         assert!((lat - 45.153_477).abs() < 1e-5, "{lat}");
+    }
+
+    #[test]
+    fn geographic_box_touching_a_pole_keeps_its_longitudes() {
+        let crs = crate::epsg_crs(4326).unwrap();
+        for (bx, expected) in [
+            (b(10.0, 50.0, 12.0, 90.0), [10.0, 50.0, 12.0, 90.0]),
+            (b(10.0, -90.0, 12.0, -50.0), [10.0, -90.0, 12.0, -50.0]),
+            (
+                b(10.0, 50.0, 12.0, 89.999_999_999_9),
+                [10.0, 50.0, 12.0, 89.999_999_999_9],
+            ),
+        ] {
+            let t = transform_bounds(&bx, &crs).unwrap();
+            assert_eq!(parts(&t), vec![expected]);
+            assert!(t.partial.is_none());
+        }
+    }
+
+    #[test]
+    fn low_densify_does_not_split_a_wide_geographic_box() {
+        let crs = crate::epsg_crs(4326).unwrap();
+        for densify in [0, 1, 3] {
+            let t = transform_bounds_with(
+                &b(-170.0, -10.0, 170.0, 10.0),
+                &crs,
+                &TransformOptions {
+                    densify,
+                    ..TransformOptions::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(parts(&t), vec![[-170.0, -10.0, 170.0, 10.0]], "{densify}");
+        }
+    }
+
+    #[test]
+    fn polar_box_gains_the_pole() {
+        // The no-interior-sample fallback (no pole adjustment) cannot be reached with a real CRS;
+        // here, the normal path: a box around the north pole gains latitude 90.
+        let crs = crate::epsg_crs(3413).unwrap(); // NSIDC Sea Ice Polar Stereographic North
+        let t = transform_bounds(&b(-500_000.0, -500_000.0, 500_000.0, 500_000.0), &crs).unwrap();
+        assert_eq!(
+            parts(&t),
+            vec![[-180.0, t.extent.parts()[0].min_y(), 180.0, 90.0]]
+        );
+    }
+
+    #[test]
+    fn box_past_the_domain_edge_is_widened_to_it_and_partial() {
+        // Web Mercator, x from 0 to twice the half-circumference: samples beyond ±π·a are out of
+        // domain. The coarse samples alone would stop near 170°E; bisection reaches the edge.
+        let crs = crate::epsg_crs(3857).unwrap();
+        let t = transform_bounds(&b(0.0, 0.0, 40_000_000.0, 1_000_000.0), &crs).unwrap();
+        let p = &t.extent.parts()[0];
+        assert!(t.partial.is_some());
+        assert!(p.min_x() >= -1e-9 && p.max_x() > 179.999, "{p:?}");
+    }
+
+    #[test]
+    fn swapped_standard_parallels_transform_identically() {
+        let wkt = |sp1: &str, sp2: &str| {
+            format!(
+                r#"PROJCS["x",GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic"],PARAMETER["False_Easting",6561666.666666666],PARAMETER["False_Northing",1640416.666666667],PARAMETER["Central_Meridian",-120.5],PARAMETER["Standard_Parallel_1",{sp1}],PARAMETER["Standard_Parallel_2",{sp2}],PARAMETER["Latitude_Of_Origin",36.5],UNIT["Foot_US",0.3048006096012192]]"#
+            )
+        };
+        let a = crate::parse(&wkt("37.06666666666667", "38.43333333333333")).unwrap();
+        let c = crate::parse(&wkt("38.43333333333333", "37.06666666666667")).unwrap();
+        let bx = b(6_000_000.0, 1_500_000.0, 6_900_000.0, 2_000_000.0);
+        let (ta, tc) = (
+            transform_bounds(&bx, &a).unwrap(),
+            transform_bounds(&bx, &c).unwrap(),
+        );
+        assert_eq!(ta, tc);
+        let p = &ta.extent.parts()[0];
+        assert!(
+            p.min_x() < -121.0 && p.max_x() > -119.5 && p.min_y() > 36.0 && p.max_y() < 39.0,
+            "{p:?}"
+        );
     }
 }

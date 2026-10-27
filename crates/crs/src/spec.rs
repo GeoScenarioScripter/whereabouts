@@ -103,6 +103,17 @@ impl Default for Params {
     }
 }
 
+impl Params {
+    /// Order the standard parallels so `lat_1 <= lat_2`. Lambert conformal conic (2SP) and
+    /// Albers are symmetric in the two parallels, and files disagree on their order (ESRI lists
+    /// California III as 37.07/38.43, EPSG 2227 stores 38.43/37.07).
+    pub(crate) fn sort_parallels(&mut self) {
+        if self.lat_1 > self.lat_2 {
+            std::mem::swap(&mut self.lat_1, &mut self.lat_2);
+        }
+    }
+}
+
 /// A CRS reduced to its coordinate-transformation essentials.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ProjSpec {
@@ -246,6 +257,7 @@ impl ProjSpec {
             M::LambertConicConformal2Sp | M::LambertConicConformal2SpBelgium => {
                 p.lat_1 = sp1.unwrap_or(lat_0);
                 p.lat_2 = sp2.unwrap_or(p.lat_1);
+                p.sort_parallels();
                 if projection.method == M::LambertConicConformal2SpBelgium {
                     Method::LccBelgium
                 } else {
@@ -255,6 +267,7 @@ impl ProjSpec {
             M::AlbersEqualArea => {
                 p.lat_1 = sp1.unwrap_or(lat_0);
                 p.lat_2 = sp2.unwrap_or(p.lat_1);
+                p.sort_parallels();
                 p.k_0 = 1.0;
                 Method::Aea
             }

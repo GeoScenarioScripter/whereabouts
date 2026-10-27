@@ -120,8 +120,17 @@ pub fn identify(crs: &Crs) -> Option<Identification> {
         .filter(|&e| kind_ok(e) && equivalent(e))
         .collect();
     let with_datum: Vec<Entry> = named.iter().copied().filter(|&e| datum_ok(e)).collect();
-    if let Some(e) = best(&with_datum).or_else(|| best(&named)) {
+    if let Some(e) = best(&with_datum) {
         return found(e, 100, MatchMethod::Name);
+    }
+    // The name matches but the table entry's datum is not one the file's datum resolves to.
+    // A national realisation of the same reference frame (ETRS89-NOR for ESRI's D_ETRS_1989)
+    // is fine; anything else is a name collision, so cap the confidence.
+    if let Some(e) = best(&named) {
+        let same_family = datums
+            .as_deref()
+            .is_none_or(|codes| datum_family_matches(e, codes));
+        return found(e, if same_family { 100 } else { 70 }, MatchMethod::Name);
     }
 
     // 3. Parameters.
@@ -144,6 +153,29 @@ pub fn identify(crs: &Crs) -> Option<Identification> {
         (current.len() == 1).then(|| current[0])
     }?;
     found(e, 70, MatchMethod::Parameters)
+}
+
+/// Whether the entry's datum is the file's datum or a realisation of it: its name starts with
+/// one of the names or aliases of the file's resolved datums (compared as lowercase
+/// alphanumerics, at least four characters, so `ETRS89-NOR [EUREF89]` extends `ETRS89`).
+fn datum_family_matches(entry: Entry, file_datums: &[u32]) -> bool {
+    fn norm(s: &str) -> String {
+        s.chars()
+            .filter(char::is_ascii_alphanumeric)
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
+    }
+    let t = table();
+    let Some(row) = t.datum_of(entry).and_then(|c| t.datum(c)) else {
+        return false;
+    };
+    let entry_name = norm(row.name);
+    file_datums.iter().filter_map(|&c| t.datum(c)).any(|d| {
+        std::iter::once(d.name)
+            .chain(d.aliases.split(';'))
+            .map(norm)
+            .any(|n| n.len() >= 4 && entry_name.starts_with(&n))
+    })
 }
 
 fn epsg_name_or(code: u32, fallback: &str) -> String {
@@ -254,6 +286,59 @@ mod tests {
         assert_eq!((id.epsg, id.method), (4326, MatchMethod::Name));
         let crs = crate::epsg_crs(2193).unwrap();
         assert_eq!(identify(&crs).unwrap().method, MatchMethod::Authority);
+    }
+
+    const NAD83: &str = r#"GEOGCS["GCS_North_American_1983",DATUM["D_North_American_1983",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]"#;
+
+    fn ca3(sp1: &str, sp2: &str, name: &str) -> String {
+        format!(
+            r#"PROJCS["{name}",{NAD83},PROJECTION["Lambert_Conformal_Conic"],PARAMETER["False_Easting",6561666.666666666],PARAMETER["False_Northing",1640416.666666667],PARAMETER["Central_Meridian",-120.5],PARAMETER["Standard_Parallel_1",{sp1}],PARAMETER["Standard_Parallel_2",{sp2}],PARAMETER["Latitude_Of_Origin",36.5],UNIT["Foot_US",0.3048006096012192]]"#
+        )
+    }
+
+    fn conus_albers(sp1: &str, sp2: &str, name: &str) -> String {
+        format!(
+            r#"PROJCS["{name}",{NAD83},PROJECTION["Albers"],PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",-96.0],PARAMETER["Standard_Parallel_1",{sp1}],PARAMETER["Standard_Parallel_2",{sp2}],PARAMETER["Latitude_Of_Origin",23.0],UNIT["Meter",1.0]]"#
+        )
+    }
+
+    #[test]
+    fn swapped_standard_parallels_identify_the_same() {
+        let name = "NAD_1983_StatePlane_California_III_FIPS_0403_Feet";
+        // File order (ESRI) and EPSG's order; both by name, and by parameters under a custom name.
+        for (sp1, sp2) in [
+            ("37.06666666666667", "38.43333333333333"),
+            ("38.43333333333333", "37.06666666666667"),
+        ] {
+            for n in [name, "Custom_Grid"] {
+                let id = identify(&crate::parse(&ca3(sp1, sp2, n)).unwrap());
+                assert_eq!(id.as_ref().map(|i| i.epsg), Some(2227), "{sp1}/{sp2} {n}");
+            }
+        }
+        for (sp1, sp2) in [("29.5", "45.5"), ("45.5", "29.5")] {
+            for n in ["NAD_1983_Contiguous_USA_Albers", "Custom_Albers"] {
+                let id = identify(&crate::parse(&conus_albers(sp1, sp2, n)).unwrap());
+                assert_eq!(id.as_ref().map(|i| i.epsg), Some(5070), "{sp1}/{sp2} {n}");
+            }
+        }
+    }
+
+    #[test]
+    fn name_match_with_a_different_datum_is_capped() {
+        // ETRS89 / UTM 33N's name and parameters (same ellipsoid) on the NAD83 datum: a name
+        // collision, not an identification at full confidence.
+        let prj = format!(
+            r#"PROJCS["ETRS_1989_UTM_Zone_33N",{NAD83},PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",15.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]"#
+        );
+        let id = identify(&crate::parse(&prj).unwrap()).unwrap();
+        assert_eq!((id.epsg, id.confidence), (25833, 70));
+    }
+
+    #[test]
+    fn etrs89_national_realisation_keeps_full_confidence() {
+        let prj = r#"GEOGCS["GCS_ETRS_1989",DATUM["D_ETRS_1989",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]"#;
+        let id = identify(&crate::parse(prj).unwrap()).unwrap();
+        assert_eq!((id.epsg, id.confidence), (4258, 100));
     }
 
     #[test]

@@ -13,7 +13,9 @@
 //!   directory is transformed.
 //!
 //! WGS84 tolerance is D-33's: each edge within 0.01°, longitudes modulo 360, longitude span within
-//! 0.02°. Identification agrees when both give the same EPSG code or both give none.
+//! 0.02°. Identification agrees when both give the same EPSG code or both give none; the report
+//! counts those two separately, so "both none" is not mistaken for a match. Inputs that cannot be
+//! compared are counted as skipped and pinned (`KNOWN_*` at the bottom), as are the disagreements.
 //!
 //! Run with `cargo test -p whereabouts-crs --test g2 -- --nocapture` to see the report. The test
 //! fails if a rate drops below the floors at the bottom of this file (the measured values when
@@ -86,8 +88,10 @@ fn wgs84_close(e: &Bbox, a: &Bbox) -> bool {
         && lat(e[3], a[3])
 }
 
-/// `[west, south, east, north]` of an extent (west > east when split at the antimeridian).
-fn wsen(x: &Wgs84Extent) -> Bbox {
+/// `[west, south, east, north]` of an extent (west > east when split at the antimeridian). A
+/// two-part extent must be a real antimeridian split: one part ending at +180 and the other
+/// starting at -180; anything else is an error rather than being papered over.
+fn wsen(x: &Wgs84Extent) -> Result<Bbox, String> {
     let parts = x.parts();
     let s = parts
         .iter()
@@ -97,15 +101,23 @@ fn wsen(x: &Wgs84Extent) -> Bbox {
         .iter()
         .map(|p| p.max_y())
         .fold(f64::NEG_INFINITY, f64::max);
-    if parts.len() == 2 {
-        let (east_part, west_part) = if parts[0].max_x() == 180.0 {
-            (&parts[1], &parts[0])
-        } else {
-            (&parts[0], &parts[1])
-        };
-        [west_part.min_x(), s, east_part.max_x(), n]
-    } else {
-        [parts[0].min_x(), s, parts[0].max_x(), n]
+    match parts {
+        [one] => Ok([one.min_x(), s, one.max_x(), n]),
+        [a, b] => {
+            let (west_part, east_part) = if a.max_x() == 180.0 { (a, b) } else { (b, a) };
+            if west_part.max_x() != 180.0 || east_part.min_x() != -180.0 {
+                return Err(format!(
+                    "two-part extent that is not an antimeridian split: \
+                     [{}, {}] and [{}, {}]",
+                    a.min_x(),
+                    a.max_x(),
+                    b.min_x(),
+                    b.max_x()
+                ));
+            }
+            Ok([west_part.min_x(), s, east_part.max_x(), n])
+        }
+        other => Err(format!("{} extent parts", other.len())),
     }
 }
 
@@ -122,7 +134,10 @@ fn bbox(v: &Value) -> Option<Bbox> {
 #[derive(Default)]
 struct Tally {
     id_total: usize,
-    id_agree: usize,
+    /// Same EPSG code as the oracle.
+    id_same: usize,
+    /// Neither side identified the CRS (agreement on "no code", not a real match).
+    id_both_none: usize,
     /// Cases where the oracle identified an EPSG code.
     id_expected: usize,
     /// ... and we found the same one.
@@ -134,13 +149,44 @@ struct Tally {
     tf_partial: usize,
 }
 
+impl Tally {
+    /// Identification agreements: the same code, or both without one.
+    fn agree(&self) -> usize {
+        self.id_same + self.id_both_none
+    }
+}
+
 #[derive(Default)]
 struct Report {
     families: BTreeMap<String, Tally>,
+    /// Every disagreement, as `identify | case | ...` / `wgs84 | case | ...`.
     failures: Vec<String>,
+    /// Cases where we gave an EPSG code the oracle did not, or a different one.
+    wrong: Vec<String>,
+    /// Inputs that could not be compared at all, by reason.
+    skipped: BTreeMap<&'static str, usize>,
 }
 
 impl Report {
+    fn skip(&mut self, reason: &'static str) {
+        self.skip_n(reason, 1);
+    }
+
+    fn skip_n(&mut self, reason: &'static str, n: usize) {
+        *self.skipped.entry(reason).or_default() += n;
+    }
+
+    /// `kind | case` of every disagreement, sorted: what the pinned lists are compared with.
+    fn failure_keys(&self) -> Vec<String> {
+        let mut keys: Vec<String> = self
+            .failures
+            .iter()
+            .map(|f| f.split(" | ").take(2).collect::<Vec<_>>().join(" | "))
+            .collect();
+        keys.sort();
+        keys
+    }
+
     fn identification(&mut self, case: &str, family: &str, ours: Option<u32>, gold: Option<u32>) {
         let t = self.families.entry(family.to_owned()).or_default();
         t.id_total += 1;
@@ -148,13 +194,16 @@ impl Report {
             t.id_expected += 1;
         }
         if ours == gold {
-            t.id_agree += 1;
             if gold.is_some() {
+                t.id_same += 1;
                 t.id_found += 1;
+            } else {
+                t.id_both_none += 1;
             }
         } else {
             if ours.is_some() {
                 t.id_wrong += 1;
+                self.wrong.push(case.to_owned());
             }
             self.failures.push(format!(
                 "identify | {case} | {family} | ours {ours:?} vs GDAL {gold:?}"
@@ -198,7 +247,8 @@ impl Report {
         let mut all = Tally::default();
         for t in self.families.values() {
             all.id_total += t.id_total;
-            all.id_agree += t.id_agree;
+            all.id_same += t.id_same;
+            all.id_both_none += t.id_both_none;
             all.id_expected += t.id_expected;
             all.id_found += t.id_found;
             all.id_wrong += t.id_wrong;
@@ -214,14 +264,15 @@ impl Report {
         writeln!(s, "\n### {title}\n").unwrap();
         writeln!(
             s,
-            "| family | identification agrees | EPSG found (of GDAL-identified) | wrong code | WGS84 agrees | partial |"
+            "| family | same EPSG code | both none | EPSG found (of GDAL-identified) | wrong code | WGS84 agrees | partial |"
         )
         .unwrap();
-        writeln!(s, "|---|---|---|---|---|---|").unwrap();
+        writeln!(s, "|---|---|---|---|---|---|---|").unwrap();
         let row = |name: &str, t: &Tally| {
             format!(
-                "| {name} | {} | {} | {} | {} | {} |",
-                ratio(t.id_agree, t.id_total),
+                "| {name} | {} | {} | {} | {} | {} | {} |",
+                ratio(t.id_same, t.id_total),
+                t.id_both_none,
                 ratio(t.id_found, t.id_expected),
                 t.id_wrong,
                 ratio(t.tf_agree, t.tf_total),
@@ -231,7 +282,26 @@ impl Report {
         for (name, t) in &self.families {
             writeln!(s, "{}", row(name, t)).unwrap();
         }
-        writeln!(s, "{}", row("**all**", &self.totals())).unwrap();
+        let all = self.totals();
+        writeln!(s, "{}", row("**all**", &all)).unwrap();
+        writeln!(
+            s,
+            "\nIdentification: {} cases; agree with GDAL {} (same code {}, both none {}). \
+             WGS84: {} boxes.",
+            all.id_total,
+            all.agree(),
+            all.id_same,
+            all.id_both_none,
+            all.tf_total
+        )
+        .unwrap();
+        if !self.skipped.is_empty() {
+            let total: usize = self.skipped.values().sum();
+            writeln!(s, "\nSkipped ({total}):\n").unwrap();
+            for (reason, n) in &self.skipped {
+                writeln!(s, "- {n} x {reason}").unwrap();
+            }
+        }
         if !self.failures.is_empty() {
             writeln!(s, "\nDisagreements ({}):\n", self.failures.len()).unwrap();
             for f in &self.failures {
@@ -265,7 +335,7 @@ fn run_transform(crs: Option<&Crs>, native: Bbox) -> Result<(Bbox, bool), String
     let bounds =
         Bounds::new(native[0], native[1], native[2], native[3]).map_err(|e| e.to_string())?;
     let t = transform_bounds(&bounds, crs).map_err(|e| e.to_string())?;
-    Ok((wsen(&t.extent), t.partial.is_some()))
+    Ok((wsen(&t.extent)?, t.partial.is_some()))
 }
 
 fn def_kind(raw_kind: &str) -> Option<CrsDefinitionKind> {
@@ -293,6 +363,7 @@ fn corpus_report() -> Report {
         for layer in doc["layers"].as_array().into_iter().flatten() {
             let crs = &layer["crs"];
             if crs["status"].as_str() == Some("missing") || crs.is_null() {
+                report.skip("corpus layer without a CRS (status missing)");
                 continue;
             }
             let id = format!("{case}/{}", layer["name"].as_str().unwrap_or("?"));
@@ -315,7 +386,10 @@ fn corpus_report() -> Report {
                 }
                 _ => match gold_epsg {
                     Some(code) => CrsDefinition::epsg(code),
-                    None => continue,
+                    None => {
+                        report.skip("corpus layer with no raw CRS text and no GDAL EPSG code");
+                        continue;
+                    }
                 },
             };
             let r = resolve(&def);
@@ -325,6 +399,8 @@ fn corpus_report() -> Report {
                 (bbox(&layer["extent"]), bbox(&layer["wgs84_extent"]))
             {
                 report.transform(&id, &fam, run_transform(r.crs.as_ref(), native), gold);
+            } else {
+                report.skip("corpus layer without native extent or golden WGS84 extent");
             }
         }
     }
@@ -346,7 +422,8 @@ fn fixture_report() -> Report {
     for rec in oracle["identify"].as_array().unwrap() {
         let fixture = rec["fixture"].as_str().unwrap();
         if rec["parsed"].as_bool() != Some(true) {
-            continue; // GDAL can't read it either (ESRI VERTCS-only files)
+            report.skip("fixture GDAL cannot parse (ESRI VERTCS-only files): identification");
+            continue;
         }
         let crs = parse(fixture);
         let ours = crs
@@ -365,6 +442,10 @@ fn fixture_report() -> Report {
         files.sort();
         for b in rec["boxes"].as_array().unwrap() {
             let (Some(native), Some(gold)) = (bbox(&b["native"]), bbox(&b["wgs84"])) else {
+                report.skip_n(
+                    "fixture box without native or golden WGS84 value (per encoding)",
+                    files.len(),
+                );
                 continue;
             };
             for file in &files {
@@ -402,7 +483,7 @@ fn g2_report() {
     let c = corpus.totals();
     let f = fixtures.totals();
     assert!(
-        rate(c.id_agree, c.id_total) >= FLOOR_CORPUS_ID,
+        rate(c.agree(), c.id_total) >= FLOOR_CORPUS_ID,
         "corpus identification dropped"
     );
     assert!(
@@ -410,7 +491,7 @@ fn g2_report() {
         "corpus WGS84 dropped"
     );
     assert!(
-        rate(f.id_agree, f.id_total) >= FLOOR_FIXTURE_ID,
+        rate(f.agree(), f.id_total) >= FLOOR_FIXTURE_ID,
         "fixture identification dropped"
     );
     assert!(
@@ -418,6 +499,41 @@ fn g2_report() {
         "fixture WGS84 dropped"
     );
     assert_eq!(c.id_wrong, 0, "corpus: a wrong EPSG code was given");
+    // Pinned inventories, so a changed disagreement or a silently dropped input fails the test
+    // even when the rates stay above the floors. Update them (and the session note) deliberately.
+    assert_eq!(
+        corpus.failure_keys(),
+        Vec::<String>::new(),
+        "corpus disagreements"
+    );
+    assert_eq!(corpus.wrong, Vec::<String>::new(), "corpus wrong codes");
+    assert_eq!(
+        fixtures.failure_keys(),
+        KNOWN_FIXTURE_DISAGREEMENTS,
+        "fixture disagreements changed"
+    );
+    assert_eq!(
+        fixtures.wrong, KNOWN_FIXTURE_WRONG_CODES,
+        "fixture wrong codes changed"
+    );
+    assert_eq!(
+        corpus
+            .skipped
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect::<Vec<_>>(),
+        KNOWN_CORPUS_SKIPS,
+        "corpus skips changed"
+    );
+    assert_eq!(
+        fixtures
+            .skipped
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect::<Vec<_>>(),
+        KNOWN_FIXTURE_SKIPS,
+        "fixture skips changed"
+    );
 }
 
 /// EPSG-wide sweep: every non-deprecated EPSG geographic 2D / projected CRS. WGS84 agreement of
@@ -476,16 +592,14 @@ fn g2_epsg_sweep() {
     let mut md = String::from("## G2 — EPSG-wide sweep vs GDAL 3.13.3 / PROJ 9.8.1\n");
     // Keep the failure lists short in the printed report: summarise by family.
     let summarize = |r: &Report, title: &str| {
-        let mut short = Report {
-            families: BTreeMap::new(),
-            failures: Vec::new(),
-        };
+        let mut short = Report::default();
         for (k, v) in &r.families {
             short.families.insert(
                 k.clone(),
                 Tally {
                     id_total: v.id_total,
-                    id_agree: v.id_agree,
+                    id_same: v.id_same,
+                    id_both_none: v.id_both_none,
                     id_expected: v.id_expected,
                     id_found: v.id_found,
                     id_wrong: v.id_wrong,
@@ -557,3 +671,39 @@ const FLOOR_CORPUS_ID: f64 = 1.0;
 const FLOOR_CORPUS_WGS84: f64 = 1.0;
 const FLOOR_FIXTURE_ID: f64 = 0.99;
 const FLOOR_FIXTURE_WGS84: f64 = 0.99;
+
+/// Fixture disagreements with GDAL, as `kind | case`, sorted. Two identification cases where we
+/// name a code and GDAL names none (GDAL left them unidentified; we match by name/parameters),
+/// and four Mollweide "area" boxes where GDAL's answer is a degenerate `[0, -90, 0, 90]` strip
+/// while we return the whole globe, flagged partial.
+const KNOWN_FIXTURE_DISAGREEMENTS: &[&str] = &[
+    "identify | epsg-2046/esri.prj",
+    "identify | handwritten/wkt2_2019-escaped-quotes.txt",
+    "wgs84 | esri-54009/esri.prj [area]",
+    "wgs84 | esri-54009/projjson.json [area]",
+    "wgs84 | esri-54009/wkt1.txt [area]",
+    "wgs84 | esri-54009/wkt2_2019.txt [area]",
+];
+
+/// Fixture cases where we give an EPSG code and GDAL gives none (the allow-list for `id_wrong`).
+const KNOWN_FIXTURE_WRONG_CODES: &[&str] = &[
+    "epsg-2046/esri.prj",
+    "handwritten/wkt2_2019-escaped-quotes.txt",
+];
+
+/// Inputs the corpus run cannot compare: 6 layers have no CRS at all (never identified, so the
+/// 46 layers give 40 identification cases) and 2 layers have no native or WGS84 golden extent
+/// (so 40 identification cases give 38 transform cases).
+const KNOWN_CORPUS_SKIPS: &[(&str, usize)] = &[
+    ("corpus layer without a CRS (status missing)", 6),
+    (
+        "corpus layer without native extent or golden WGS84 extent",
+        2,
+    ),
+];
+
+/// Fixture identification records GDAL itself cannot parse.
+const KNOWN_FIXTURE_SKIPS: &[(&str, usize)] = &[(
+    "fixture GDAL cannot parse (ESRI VERTCS-only files): identification",
+    3,
+)];

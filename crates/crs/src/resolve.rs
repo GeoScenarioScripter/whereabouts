@@ -48,6 +48,17 @@ pub fn resolve(definition: &CrsDefinition) -> Resolution {
             };
             let t = table();
             let entry = t.get(code);
+            if entry.is_none() && !is_known_non_horizontal(code) {
+                // Not a code at all (0, GeoTIFF's 32767 "user-defined", 999999, ...) or a
+                // horizontal CRS the table lacks: claiming "Identified" would put a wrong
+                // authority code in the catalog.
+                return Resolution {
+                    resolved: ResolvedCrs::Unidentified { name: None },
+                    crs: None,
+                    identification: None,
+                    error: None,
+                };
+            }
             let crs = entry.and_then(|e| t.crs(e));
             let name = entry.and_then(|e| t.name(e));
             Resolution {
@@ -93,6 +104,13 @@ pub fn resolve(definition: &CrsDefinition) -> Resolution {
     }
 }
 
+/// EPSG codes that name a real CRS but not a horizontal one the table models: vertical CRSs
+/// (the 5600-5799 block, plus EGM2008 height 3855) and the common geocentric WGS 84 / ETRS89 /
+/// ITRF-style codes 4978, 4936 and 4896. These stay `Identified` (without a model).
+fn is_known_non_horizontal(code: u32) -> bool {
+    matches!(code, 3855 | 4896 | 4936 | 4978 | 5600..=5799)
+}
+
 /// The definition's out-of-band EPSG authority, when the text has none of its own.
 fn out_of_band(definition: &CrsDefinition, crs: &Crs) -> Option<Identification> {
     let auth = definition.authority.as_ref()?;
@@ -133,6 +151,22 @@ mod tests {
         let r = resolve(&CrsDefinition::new(CrsDefinitionKind::Wkt1Esri, "garbage"));
         assert_eq!(r.resolved, ResolvedCrs::Unparsed);
         assert!(r.error.is_some());
+    }
+
+    #[test]
+    fn non_codes_and_unknown_codes_are_not_identified() {
+        for code in [0u32, 32767, 999_999, 1] {
+            let r = resolve(&CrsDefinition::epsg(code));
+            assert_eq!(r.resolved.status(), CrsStatus::Unidentified, "{code}");
+            assert_eq!(r.resolved.epsg(), None, "{code}");
+            assert!(r.crs.is_none() && r.identification.is_none());
+        }
+        for code in [3855u32, 4978, 5703] {
+            assert_eq!(
+                resolve(&CrsDefinition::epsg(code)).resolved.epsg(),
+                Some(code)
+            );
+        }
     }
 
     #[test]

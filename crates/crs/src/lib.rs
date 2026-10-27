@@ -83,8 +83,8 @@ pub use model::{
 pub use names::{ParamClass, ParamName, ProjectionMethod};
 pub use resolve::{Resolution, resolve};
 pub use transform::{
-    AxisPolicy, DEFAULT_DENSIFY, MAX_DENSIFY, TransformError, TransformOptions, TransformedBounds,
-    Transformer, transform_bounds, transform_bounds_with,
+    AxisPolicy, DEFAULT_DENSIFY, MAX_DENSIFY, MIN_DENSIFY, TransformError, TransformOptions,
+    TransformedBounds, Transformer, transform_bounds, transform_bounds_with,
 };
 
 /// Largest CRS definition accepted, in bytes (256 KiB). Real definitions are a few KiB; the
