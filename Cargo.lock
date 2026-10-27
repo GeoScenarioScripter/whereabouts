@@ -434,7 +434,9 @@ dependencies = [
 name = "whereabouts-datasets"
 version = "0.1.0"
 dependencies = [
+ "tracing",
  "whereabouts-core",
+ "whereabouts-source",
 ]
 
 [[package]]
