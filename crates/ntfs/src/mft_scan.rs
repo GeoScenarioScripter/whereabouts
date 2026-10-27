@@ -1020,6 +1020,24 @@ const ATTRIBUTE_MASK: u32 = 0x0000_FFFF;
 /// `FILE_ATTRIBUTE_NORMAL`.
 const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
 
+/// `true` if the UTF-16LE bytes `name` spell the ASCII string `s`.
+fn utf16_is(name: &[u8], s: &str) -> bool {
+    name.len() == s.len() * 2
+        && name
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(s.bytes())
+            .all(|(c, b)| c[0] == b && c[1] == 0)
+}
+
+/// NTFS metadata the USN API does not enumerate (see `finalize`).
+fn hidden_by_usn_api(number: u64, choice: &NameChoice) -> bool {
+    let parent = reference_record_number(choice.parent);
+    (parent == 11 && !utf16_is(&choice.name, "$RmMetadata"))
+        || (number < 64 && (16..64).contains(&parent) && utf16_is(&choice.name, "$Repair"))
+}
+
 /// Builds the record for a file whose names are all known, or counts why not.
 fn finalize(
     number: u64,
@@ -1037,8 +1055,10 @@ fn finalize(
         stats.no_name += 1;
         return None;
     }
-    // The USN API leaves out the metadata files under `$Extend` (record 11).
-    if skip_extend_children && reference_record_number(choice.parent) == 11 {
+    // The USN API leaves out the metadata files under `$Extend` (record 11) except the
+    // `$RmMetadata` directory, and leaves out `$RmMetadata\$Repair` (observed on a Windows 11
+    // system volume and on a fresh VHD).
+    if skip_extend_children && hidden_by_usn_api(number, choice) {
         return None;
     }
     let mut attributes = info.map_or(0, |i| i.attributes) & ATTRIBUTE_MASK;

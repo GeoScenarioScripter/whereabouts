@@ -781,6 +781,18 @@ fn skip_reserved_also_hides_the_children_of_extend() {
         simple_file(1024, 1, false, reference(11, 1), "$ObjId", 0x20),
     );
     b.put(21, simple_file(1024, 1, false, ROOT, "keep.txt", 0x20));
+    b.put(
+        22,
+        simple_file(1024, 1, true, reference(11, 1), "$RmMetadata", 0x10),
+    );
+    b.put(
+        23,
+        simple_file(1024, 1, false, reference(22, 1), "$Repair", 0x20),
+    );
+    b.put(
+        24,
+        simple_file(1024, 1, false, reference(22, 1), "$TxfLog", 0x20),
+    );
     let img = b.build();
     let opts = MftScanOptions {
         skip_reserved: true,
@@ -791,7 +803,7 @@ fn skip_reserved_also_hides_the_children_of_extend() {
         .iter()
         .map(|r| r.name.to_string_lossy().into_owned())
         .collect();
-    assert_eq!(names, [".", "keep.txt"]);
+    assert_eq!(names, [".", "keep.txt", "$RmMetadata", "$TxfLog"]);
     assert_eq!(stats.lost(), 0);
 }
 

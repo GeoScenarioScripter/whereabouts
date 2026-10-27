@@ -362,7 +362,11 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
         .iter()
         .filter(|r| {
             let rn = record_number(r.frn);
-            rn == 5 || (rn >= 16 && record_number(r.parent_frn) != 11)
+            let name = r.name.to_string_lossy();
+            let parent = record_number(r.parent_frn);
+            let hidden = (parent == 11 && name != "$RmMetadata")
+                || (rn < 64 && (16..64).contains(&parent) && name == "$Repair");
+            rn == 5 || (rn >= 16 && !hidden)
         })
         .map(|r| r.frn)
         .collect();
