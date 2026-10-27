@@ -182,6 +182,36 @@ pub enum Error {
         /// The system message for `code`.
         message: String,
     },
+    /// Reading `$MFT` directly failed or found it malformed (`crate::mft_scan`).
+    #[error(
+        "raw $MFT scan of {volume} failed after delivering {delivered} records to the sink \
+         (discard them before falling back to the USN API)"
+    )]
+    Mft {
+        /// The volume, e.g. `C:`.
+        volume: String,
+        /// Records already handed to the sink (the synthesised root included) when it failed.
+        delivered: u64,
+        /// What went wrong.
+        #[source]
+        source: crate::mft_scan::MftError,
+    },
+    /// The raw `$MFT` scan finished but could not account for every in-use record (strict mode:
+    /// the index would silently lack entries), so the result must be discarded.
+    #[error(
+        "raw $MFT scan of {volume} is incomplete after delivering {delivered} records: \
+         {lost} lost ({detail}); discard them and use the USN API"
+    )]
+    MftIncomplete {
+        /// The volume, e.g. `C:`.
+        volume: String,
+        /// Records already handed to the sink.
+        delivered: u64,
+        /// `MftScanStats::lost()`.
+        lost: u64,
+        /// The counters behind it.
+        detail: String,
+    },
     /// The file system returned bytes that do not match the documented layout.
     #[error("malformed {what} returned for {volume}")]
     Parse {

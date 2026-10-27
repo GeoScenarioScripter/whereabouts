@@ -238,11 +238,55 @@ pub fn assess(
     Ok(pos)
 }
 
+/// Default journal margin replayed after a raw `$MFT` scan (1 MiB of journal).
+pub const RAW_SCAN_REPLAY_MARGIN: u64 = 1 << 20;
+
+/// The USN to put in the checkpoint of a raw `$MFT` scan: `next_usn` moved back by `margin`
+/// bytes of journal, but never before `first_usn`.
+///
+/// Raw volume reads can miss changes NTFS has not written to disk yet, so changes from just
+/// before the scan are replayed by the next `changes` call. Replay is idempotent for consumers
+/// (upserts, delete wins, D-29). The result is arithmetic only: it need **not** be a record
+/// boundary, and `FSCTL_READ_USN_JOURNAL` rejects a start USN that is not one
+/// (`ERROR_INVALID_PARAMETER`, seen on a VHD), so the source snaps it to a record first.
+#[must_use]
+pub fn replay_start(first_usn: i64, next_usn: i64, margin: u64) -> i64 {
+    let available = u64::try_from(next_usn.saturating_sub(first_usn).max(0)).unwrap_or(0);
+    let back = i64::try_from(margin.min(available)).unwrap_or(i64::MAX);
+    next_usn.saturating_sub(back).max(first_usn)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn replay_start_backs_off_but_stays_inside_the_journal() {
+        // Plenty of journal: back by exactly the margin.
+        assert_eq!(replay_start(100, 5_000_000, 1 << 20), 5_000_000 - (1 << 20));
+        // Less journal than the margin: start at the first record.
+        assert_eq!(replay_start(100, 500, 1 << 20), 100);
+        // Empty journal and zero margin leave the position alone.
+        assert_eq!(replay_start(700, 700, 1 << 20), 700);
+        assert_eq!(replay_start(0, 4096, 0), 4096);
+        // Nonsense input (next before first) never goes below `first`/panics.
+        assert_eq!(replay_start(1000, 10, 50), 1000);
+        // Extreme input must not panic.
+        let _ = replay_start(i64::MIN, i64::MAX, u64::MAX);
+        // The result is always acceptable to `assess`.
+        let j = journal(1, 100, 5_000_000);
+        let cp = NtfsCheckpoint {
+            volume_serial: 7,
+            journal: Some(JournalPosition {
+                journal_id: 1,
+                next_usn: replay_start(j.first_usn, j.next_usn, 1 << 20),
+            }),
+            pending_renames: vec![],
+        };
+        assert!(assess(&cp, 7, Some(&j)).is_ok());
+    }
 
     fn journal(id: u64, first: i64, next: i64) -> JournalInfo {
         JournalInfo {
