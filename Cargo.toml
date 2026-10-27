@@ -45,9 +45,12 @@ whereabouts-source = { path = "crates/source" }
 # External crates (versions current as of 2026-10-19)
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
+crc32fast = "1.5.2"
 geo = "0.33.1"
 geo-types = "0.7.20"
+memchr = "2.8.3"
 proj4rs = "0.2.1"
+rayon = "1.12.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -57,6 +60,8 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 windows = "0.62.2"
 
 # Dev-only
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+proptest = "1.12.0"
 tempfile = "3.27.0"
 
 [workspace.lints.rust]
