@@ -13,4 +13,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+tracing.workspace = true
 whereabouts-core.workspace = true
+whereabouts-source.workspace = true
