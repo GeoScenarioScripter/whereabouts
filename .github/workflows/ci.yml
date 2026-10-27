@@ -45,13 +45,12 @@ jobs:
       # Release-build timings of both enumeration methods on C: (read-only), for Q-16 / #29.
       - name: enum_volume, USN API vs raw $MFT (release, elevated)
         if: runner.os == 'Windows'
+        # bash with -e so a failing command (including a raw scan that lost records) fails the job.
+        shell: bash
         run: |
+          set -euo pipefail
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --count-only
           cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only
-          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only --chunk-mib 1
-          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft --count-only --chunk-mib 32
-          cargo run --release -p whereabouts-ntfs --example enum_volume -- C:
-          cargo run --release -p whereabouts-ntfs --example enum_volume -- C: --mft
 
   deny:
     name: cargo-deny (licenses, advisories, bans incl. no-GDAL)

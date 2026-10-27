@@ -21,10 +21,10 @@ use std::time::{Duration, Instant};
 use whereabouts_core::FileRecord;
 use whereabouts_ntfs::record::record_number;
 use whereabouts_ntfs::{
-    EnumerationMethod, MftScanOptions, NtfsVolumeSource, RawRecord, SourceOptions, Volume,
-    process_memory,
+    EnumerationMethod, MftScanOptions, MftScanStats, NtfsVolumeSource, RawRecord, SourceOptions,
+    Volume, process_memory,
 };
-use whereabouts_source::{Changes, Source};
+use whereabouts_source::{Changes, Source, SourceEvent};
 
 fn report(line: &str) {
     let _ = writeln!(std::io::stderr(), "[mft-measure] {line}");
@@ -42,7 +42,7 @@ fn ms(d: Duration) -> u128 {
 fn scan_all(
     volume: &Volume,
     options: &MftScanOptions,
-) -> (Vec<RawRecord>, Duration, String, HashSet<u64>) {
+) -> (Vec<RawRecord>, Duration, String, MftScanStats) {
     let started = Instant::now();
     let scanner = volume.open_mft().unwrap();
     let opened = started.elapsed();
@@ -77,8 +77,8 @@ fn scan_all(
         ms(stats.read_time),
         ms(elapsed),
     );
-    let links = stats.hard_link_frns.iter().copied().collect();
-    (records, elapsed, line, links)
+
+    (records, elapsed, line, stats)
 }
 
 fn count_mft(volume: &Volume) -> (u64, Duration) {
@@ -151,7 +151,8 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
         list_hard_links: true,
         ..MftScanOptions::default()
     };
-    let (mft_records, mft_cold, stats_line, hard_links) = scan_all(&volume, &options);
+    let (mft_records, mft_cold, stats_line, mft_stats) = scan_all(&volume, &options);
+    let hard_links: HashSet<u64> = mft_stats.hard_link_frns.iter().copied().collect();
     report(&format!("pass 2 mft-cold: {stats_line}"));
     report(&format!(
         "pass 2 mft-cold: records={} total_ms={} working_set_mib={:.1}",
@@ -212,8 +213,12 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
                 if batch.events.is_empty() {
                     break;
                 }
+                // Only events that change the (parent, name) set excuse a difference; a plain
+                // `Modified` cannot explain a disagreement about names.
                 for e in &batch.events {
-                    churn.insert(record_number(e.record().frn.0));
+                    if !matches!(e, SourceEvent::Modified(_)) {
+                        churn.insert(record_number(e.record().frn.0));
+                    }
                 }
                 cp = batch.checkpoint;
             }
@@ -351,33 +356,66 @@ fn raw_mft_matches_usn_enumeration_on_system_volume() {
         mft_records.len()
     ));
 
-    // The Source wiring must agree with the direct scan (modulo reserved records and churn).
-    let direct_non_reserved = mft_records
+    // The Source wiring must yield the direct scan's records (reserved ones and the children of
+    // `$Extend` left out): compare the FRN *sets*; only churn excuses a difference.
+    let expected: HashSet<u64> = mft_records
         .iter()
         .filter(|r| {
             let rn = record_number(r.frn);
             rn == 5 || (rn >= 16 && record_number(r.parent_frn) != 11)
         })
-        .count();
-    let wired = raw_source_records.len();
+        .map(|r| r.frn)
+        .collect();
+    let wired: HashSet<u64> = raw_source_records.iter().map(|r| r.frn.0).collect();
+    assert_eq!(wired.len(), raw_source_records.len(), "duplicate FRNs");
+    let wiring_diff: Vec<u64> = expected.symmetric_difference(&wired).copied().collect();
+    let wiring_unexplained: Vec<&u64> = wiring_diff
+        .iter()
+        .filter(|f| !churn.contains(&record_number(**f)))
+        .collect();
     report(&format!(
-        "source wiring: source_raw={wired} direct_non_reserved={direct_non_reserved}"
+        "source wiring: source_raw={} direct_non_reserved={} differing={} unexplained={}",
+        wired.len(),
+        expected.len(),
+        wiring_diff.len(),
+        wiring_unexplained.len()
     ));
 
+    // ---- assertions -----------------------------------------------------------------------
     assert!(
         usn_records.len() > 100_000,
         "only {} records",
         usn_records.len()
     );
+    // The raw scan must account for every in-use record, also after the torn-record retry.
+    assert_eq!(mft_stats.lost(), 0, "raw scan lost records: {mft_stats:?}");
+    assert_eq!(mft_stats.extension_errors, 0);
+    assert_eq!(raw_source.last_enumerate_stats().skipped, 0);
+    let by = |name: &str| categories.iter().find(|c| c.0 == name).unwrap().2;
+    // Nothing the USN API reports may be missing from the raw scan, churn aside.
+    assert_eq!(by("only_usn:UNEXPLAINED"), 0);
+    assert_eq!(by("only_mft:UNEXPLAINED"), 0);
+    assert_eq!(by("differ:attributes_only"), 0);
+    // The name rule agreed with the USN API for every hard-linked file seen so far; a
+    // disagreement means the rule is wrong, not that the volume changed.
+    assert_eq!(by("differ:hard_link"), 0);
+    // A churn-excused difference needs a create/delete/rename in the journal since pass 1, and
+    // there cannot be more of them than such events.
+    assert!(churn_complete, "journal unusable: churn cannot be verified");
+    let excused = by("differ:churn") + by("only_usn:churn") + by("only_mft:churn");
     assert!(
-        unexplained * 5000 <= usn_records.len(),
-        "{unexplained} unexplained differences out of {}",
-        usn_records.len()
+        excused <= churn.len(),
+        "{excused} excused vs {} events",
+        churn.len()
     );
+    // The only tolerated name/parent disagreement: a hard link added or removed while the passes
+    // ran (the journal source reports nothing for that, 2.2). A small fixed bound.
     assert!(
-        wired.abs_diff(direct_non_reserved) * 1000 <= wired,
-        "Source wiring {wired} vs direct scan {direct_non_reserved}"
+        by("differ:UNEXPLAINED") <= 5,
+        "{}",
+        by("differ:UNEXPLAINED")
     );
-    assert!(warm_mft_n.abs_diff(mft_records.len() as u64) * 1000 <= warm_mft_n);
-    let _ = warm_usn_n;
+    assert!(wiring_unexplained.is_empty(), "{wiring_unexplained:x?}");
+    assert!(warm_mft_n.abs_diff(mft_records.len() as u64) <= churn.len() as u64 + 5);
+    let _ = (warm_usn_n, unexplained);
 }

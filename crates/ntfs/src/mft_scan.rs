@@ -45,12 +45,17 @@ use crate::mft::{
 use crate::name::NtfsName;
 use crate::record::{FILE_ATTRIBUTE_DIRECTORY, RawRecord};
 
-/// Largest `$ATTRIBUTE_LIST` loaded into memory (a file would need ~1M named streams or links).
-const MAX_ATTRIBUTE_LIST: u64 = 16 << 20;
+/// Largest `$ATTRIBUTE_LIST` loaded into memory (1 MiB holds about 30,000 entries).
+const MAX_ATTRIBUTE_LIST: u64 = 1 << 20;
 /// Most extension records read for the `$FILE_NAME` attributes of one file.
-const MAX_EXTENSIONS_PER_FILE: usize = 64;
+const MAX_EXTENSIONS_PER_FILE: usize = 4096;
 /// Most extension records that may extend `$MFT`'s own `$DATA`.
 const MAX_MFT_EXTENSIONS: usize = 1024;
+/// Most bytes of files held back for extension records further down the table; beyond it a file
+/// is finished at once with direct reads.
+const MAX_PENDING_BYTES: usize = 64 << 20;
+/// Most torn record numbers remembered for the retry (more stay counted as lost).
+const MAX_TORN_RETRY: usize = 1 << 16;
 
 /// Random-access byte reads from a volume (or a test image).
 pub trait ByteSource {
@@ -126,14 +131,27 @@ pub struct MftScanStats {
     pub yielded: u64,
     /// Slots that are not in use (bitmap clear or header flag clear).
     pub unused: u64,
-    /// Slots without the `FILE` signature (zeroed, `BAAD`, ...) that the bitmap marked in use.
+    /// Examined slots without the `FILE` signature (zeroed, `BAAD`, ...), whether or not the
+    /// bitmap vouches for them.
     pub not_file: u64,
+    /// The part of `not_file` that the bitmap marks in use (where the bitmap covers the slot):
+    /// each is a missing entry.
+    pub not_file_in_use: u64,
     /// Extension records, reached through their base record instead.
     pub extension: u64,
-    /// Records whose update sequence did not match (torn writes); each is a missing entry.
+    /// Records still torn (update sequence mismatch) after the retry; each is a missing entry.
     pub torn: u64,
-    /// Records with a malformed header, attribute chain or name; each is a missing entry.
+    /// Torn records read a second time at the end of the pass.
+    pub torn_retried: u64,
+    /// Of those, how many were whole the second time.
+    pub torn_recovered: u64,
+    /// Records or attributes with a malformed header, attribute chain, `$FILE_NAME` or
+    /// `$STANDARD_INFORMATION`; each is a missing entry or a damaged one.
     pub malformed: u64,
+    /// `$MFT` slots beyond its initialized size (not read; can be legitimate).
+    pub uninitialized_slots: u64,
+    /// Files held back for a later extension record (diagnostic).
+    pub deferred: u64,
     /// In-use base records without a reportable name (DOS-only or none).
     pub no_name: u64,
     /// Files with more than one non-DOS `$FILE_NAME` (hard links). One name is reported.
@@ -157,11 +175,14 @@ pub struct MftScanStats {
 }
 
 impl MftScanStats {
-    /// Records that exist on the volume but could not be reported: torn, malformed, no usable
-    /// name. A non-zero value means the result is incomplete.
+    /// Records or names that exist on the volume but could not be reported: torn after the
+    /// retry, malformed, in use per the bitmap but not a `FILE` record, or unusable extension
+    /// records (including the per-file cap and `$ATTRIBUTE_LIST` problems). A non-zero value
+    /// means the result is incomplete. `no_name` is **not** included: a record without a
+    /// reportable name (DOS-only) is legitimate and is not reported by the USN API either.
     #[must_use]
     pub fn lost(&self) -> u64 {
-        self.torn + self.malformed + self.no_name
+        self.torn + self.malformed + self.not_file_in_use + self.extension_errors
     }
 }
 
@@ -279,6 +300,7 @@ pub struct MftScanner<'s, S: ByteSource + ?Sized> {
     geom: VolumeGeometry,
     runs: Vec<Run>,
     record_count: u64,
+    uninitialized_slots: u64,
     bitmap: Vec<u8>,
 }
 
@@ -427,7 +449,22 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
         }
 
         let covered = next_vcn.saturating_mul(u64::from(geom.bytes_per_cluster));
-        let data_bytes = real_size.min(initialized_size).min(covered);
+        // A runlist that stops short of the declared size means part of the table is missing.
+        if covered < real_size {
+            return Err(MftParseError::malformed(
+                "$MFT $DATA",
+                "runlist covers less than the declared size",
+            )
+            .into());
+        }
+        let data_bytes = real_size.min(initialized_size);
+        let uninitialized_slots = (real_size - data_bytes) / u64::from(geom.bytes_per_record);
+        if uninitialized_slots > 0 {
+            tracing::warn!(
+                uninitialized_slots,
+                "$MFT is larger than its initialized size; the tail is not scanned"
+            );
+        }
         let record_count = data_bytes / u64::from(geom.bytes_per_record);
         if record_count == 0 {
             return Err(MftParseError::malformed("$MFT", "holds no records").into());
@@ -466,6 +503,7 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             geom,
             runs,
             record_count,
+            uninitialized_slots,
             bitmap,
         })
     }
@@ -489,8 +527,19 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             .is_none_or(|b| b >> (number % 8) & 1 == 1)
     }
 
+    /// `true` when the bitmap says something about this slot (so "not in use" and "in use" are
+    /// known facts rather than defaults).
+    fn bitmap_covers(&self, number: u64) -> bool {
+        ((number / 8) as usize) < self.bitmap.len()
+    }
+
     /// Reads the whole `$MFT` and passes every in-use base record to `sink`. The sink may return
     /// [`ControlFlow::Break`] to stop early.
+    ///
+    /// Torn records (a write in flight while the disk was read) are read once more at the end of
+    /// the pass. The caller must check [`MftScanStats::lost`]: a non-zero value means records
+    /// are missing and the result must not be used as a complete index. An `Err` or a non-zero
+    /// `lost()` comes *after* the sink has received records; the caller discards them.
     ///
     /// Records come in `$MFT` order, except files whose `$FILE_NAME` attributes live in
     /// extension records that come *later* in the table: those are held back and delivered after
@@ -519,7 +568,12 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             ext_bytes: 0,
             ext_cache_limit: options.ext_cache_bytes,
             skip_extend_children: options.skip_reserved,
-            stats: MftScanStats::default(),
+            torn_list: Vec::new(),
+            pending_bytes: 0,
+            stats: MftScanStats {
+                uninitialized_slots: self.uninitialized_slots,
+                ..MftScanStats::default()
+            },
         };
         let mut pending: Vec<Pending> = Vec::new();
 
@@ -567,6 +621,41 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             first += n;
         }
 
+        // Torn records: a write was in flight when the disk was read. Read each once more.
+        let torn_list = std::mem::take(&mut ctx.torn_list);
+        let mut rec = vec![0_u8; rec_size];
+        for number in torn_list {
+            ctx.stats.torn_retried += 1;
+            ctx.stats.torn -= 1; // counted again by `process` if it is still torn
+            let started = Instant::now();
+            let read = read_runs(
+                self.src,
+                &self.geom,
+                &self.runs,
+                number * rec_size as u64,
+                &mut rec,
+            );
+            ctx.stats.read_time += started.elapsed();
+            ctx.stats.reads += 1;
+            ctx.stats.bytes += rec_size as u64;
+            read?;
+            let before = ctx.stats.torn;
+            match self.process(number, &mut rec, &mut ctx) {
+                Outcome::Skip => {}
+                Outcome::Done(raw, multi) => {
+                    if emit(options, sink, &mut ctx.stats, raw, multi).is_break() {
+                        return Ok(ctx.stats);
+                    }
+                }
+                Outcome::Defer(p) => pending.push(p),
+            }
+            if ctx.stats.torn == before {
+                ctx.stats.torn_recovered += 1;
+            }
+            // A second tear is final: do not retry again.
+            ctx.torn_list.clear();
+        }
+
         // Files whose names are partly in extension records that came after them.
         for p in pending {
             let mut choice = p.choice;
@@ -602,10 +691,17 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             Ok(()) => {}
             Err(MftParseError::NotFileRecord) => {
                 ctx.stats.not_file += 1;
+                if self.bitmap_covers(number) {
+                    // The bitmap vouches that this slot holds a file.
+                    ctx.stats.not_file_in_use += 1;
+                }
                 return Outcome::Skip;
             }
             Err(MftParseError::TornWrite { .. }) => {
                 ctx.stats.torn += 1;
+                if ctx.torn_list.len() < MAX_TORN_RETRY {
+                    ctx.torn_list.push(number);
+                }
                 tracing::debug!(record = number, "torn $MFT record skipped");
                 return Outcome::Skip;
             }
@@ -647,16 +743,34 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             match (attr.type_code, attr.body) {
                 (ATTR_STANDARD_INFORMATION, AttrBody::Resident { value }) if attr.is_unnamed() => {
                     info = parse_standard_info(value).ok();
+                    if info.is_none() {
+                        // Keep the record (attributes default to none), but do not hide it.
+                        ctx.stats.malformed += 1;
+                        tracing::debug!(record = number, "malformed $STANDARD_INFORMATION");
+                    }
                 }
-                (ATTR_FILE_NAME, AttrBody::Resident { value }) => {
-                    if let Ok(name) = parse_file_name(value) {
+                (ATTR_FILE_NAME, AttrBody::Resident { value }) => match parse_file_name(value) {
+                    Ok(name) => {
                         ctx.scratch
                             .choice
                             .consider(name.parent, name.namespace, name.name);
                     }
-                }
-                (ATTR_ATTRIBUTE_LIST, body) => {
-                    ctx.scratch.list = Stream::from_body(body, self.geom.total_clusters).ok();
+                    Err(e) => {
+                        ctx.stats.malformed += 1;
+                        tracing::debug!(record = number, error = %e, "malformed $FILE_NAME");
+                    }
+                },
+                // A second extent of a non-resident list must not replace the first (the first
+                // extent's size covers the whole list; `extensions_wanted` reports it as an
+                // error if the runs fall short).
+                (ATTR_ATTRIBUTE_LIST, body) if ctx.scratch.list.is_none() => {
+                    match Stream::from_body(body, self.geom.total_clusters) {
+                        Ok(list) => ctx.scratch.list = Some(list),
+                        Err(e) => {
+                            ctx.stats.extension_errors += 1;
+                            tracing::debug!(record = number, error = %e, "bad $ATTRIBUTE_LIST");
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -667,7 +781,11 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
             None => Vec::new(),
         };
         // An extension record further down the table has not been read yet: hold this file back.
-        if wanted.iter().any(|&ext| ext > number) {
+        // (Bounded: past the budget the file is finished at once, with direct reads.)
+        let cost = 128 + ctx.scratch.choice.name.len() + 8 * wanted.len();
+        if wanted.iter().any(|&ext| ext > number) && ctx.pending_bytes + cost <= MAX_PENDING_BYTES {
+            ctx.pending_bytes += cost;
+            ctx.stats.deferred += 1;
             return Outcome::Defer(Pending {
                 number,
                 sequence: header.sequence,
@@ -703,13 +821,20 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
 
     /// The extension records an `$ATTRIBUTE_LIST` places `$FILE_NAME` attributes in.
     fn extensions_wanted(&self, number: u64, list: &Stream, stats: &mut MftScanStats) -> Vec<u64> {
-        let list = match load_stream(
+        if let Stream::NonResident { real_size, .. } = list {
+            stats.reads += 1;
+            stats.bytes += real_size;
+        }
+        let started = Instant::now();
+        let loaded = load_stream(
             self.src,
             &self.geom,
             list,
             MAX_ATTRIBUTE_LIST,
             "$ATTRIBUTE_LIST",
-        ) {
+        );
+        stats.read_time += started.elapsed();
+        let list = match loaded {
             Ok(l) => l,
             Err(e) => {
                 stats.extension_errors += 1;
@@ -724,11 +849,13 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
                 break;
             };
             let record = reference_record_number(entry.segment_reference);
-            if entry.type_code == ATTR_FILE_NAME
-                && record != number
-                && record < self.record_count
-                && !wanted.contains(&record)
+            if entry.type_code == ATTR_FILE_NAME && record != number && record >= self.record_count
             {
+                // A name that lives outside the table we scanned: it cannot be recovered.
+                stats.extension_errors += 1;
+                continue;
+            }
+            if entry.type_code == ATTR_FILE_NAME && record != number && !wanted.contains(&record) {
                 if wanted.len() >= MAX_EXTENSIONS_PER_FILE {
                     stats.extension_errors += 1;
                     break;
@@ -781,10 +908,11 @@ impl<'s, S: ByteSource + ?Sized> MftScanner<'s, S> {
                 stats.extension_errors += 1;
                 break;
             };
-            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body)
-                && let Ok(name) = parse_file_name(value)
-            {
-                choice.consider(name.parent, name.namespace, name.name);
+            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body) {
+                match parse_file_name(value) {
+                    Ok(name) => choice.consider(name.parent, name.namespace, name.name),
+                    Err(_) => stats.extension_errors += 1,
+                }
             }
         }
     }
@@ -825,6 +953,10 @@ struct Ctx {
     ext_bytes: usize,
     ext_cache_limit: usize,
     skip_extend_children: bool,
+    /// Record numbers of torn records, for the retry at the end of the pass.
+    torn_list: Vec<u64>,
+    /// Approximate bytes held by deferred files.
+    pending_bytes: usize,
     stats: MftScanStats,
 }
 
@@ -840,12 +972,14 @@ impl Ctx {
             let Ok(attr) = attr else {
                 return; // malformed: let the base file's on-demand read count it
             };
-            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body)
-                && let Ok(name) = parse_file_name(value)
-                && name.namespace != NAMESPACE_DOS
-            {
-                bytes += name.name.len() + 48;
-                names.push((name.parent, name.namespace, name.name.to_vec()));
+            if let (ATTR_FILE_NAME, AttrBody::Resident { value }) = (attr.type_code, attr.body) {
+                let Ok(name) = parse_file_name(value) else {
+                    return; // malformed: let the base file's on-demand read count it
+                };
+                if name.namespace != NAMESPACE_DOS {
+                    bytes += name.name.len() + 48;
+                    names.push((name.parent, name.namespace, name.name.to_vec()));
+                }
             }
         }
         self.ext_bytes += bytes;

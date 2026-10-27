@@ -53,6 +53,9 @@ pub struct SourceOptions {
     /// Bytes per sequential read of the raw `$MFT` scan (see
     /// [`crate::MftScanOptions::chunk_bytes`]); ignored by the USN method.
     pub mft_chunk_bytes: usize,
+    /// Journal bytes replayed after a raw `$MFT` enumeration (see [`checkpoint::replay_start`]);
+    /// ignored by the USN method. Default 1 MiB.
+    pub raw_replay_margin: u64,
 }
 
 impl Default for SourceOptions {
@@ -63,6 +66,7 @@ impl Default for SourceOptions {
             max_batch_bytes: 32 << 20,
             enumeration: EnumerationMethod::default(),
             mft_chunk_bytes: MftScanOptions::default().chunk_bytes,
+            raw_replay_margin: checkpoint::RAW_SCAN_REPLAY_MARGIN,
         }
     }
 }
@@ -76,6 +80,11 @@ pub enum EnumerationMethod {
     #[default]
     UsnApi,
     /// Read `$MFT` directly in large sequential chunks (2.7, [`crate::mft_scan`]).
+    ///
+    /// **Strict**: if the scan fails or cannot account for every in-use record, `enumerate`
+    /// returns an error, but only *after* the sink has received records. The caller must discard
+    /// what the sink collected and fall back to the USN API. The error reports how many records
+    /// were delivered. The checkpoint replays a margin of journal from before the scan.
     RawMft,
 }
 
@@ -206,19 +215,48 @@ impl NtfsVolumeSource {
     /// The raw-`$MFT` variant of [`Source::enumerate`]: the root record has been sent already;
     /// this streams every other in-use base record of `$MFT` (system records 0..=15 are left
     /// out, as `FSCTL_ENUM_USN_DATA` leaves out the metadata files).
+    ///
+    /// **Strict**: if the scan fails, or cannot account for every in-use record, this returns an
+    /// error, *after* the sink has received records. The caller must discard what the sink
+    /// collected and fall back to the USN API. The error says how many records were delivered.
+    ///
+    /// The checkpoint starts replay [`SourceOptions::raw_replay_margin`] bytes of journal before
+    /// the position taken at the start: raw volume reads can miss changes NTFS has not flushed
+    /// to disk yet, and replaying a little history is idempotent (upserts, delete wins).
     fn enumerate_raw_mft(
         &mut self,
         sink: &mut dyn RecordSink,
-        checkpoint: Checkpoint,
-        journal: bool,
+        journal: Option<JournalInfo>,
     ) -> Result<Checkpoint, SourceError> {
         let volume = self.label();
         let root = self.root.0;
+        let checkpoint = self.checkpoint_for(journal.map(|j| JournalPosition {
+            journal_id: j.journal_id,
+            next_usn: checkpoint::replay_start(
+                j.first_usn,
+                j.next_usn,
+                self.options.raw_replay_margin,
+            ),
+        }))?;
+        // The root record has been sent already.
         let mut stats = EnumerateStats {
             records: 1,
             ..EnumerateStats::default()
         };
-        let scanner = self.volume.open_mft().map_err(source_error)?;
+        let failed = |stats: &mut EnumerateStats, source: crate::mft_scan::MftError| {
+            source_error(Error::Mft {
+                volume: volume.clone(),
+                delivered: stats.records,
+                source,
+            })
+        };
+        let scanner = match self.volume.open_mft() {
+            Ok(s) => s,
+            Err(e) => {
+                self.last_enumerate = stats;
+                return Err(source_error(e));
+            }
+        };
         let options = MftScanOptions {
             chunk_bytes: self.options.mft_chunk_bytes,
             skip_reserved: true,
@@ -234,32 +272,44 @@ impl NtfsVolumeSource {
             cancelled = flow.is_break();
             flow
         });
-        let scan = scan.map_err(|source| {
-            source_error(Error::Mft {
-                volume: volume.clone(),
-                source,
-            })
-        });
-        if let Ok(s) = &scan {
-            stats.skipped = s.lost();
-            stats.batches = s.reads;
-            stats.kernel_time = s.read_time;
-        }
+        let scan = match scan {
+            Ok(s) => s,
+            Err(e) => {
+                self.last_enumerate = stats;
+                return Err(failed(&mut stats, e));
+            }
+        };
+        stats.skipped = scan.lost();
+        stats.batches = scan.reads;
+        stats.kernel_time = scan.read_time;
         self.last_enumerate = stats;
-        let scan = scan?;
         if cancelled {
             return Err(SourceError::Cancelled);
         }
         if scan.lost() > 0 {
-            tracing::error!(
-                %volume, lost = scan.lost(), torn = scan.torn, malformed = scan.malformed,
-                no_name = scan.no_name,
-                "raw $MFT scan could not report some records; the index is incomplete"
+            let detail = format!(
+                "torn {} (retried {}, recovered {}), malformed {}, in-use slots that are not FILE \
+                 records {}, extension errors {}",
+                scan.torn,
+                scan.torn_retried,
+                scan.torn_recovered,
+                scan.malformed,
+                scan.not_file_in_use,
+                scan.extension_errors
             );
+            tracing::error!(%volume, lost = scan.lost(), %detail, "raw $MFT scan is incomplete");
+            return Err(source_error(Error::MftIncomplete {
+                volume,
+                delivered: stats.records,
+                lost: scan.lost(),
+                detail,
+            }));
         }
         tracing::info!(
-            %volume, records = stats.records, reads = scan.reads, hard_link_files = scan.hard_link_files,
-            read_ms = scan.read_time.as_millis() as u64, journal, "enumerated volume from $MFT"
+            %volume, records = stats.records, reads = scan.reads,
+            hard_link_files = scan.hard_link_files, no_name = scan.no_name,
+            torn_recovered = scan.torn_recovered,
+            read_ms = scan.read_time.as_millis() as u64, "enumerated volume from $MFT"
         );
         Ok(checkpoint)
     }
@@ -399,7 +449,7 @@ impl Source for NtfsVolumeSource {
             return Err(SourceError::Cancelled);
         }
         if self.options.enumeration == EnumerationMethod::RawMft {
-            return self.enumerate_raw_mft(sink, checkpoint, journal.is_some());
+            return self.enumerate_raw_mft(sink, journal);
         }
         let volume = self.label();
         let root = self.root.0;

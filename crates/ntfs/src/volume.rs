@@ -437,6 +437,7 @@ impl Volume {
         let bytes = u64s_as_bytes(&out);
         let len = (returned as usize).min(bytes.len());
         mft::parse_volume_data(&bytes[..len]).map_err(|e| Error::Mft {
+            delivered: 0,
             volume: letter_str(letter),
             source: MftError::Parse(e),
         })
@@ -537,6 +538,7 @@ impl Volume {
     pub fn open_mft(&self) -> Result<MftScanner<'_, Volume>> {
         let geometry = self.geometry()?;
         MftScanner::open(self, geometry).map_err(|source| Error::Mft {
+            delivered: 0,
             volume: letter_str(self.letter()),
             source,
         })

@@ -140,10 +140,14 @@ mod windows_main {
             stats.unused
         );
         println!(
-            "lost          {} (torn {}, malformed {}, no name {}; expected 0)",
+            "lost          {} (torn {} after {} retries, malformed {}, not-FILE in use {}, \
+             extension errors {}; expected 0); {} records without a name (legitimate)",
             stats.lost(),
             stats.torn,
+            stats.torn_retried,
             stats.malformed,
+            stats.not_file_in_use,
+            stats.extension_errors,
             stats.no_name
         );
         println!(
@@ -187,6 +191,19 @@ mod windows_main {
                 chains.cyclic,
                 chains.root_enumerated
             );
+        }
+        // A raw scan that lost records must not look like a complete listing.
+        if stats.lost() > 0 {
+            return Err(format!(
+                "raw $MFT scan lost {} records (torn {}, malformed {}, not-FILE in use {}, \
+                 extension errors {})",
+                stats.lost(),
+                stats.torn,
+                stats.malformed,
+                stats.not_file_in_use,
+                stats.extension_errors
+            )
+            .into());
         }
         Ok(())
     }

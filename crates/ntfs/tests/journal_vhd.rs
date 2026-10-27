@@ -32,15 +32,27 @@ struct Fixture {
 }
 
 fn fixture(journal_max: u64, journal_delta: u64) -> Fixture {
-    fixture_with(journal_max, journal_delta, SourceOptions::default())
+    fixture_sized(64, journal_max, journal_delta, SourceOptions::default())
 }
 
 fn fixture_with(journal_max: u64, journal_delta: u64, options: SourceOptions) -> Fixture {
+    fixture_sized(64, journal_max, journal_delta, options)
+}
+
+/// A fixture on an expandable VHD of `size_mib`. NTFS lets the journal grow far past its
+/// requested maximum before trimming (about 40 MiB seen), so tests that churn until the journal
+/// wraps need a volume with room for that.
+fn fixture_sized(
+    size_mib: u32,
+    journal_max: u64,
+    journal_delta: u64,
+    options: SourceOptions,
+) -> Fixture {
     let lock = ONE_VHD_AT_A_TIME
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
     let started = Instant::now();
-    let vol = TestVolume::create(64).unwrap();
+    let vol = TestVolume::create(size_mib).unwrap();
     vol.create_journal(journal_max, journal_delta).unwrap();
     let source = NtfsVolumeSource::open_with(&vol.volume(), options).unwrap();
     report(&format!(
@@ -399,7 +411,7 @@ fn one_batch_is_coalesced_per_file() {
 #[ignore = "needs an elevated shell: creates and mounts a VHD test volume"]
 fn checkpoint_older_than_first_usn_requires_rescan() {
     // A small journal, so churn wraps it quickly.
-    let mut f = fixture(1 << 20, 64 << 10);
+    let mut f = fixture_sized(512, 1 << 20, 64 << 10, SourceOptions::default());
     // Journal a few records first: on a fresh journal the checkpoint USN would be 0, and the
     // kernel treats StartUsn = 0 as "from the first record" instead of failing (seen in CI).
     std::fs::write(f.vol.path("seed.txt"), b"x").unwrap();
@@ -549,5 +561,57 @@ fn foreign_or_garbage_checkpoints_require_rescan() {
     assert_eq!(
         rescan_reason(&mut f.source, &ahead.to_checkpoint().unwrap()),
         RescanReason::CheckpointMismatch
+    );
+}
+
+#[test]
+#[ignore = "needs an elevated shell: creates and mounts a VHD test volume"]
+fn raw_mft_enumeration_matches_usn_and_replays_a_margin() {
+    use whereabouts_ntfs::EnumerationMethod;
+
+    // 100 bytes of replay margin is not a record boundary: the kernel must accept it.
+    let raw_options = SourceOptions {
+        enumeration: EnumerationMethod::RawMft,
+        raw_replay_margin: 100,
+        ..SourceOptions::default()
+    };
+    let mut f = fixture_with(1 << 20, 64 << 10, raw_options);
+    std::fs::create_dir(f.vol.path("gis")).unwrap();
+    for i in 0..30 {
+        std::fs::write(f.vol.path(format!(r"gis\layer{i}.shp")), b"x").unwrap();
+    }
+    std::fs::write(f.vol.path("long file name with spaces.tif"), b"x").unwrap();
+
+    let (raw, cp) = enumerate(&mut f.source);
+    let stats = f.source.last_enumerate_stats();
+    assert_eq!(stats.skipped, 0);
+    report(&format!("raw enumerate: {} records, {stats:?}", raw.len()));
+
+    // The same volume through the USN API.
+    let mut usn_source = NtfsVolumeSource::open(&f.vol.volume()).unwrap();
+    let (usn, _) = enumerate(&mut usn_source);
+    let key = |r: &FileRecord| (r.frn, r.parent, r.name.as_wtf8().to_vec(), r.attrs.0);
+    let mut a: Vec<_> = raw.iter().map(key).collect();
+    let mut b: Vec<_> = usn.iter().map(key).collect();
+    a.sort();
+    b.sort();
+    assert_eq!(a, b);
+    assert!(
+        raw.iter()
+            .any(|r| r.name.to_string_lossy() == "layer29.shp")
+    );
+
+    // The raw checkpoint replays history from before the scan: the changes call must succeed
+    // (not an error, not a rescan) and report the files created just before the scan.
+    let replayed = batch(&mut f.source, &cp);
+    report(&format!("replayed {} events", replayed.events.len()));
+    assert!(
+        replayed
+            .events
+            .iter()
+            .any(|e| e.record().name.to_string_lossy() == "layer29.shp"
+                || e.record().name.to_string_lossy() == "gis"),
+        "{:#?}",
+        replayed.events
     );
 }

@@ -533,7 +533,7 @@ fn name_selection_prefers_win32_and_never_reports_dos_names() {
         assert!(!names.iter().any(|n| n == hidden), "{hidden} leaked");
     }
     assert_eq!(stats.no_name, 1);
-    assert_eq!(stats.lost(), 1);
+    assert_eq!(stats.lost(), 0, "no_name is reported but is not a loss");
 }
 
 #[test]
@@ -629,7 +629,8 @@ fn torn_and_damaged_records_are_counted_not_fatal() {
     let (records, stats) = scan_image(&img, &b).unwrap();
     assert_eq!(records.len(), 5);
     assert_eq!((stats.torn, stats.not_file, stats.malformed), (1, 2, 1));
-    assert_eq!(stats.lost(), 2);
+    assert_eq!(stats.lost(), 4);
+    assert_eq!((stats.torn_retried, stats.torn_recovered), (1, 0));
 }
 
 #[test]
@@ -709,7 +710,7 @@ fn names_in_extension_records_are_found_through_the_attribute_list() {
     // The extension records come after their base files, so the sequential pass has seen them
     // by the time the held-back files are finished: no random reads.
     assert_eq!(stats.extension_reads, 0);
-    assert_eq!(stats.extension_errors, 1);
+    assert_eq!(stats.extension_errors, 2);
 
     // With the remember-as-you-go cache disabled, each extension record is read on demand and
     // the result is the same.
@@ -719,7 +720,7 @@ fn names_in_extension_records_are_found_through_the_attribute_list() {
     };
     let (records2, stats2) = scan_with(&img, &b, &no_cache).unwrap();
     assert_eq!(stats2.extension_reads, 2);
-    assert_eq!(stats2.extension_errors, 1);
+    assert_eq!(stats2.extension_errors, 2);
     let mut a: Vec<_> = records
         .iter()
         .map(|r| (r.frn, r.parent_frn, r.name.clone()))
@@ -989,8 +990,8 @@ fn lying_mft_data_attributes_are_bounded() {
         &file_name_value(ROOT, NAMESPACE_WIN32, "$MFT"),
     );
     let one = encode_runs(&[(4, Some(4))]);
-    // Declared size far beyond the runs: clamped to what the runs cover (16 records), the scan
-    // finishes without reading outside the runs.
+    // Declared size far beyond the runs: the table is truncated, which is an error (not a
+    // silently shorter scan), and nothing is read outside the runs.
     let img = record0_with(
         &b,
         &[
@@ -998,8 +999,24 @@ fn lying_mft_data_attributes_are_bounded() {
             nonresident_attr(ATTR_DATA, "", 0, u64::MAX >> 1, u64::MAX >> 1, &one),
         ],
     );
+    assert!(MftScanner::open(&img[..], geom).is_err());
+    // Initialized size below the real size: allowed, only the initialized part is scanned and
+    // the rest is reported.
+    let img = record0_with(
+        &b,
+        &[
+            name.clone(),
+            nonresident_attr(ATTR_DATA, "", 0, 16384, 8192, &one),
+        ],
+    );
     let scanner = MftScanner::open(&img[..], geom).unwrap();
-    assert_eq!(scanner.record_count(), 16);
+    assert_eq!(scanner.record_count(), 8);
+    let stats = scanner
+        .scan(&MftScanOptions::default(), &mut |_| {
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    assert_eq!(stats.uninitialized_slots, 8);
 
     // Resident $DATA, missing $DATA, $DATA not starting at VCN 0, size zero.
     for (what, attrs) in [
@@ -1211,4 +1228,164 @@ fn random_noise_records_never_panic() {
             }
         }
     }
+}
+
+/// A byte source that tears one record in the first read that covers it (a write in flight),
+/// and serves it whole afterwards.
+struct TearOnce<'a> {
+    img: &'a [u8],
+    at: u64,
+    torn: std::cell::Cell<bool>,
+}
+
+impl crate::mft_scan::ByteSource for TearOnce<'_> {
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+        self.img.read_at(offset, buf)?;
+        let end = offset + buf.len() as u64;
+        if !self.torn.get() && offset <= self.at && self.at < end && buf.len() > 1024 {
+            buf[(self.at - offset) as usize] ^= 0xFF;
+            self.torn.set(true);
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn a_torn_record_is_read_again_and_recovered() {
+    let b = tree();
+    let img = b.build();
+    let geom = b.geometry();
+    // Record 7 lives at MFT start + 7 KiB; tear its last sector's tail.
+    let at = geom.mft_start_byte() + 7 * 1024 + 1022;
+    let src = TearOnce {
+        img: &img,
+        at,
+        torn: std::cell::Cell::new(false),
+    };
+    let scanner = MftScanner::open(&src, geom).unwrap();
+    let mut names = Vec::new();
+    let stats = scanner
+        .scan(&MftScanOptions::default(), &mut |r| {
+            names.push(r.name.to_string_lossy().into_owned());
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    assert!(src.torn.get());
+    assert!(names.contains(&"a.shp".to_owned()), "{names:?}");
+    assert_eq!(
+        (stats.torn, stats.torn_retried, stats.torn_recovered),
+        (0, 1, 1)
+    );
+    assert_eq!(stats.lost(), 0);
+}
+
+#[test]
+fn every_kind_of_loss_is_counted_in_lost() {
+    // Bitmap-marked slot that is not a FILE record.
+    let mut b = tree();
+    b.put(9, vec![0_u8; 1024]);
+    let img = b.build();
+    let (_, stats) = scan_image(&img, &b).unwrap();
+    assert_eq!(
+        (stats.not_file, stats.not_file_in_use, stats.lost()),
+        (1, 1, 1)
+    );
+
+    // Without a bitmap the same zeroed slots are unknowns, not losses.
+    let mut b = tree();
+    b.bitmap_lcn = None;
+    let img = b.build();
+    let (_, stats) = scan_image(&img, &b).unwrap();
+    assert!(stats.not_file > 0);
+    assert_eq!(stats.lost(), 0);
+
+    // Malformed $STANDARD_INFORMATION: the record is kept but the damage is counted.
+    let mut b = tree();
+    b.put(
+        9,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            0,
+            &[
+                resident_attr(ATTR_STANDARD_INFORMATION, "", &[1, 2, 3]),
+                resident_attr(
+                    ATTR_FILE_NAME,
+                    "",
+                    &file_name_value(ROOT, NAMESPACE_WIN32, "short-si.txt"),
+                ),
+            ],
+        ),
+    );
+    let img = b.build();
+    let (records, stats) = scan_image(&img, &b).unwrap();
+    assert_eq!(by_name(&records, "short-si.txt").file_attributes, 0x80);
+    assert_eq!((stats.malformed, stats.lost()), (1, 1));
+
+    // Malformed $FILE_NAME (declared name longer than the value).
+    let mut b = tree();
+    let mut bad = file_name_value(ROOT, NAMESPACE_WIN32, "x");
+    bad[0x40] = 200;
+    b.put(
+        9,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            0,
+            &[resident_attr(ATTR_FILE_NAME, "", &bad)],
+        ),
+    );
+    let img = b.build();
+    let (_, stats) = scan_image(&img, &b).unwrap();
+    assert_eq!((stats.malformed, stats.no_name), (1, 1));
+    assert!(stats.lost() >= 1);
+
+    // A name list entry pointing outside the table.
+    let mut b = tree();
+    let list = attr_list_entry(ATTR_FILE_NAME, 0, reference(5000, 1));
+    b.put(
+        9,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            0,
+            &[
+                resident_attr(ATTR_STANDARD_INFORMATION, "", &standard_info(1, 0x20, 0)),
+                resident_attr(ATTR_ATTRIBUTE_LIST, "", &list),
+            ],
+        ),
+    );
+    let img = b.build();
+    let (_, stats) = scan_image(&img, &b).unwrap();
+    assert_eq!(stats.extension_errors, 1);
+    assert!(stats.lost() >= 1);
+
+    // A non-resident list whose runs fall short of its size (second extent missing).
+    let mut b = tree();
+    b.put(
+        9,
+        record(
+            1024,
+            1,
+            RECORD_IN_USE,
+            0,
+            &[
+                resident_attr(ATTR_STANDARD_INFORMATION, "", &standard_info(1, 0x20, 0)),
+                nonresident_attr(
+                    ATTR_ATTRIBUTE_LIST,
+                    "",
+                    0,
+                    1 << 20,
+                    1 << 20,
+                    &encode_runs(&[(1, Some(20))]),
+                ),
+            ],
+        ),
+    );
+    let img = b.build();
+    let (_, stats) = scan_image(&img, &b).unwrap();
+    assert!(stats.extension_errors >= 1, "{stats:?}");
 }
