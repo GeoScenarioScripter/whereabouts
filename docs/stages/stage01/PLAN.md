@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged except 2.7 (in review, PR #39) on 2026-10-27. Gate G2: go (2026-10-27). Next: wave 3.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Next: wave 3.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -83,7 +83,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 ### Watch points (shared files within a wave)
 
 - **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
-- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 — merged as each became ready; the only shared file was `Cargo.lock`, so the order made no difference. 2.7 is still in review.*
+- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 → 2.7 — merged as each became ready; the only shared files were `Cargo.lock` and (2.7) a small `ci.yml` change, so the order made no difference.*
 - **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`.
 - **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
 
@@ -223,7 +223,7 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
   - Call `NameIndex::compact()` when `needs_compaction()` after a batch (and treat `EntryId`s as invalid afterwards); on `IndexError::CapacityExceeded`, compact and retry or rescan.
   - Call `datasets::is_relevant_name` before listing directories; map `GroupDelta` to actions: `changed` and `modified` re-extract, `renamed` updates the catalog row only, `added` and `removed` insert and delete.
   - `indexer::extract` uses `crs::resolve` and `Transformer`; cache them per CRS definition hash (the EPSG table and parameter index are built once on first use; benchmark the table build).
-  - Decide the journal-creation policy for a volume with no journal (the source never creates one, D-31). Check whether 2.7 added a `RawMft` option to `SourceOptions` once it lands.
+  - Decide the journal-creation policy for a volume with no journal (the source never creates one, D-31). `SourceOptions::enumeration` now has `EnumerationMethod::RawMft` (D-43, strict: on `Error::Mft`/`MftIncomplete` discard the sink and fall back to the USN API); 4.3 decides which method the first index uses (Q-16).
   - Partial extents from `transform_bounds` are widened only along the box boundary; an interior domain hole is not flagged (#46).
   - Use the catalog's `datasets_with_member`, `find_datasets` and `pending_datasets`; consider skipping unchanged records on re-upsert (#47).
 - **4.1:** hide or mark name-index orphans (`path()` reports `Orphan`); load the snapshot at startup (about 1.1 s at 5M entries; startup-to-first-result is recorded); run queries on a **dedicated rayon pool**, not the global one; decide approximate totals or early exit for 1-character terms (25 ms at 5M, all per-hit work); path-mode search is optional and slow (76–190 ms at 5M, #48); need a batch variant of `datasets_with_member` (#47); build query boxes with `Wgs84Extent::from_west_south_east_north`.
@@ -303,7 +303,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 2.4 | crs-epsg-transform | #8 | ✅ done (2026-10-27, V2, PR #37; G2 go) | [note](sessions/2.4-crs-epsg-transform.md) |
 | 2.5 | catalog | #9 | ✅ done (2026-10-27, V1, PR #36) | [note](sessions/2.5-catalog.md) |
 | 2.6 | reader-shapefile | #10 | ✅ done (2026-10-27, V2, PR #33) | [note](sessions/2.6-reader-shapefile.md) |
-| 2.7 | ntfs-mft-reader (added at G1) | #31 | 🟡 in review (PR #39) | |
+| 2.7 | ntfs-mft-reader (added at G1) | #31 | ✅ done (2026-10-27, V3, PR #39; owner V4 on D: requested) | [note](sessions/2.7-ntfs-mft-reader.md) |
 | 3.1 | reader-geopackage | #11 | ⏳ planned | |
 | 3.2 | reader-geotiff | #12 | ⏳ planned | |
 | 3.3 | index-pipeline | #13 | ⏳ planned | |

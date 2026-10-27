@@ -53,6 +53,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-40 | CRS layer: EPSG table generated from `proj.db`, `proj4rs` without default features, native inverses, GIS axis order, Helmert-only shifts | Proposed |
 | D-41 | Catalog conventions: R*Tree row ids, exact f64 post-filter, CRS latest-write-wins, same-layer filters, `set_status` drops layers, `synchronous = NORMAL` | Proposed |
 | D-42 | Shapefile reader conventions: `.shx`-then-`.dbf` count, `.shp` decides record presence, corrupt `.dbf` is `partial`, `measure` meter, `encoding_rs`, limits | Proposed |
+| D-43 | Raw `$MFT` enumeration: same raw-record API, name rule, strict mode (`MftIncomplete` → USN fallback), torn retry, 1 MiB replay margin snapped to a record boundary, read caps | Proposed |
 
 ---
 
@@ -388,3 +389,18 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - All file access goes through `io::SourceFile`, which checks the path is a regular file before opening, validates offset and length before allocating, and charges the per-dataset budget (`ReadLimits::max_bytes`).
 - **Rationale:** GDAL opens the corrupt-`.dbf` corpus case as `ok`, so `partial` keeps the usable metadata without claiming perfection. Validating before allocating means untrusted lengths cannot cause large allocations (guardrail 5).
 - **Consequences:** 3.1 and 3.2 add one `READERS` line and one oracle `Adapter` line each, and reuse `SourceFile`, `measure` and `adapters::native`. `ReadLimits::time_budget` is not checked by this reader.
+
+## D-43 — Raw `$MFT` enumeration
+- **Status:** Proposed
+- **Context:** Session 2.7 was added at gate G1 after the owner's D: run (41 s, almost all inside `FSCTL_ENUM_USN_DATA`) ([note](stages/stage01/sessions/2.7-ntfs-mft-reader.md), Q-16). Verified at V3 on the CI runner's `C:`.
+- **Decision:**
+  - **Same raw-record API.** The reader yields 1.3's `RawRecord` (FRN with sequence number, parent, name, attributes), so `Source` and its consumers do not change. It is selected by the internal option `SourceOptions::enumeration` (`EnumerationMethod::{UsnApi (default), RawMft}`); it is not a recommendation. The reserved system records 0..=15 (except the root), the children of `$Extend` (except `$RmMetadata`) and `$RmMetadata\$Repair` are left out, as the USN API omits them.
+  - **Name rule:** the first `$FILE_NAME` in the Win32 or Win32+DOS namespace, else the first POSIX one. DOS-only names are never reported. Attributes are `$STANDARD_INFORMATION` masked to the low 16 bits plus the directory bit.
+  - **Strict mode:** if the scan cannot account for every in-use record (torn, malformed, not-`FILE` in-use slots, extension errors, truncated runlists), it returns `Error::MftIncomplete`. The caller discards what the sink received and falls back to the USN API. A record without a reportable name is counted but is not a loss.
+  - **Torn-record retry:** each torn record is read once more after the sequential pass.
+  - **Replay margin:** the raw checkpoint starts journal replay `raw_replay_margin` (default 1 MiB) before the position taken at the start, because `$MFT` pages may be unflushed. `FSCTL_READ_USN_JOURNAL` rejects a start USN that is not a record boundary, so the source walks the journal from `first_usn` and snaps to the last record at or before the target (any trouble falls back to `first_usn`, which only replays more).
+  - **No `$MFT` order guarantee:** files whose extension records come later are delivered after the pass; consumers must not rely on order.
+  - **Sizes and timestamps** can come from the same pass at no extra I/O (`$STANDARD_INFORMATION`, the unnamed `$DATA` header); the USN API gives neither. Input to stage02.
+  - **Read caps:** 4 MiB chunks, free chunks skipped through `$BITMAP`, at most 2^20 runs, 4096 extension records per file, `$ATTRIBUTE_LIST` up to 1 MiB, an extension cache of 128 MiB, deferred files capped at 64 MiB. `FILE_FLAG_NO_BUFFERING` and overlapped read-ahead were not adopted.
+- **Rationale:** On the CI runner raw reads take about 6 s cold and warm, against USN 36–62 s cold and 2.0–2.7 s warm; the record sets agree (1,355,125 identical, 17 raw-only metadata records). Strictness avoids a silently incomplete index; the margin covers metadata that is not yet on disk.
+- **Consequences:** Q-16 stays **Open** and is decided in 4.3 with the owner's D: numbers. The session proposes raw for the first (cold) index and USN for changes, with USN as the fallback. Not handled: `$BITMAP`/`$DATA` pieces in extension records, compressed or sparse `$MFT`, 4Kn hardware (#53), ReFS. Hard-link names are counted but not all reported (#52).

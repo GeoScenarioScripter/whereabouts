@@ -34,7 +34,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 |---|---|
 | `whereabouts-core` | Shared types (contracts summary at the top of `core/src/lib.rs`): identities `VolumeId`/`Frn`/`DatasetId`/`LayerId` (D-27), `FileRecord`/`FileName` (WTF-8, D-28), `Format`/`DatasetKind`, `Dataset`/`Member`, `Bounds`/`Wgs84Extent`, `CrsDefinition`/`ResolvedCrs`, `LayerMetadata`/`DatasetMetadata`, `DatasetRecord`/`LayerRecord`, `ExtractionStatus`, the `FormatReader` trait, errors |
 | `whereabouts-source` | `Source` trait, `SourceEvent` (Created/Deleted/Renamed/Modified), `Changes::{Batch, FullRescanRequired}`, opaque versioned `Checkpoint` (D-29) |
-| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL`; local NTFS drive letters only (D-31) |
+| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` (D-38), optional raw `$MFT` enumeration (`EnumerationMethod::RawMft`, D-43), VHD `testvol` helper; local NTFS drive letters only (D-31) |
 | `whereabouts-nameindex` | Compact in-memory filename index (struct-of-arrays, string pool plus folded pool, FRN map), upsert/tombstone/`compact()`, path reconstruction with orphan/cycle guards, substring/wildcard/extension/path search with a rayon scan (regex is out), checksummed snapshot v1 with an embedded `Checkpoint`; `synth` feature for synthetic volumes (D-37) |
 | `whereabouts-datasets` | Stateful per-volume `Grouper` over a `DirectoryView`: sidecar/folder rules, `full_scan`, `apply_batch` → `GroupDelta`, `is_relevant_name`; names only, no file contents (D-39) |
 | `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile and lone-DBF readers (D-42); GPKG and GeoTIFF arrive in wave 3; later full-geometry reads for previews |
@@ -53,7 +53,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 ### 3.1 Initial enumeration (per NTFS volume)
 1. Open the volume handle (`\\.\C:`) — requires elevation (hence the service).
-2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. Raw `$MFT` parsing is a later optimization (faster, gives sizes/timestamps in one pass, but must handle attribute lists, fixups, fragmented runs).
+2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. Which method is the default is Q-16 (decided in 4.3). It can also deliver sizes and timestamps from the same pass (stage02).
 3. Build the name index: store **(FRN, parent, name)**, not full paths; reconstruct paths on demand by walking parent links to the root.
 4. Feed candidate GIS files (by extension and by folder signature, e.g. `*.gdb` directories) to the dataset grouper.
 
