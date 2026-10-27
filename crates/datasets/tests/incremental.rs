@@ -421,6 +421,7 @@ fn random_batches_match_full_scan() {
         let mut g = scanned(&fx);
         let mut mirror: BTreeSet<DatasetId> = BTreeSet::new();
         for _batch in 0..25 {
+            let before = snapshot(&fx, &g);
             let mut evs = Vec::new();
             for _ in 0..1 + rng.next(4) {
                 let files: Vec<String> = all_files(&fx);
@@ -440,7 +441,7 @@ fn random_batches_match_full_scan() {
                     format!("{dir}/{name}")
                 };
                 let exists = files.contains(&path);
-                match rng.next(6) {
+                match rng.next(8) {
                     0 | 1 if !exists => {
                         // Directories created on the way are reported too (possibly after).
                         let before = all_dirs(&fx);
@@ -456,7 +457,7 @@ fn random_batches_match_full_scan() {
                     3 if !files.is_empty() && !exists => {
                         let from = files[rng.next(files.len())].clone();
                         let before = all_dirs(&fx);
-                        evs.push(fx.rename(&from, &path));
+                        evs.push(unpair(&mut rng, fx.rename(&from, &path)));
                         for d in all_dirs(&fx).difference(&before) {
                             evs.push(SourceEvent::Created(fx.record(d)));
                         }
@@ -474,8 +475,50 @@ fn random_batches_match_full_scan() {
                                 None => format!("{d}.gdb"),
                             };
                             if !all_dirs(&fx).contains(&to) && !files.contains(&to) {
-                                evs.push(fx.rename(&format!("{d}/"), &format!("{to}/")));
+                                evs.push(unpair(
+                                    &mut rng,
+                                    fx.rename(&format!("{d}/"), &format!("{to}/")),
+                                ));
                             }
+                        }
+                    }
+                    6 => {
+                        // Move a directory (with everything below it) under another parent.
+                        let dirs: Vec<String> = all_dirs(&fx).into_iter().collect();
+                        if let Some(d) = dirs.get(rng.next(dirs.len())).cloned() {
+                            let mut parents: Vec<String> = vec![String::new()];
+                            parents.extend(dirs.iter().cloned());
+                            let np = parents[rng.next(parents.len())].clone();
+                            let base = d.rsplit('/').next().unwrap_or(&d).to_string();
+                            let to = if np.is_empty() {
+                                base
+                            } else {
+                                format!("{np}/{base}")
+                            };
+                            let inside = np == d || np.starts_with(&format!("{d}/"));
+                            if !inside && !all_dirs(&fx).contains(&to) && !files.contains(&to) {
+                                evs.push(unpair(
+                                    &mut rng,
+                                    fx.rename(&format!("{d}/"), &format!("{to}/")),
+                                ));
+                            }
+                        }
+                    }
+                    7 => {
+                        // Delete a directory the way NTFS requires: contents first.
+                        let dirs: Vec<String> = all_dirs(&fx).into_iter().collect();
+                        if let Some(d) = dirs.get(rng.next(dirs.len())).cloned() {
+                            let prefix = format!("{d}/");
+                            for f in files.iter().filter(|f| f.starts_with(&prefix)) {
+                                evs.push(fx.delete(f));
+                            }
+                            let mut sub: Vec<&String> =
+                                dirs.iter().filter(|x| x.starts_with(&prefix)).collect();
+                            sub.sort_by_key(|x| std::cmp::Reverse(x.len()));
+                            for s in sub {
+                                evs.push(fx.delete(&format!("{s}/")));
+                            }
+                            evs.push(fx.delete(&format!("{d}/")));
                         }
                     }
                     _ => {}
@@ -486,6 +529,7 @@ fn random_batches_match_full_scan() {
                 evs.swap(i, rng.next(i + 1));
             }
             let d = g.apply_batch(&fx.tree, &evs);
+            check_delta(&fx, &before, &g, &d, seed, &evs);
             assert_eq!(
                 fx.describe_all(&g),
                 fx.describe_all(&fx.scan()),
@@ -540,4 +584,107 @@ fn walk(fx: &Fx, dir: Frn, f: &mut dyn FnMut(String, bool)) {
             walk(fx, frn, f);
         }
     }
+}
+
+/// Delivers a rename as `Created` a third of the time (an unpaired rename, as the USN source
+/// does when it only sees the new name).
+fn unpair(rng: &mut Lcg, ev: SourceEvent) -> SourceEvent {
+    match ev {
+        SourceEvent::Renamed { record, .. } if rng.next(3) == 0 => SourceEvent::Created(record),
+        other => other,
+    }
+}
+
+type Snapshot = std::collections::BTreeMap<DatasetId, (whereabouts_core::Dataset, String)>;
+
+/// Every dataset with the path of its anchor.
+fn snapshot(fx: &Fx, g: &Grouper) -> Snapshot {
+    g.datasets()
+        .map(|d| (d.id(), (d.clone(), fx.path_of(d.anchor()))))
+        .collect()
+}
+
+/// The delta must tell the caller everything it needs: every dataset whose members changed is
+/// dirty, every dataset whose path changed is `renamed`, dirty, or under a moved directory.
+fn check_delta(
+    fx: &Fx,
+    before: &Snapshot,
+    g: &Grouper,
+    d: &GroupDelta,
+    seed: u64,
+    evs: &[SourceEvent],
+) {
+    let dirty: BTreeSet<DatasetId> = d.dirty().collect();
+    for (id, (old, old_path)) in before {
+        let Some(new) = g.dataset(*id) else { continue };
+        let new_path = fx.path_of(new.anchor());
+        if old != new {
+            assert!(
+                dirty.contains(id),
+                "seed {seed}: {id} membership changed but is not dirty; {evs:#?}"
+            );
+        } else if *old_path != new_path {
+            let mut under_moved = false;
+            let mut cur = fx.tree.entry(new.anchor()).map(|e| e.parent);
+            for _ in 0..64 {
+                let Some(dir) = cur else { break };
+                if d.moved_dirs.contains(&dir) {
+                    under_moved = true;
+                }
+                cur = (dir != ROOT)
+                    .then(|| fx.tree.entry(dir).map(|e| e.parent))
+                    .flatten();
+            }
+            assert!(
+                d.renamed.contains(id) || dirty.contains(id) || under_moved,
+                "seed {seed}: {id} moved {old_path} -> {new_path} unreported; {evs:#?}"
+            );
+        }
+    }
+}
+
+/// A directory holding only nested datasets, moved: delivered as `Renamed` or as an unpaired
+/// `Created`, the move is reported and every dataset below is found through the delta.
+#[test]
+fn moving_a_directory_that_only_holds_nested_datasets() {
+    for unpaired in [false, true] {
+        let mut fx = Fx::with(&["z/p/q/a.shp", "z/p/q/a.dbf", "z/p/r/b.tif", "dest/"]);
+        let mut g = scanned(&fx);
+        let (a, b) = (id(&fx, "z/p/q/a.shp"), id(&fx, "z/p/r/b.tif"));
+        let z = fx.frn("z");
+        let ev = fx.rename("z/", "dest/z/");
+        let ev = match ev {
+            SourceEvent::Renamed { record, .. } if unpaired => SourceEvent::Created(record),
+            other => other,
+        };
+        let d = apply(&fx, &mut g, &[ev]);
+        assert_eq!(d.moved_dirs, [z], "unpaired={unpaired}");
+        assert!(d.dirty().count() == 0 && d.removed.is_empty());
+        let mut under = vec![a, b];
+        under.sort();
+        assert_eq!(g.datasets_under(&fx.tree, z), under);
+        // A repeated Created for the same place is an idempotent upsert, not a move.
+        let again = SourceEvent::Created(fx.record("dest/z"));
+        assert!(apply(&fx, &mut g, &[again]).is_empty());
+    }
+}
+
+/// A directory's `Deleted` removes datasets in nested directories even if their files' own
+/// events are missing from the batch.
+#[test]
+fn deleted_directory_drops_nested_datasets() {
+    let fx = Fx::with(&["d/e/f/a.shp", "d/e/b.tif", "d/c.gpkg", "keep/k.gpkg"]);
+    let mut g = scanned(&fx);
+    let gone = [
+        id(&fx, "d/e/f/a.shp"),
+        id(&fx, "d/e/b.tif"),
+        id(&fx, "d/c.gpkg"),
+    ];
+    let keep = id(&fx, "keep/k.gpkg");
+    let rec = fx.record("d");
+    let d = g.apply_batch(&fx.tree, &[SourceEvent::Deleted(rec)]);
+    let mut want = gone.to_vec();
+    want.sort();
+    assert_eq!(d.removed, want);
+    assert_eq!(g.datasets().map(|x| x.id()).collect::<Vec<_>>(), [keep]);
 }

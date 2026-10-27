@@ -123,6 +123,11 @@ const CASES: &[Case] = &[
         &["gtiff c.tif [other:c.tif.vat.cpg, other:c.tif.vat.dbf]"],
     ),
     (
+        "orphan raster attribute table is not a standalone table",
+        &["c.tif.vat.dbf", "C.TIF.VAT.CPG", "d.vat.dbf"],
+        &[],
+    ),
+    (
         "erdas aux and rrd",
         &["e.tif", "e.aux", "e.tif.aux", "e.rrd"],
         &["gtiff e.tif [other:e.aux, other:e.rrd, other:e.tif.aux]"],

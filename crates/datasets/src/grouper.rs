@@ -53,6 +53,9 @@ impl GroupDelta {
     }
 }
 
+/// Directory FRN to (parent, name as WTF-8).
+type DirIndex = HashMap<Frn, (Frn, Box<[u8]>)>;
+
 /// A dataset with the directory that produced it and its anchor's location.
 #[derive(Debug, Clone)]
 struct Stored {
@@ -108,6 +111,9 @@ pub struct Grouper {
     units: HashMap<Frn, Vec<Frn>>,
     /// Member FRN (anchor included) → anchors of the datasets it belongs to.
     members: HashMap<Frn, Owners>,
+    /// Every directory known from the last scan and the events since: FRN → (parent, name).
+    /// Detects moves delivered as `Created` and finds subtrees of deleted directories.
+    dirs: DirIndex,
 }
 
 impl Grouper {
@@ -118,6 +124,7 @@ impl Grouper {
             datasets: HashMap::new(),
             units: HashMap::new(),
             members: HashMap::new(),
+            dirs: HashMap::new(),
         }
     }
 
@@ -171,6 +178,7 @@ impl Grouper {
     /// paths after [`GroupDelta::moved_dirs`]. Walks the view; cycles are guarded.
     pub fn datasets_under<V: DirectoryView + ?Sized>(&self, view: &V, dir: Frn) -> Vec<DatasetId> {
         let mut out: Vec<DatasetId> = walk(view, dir)
+            .0
             .iter()
             .flat_map(|d| self.datasets_in(*d))
             .collect();
@@ -182,7 +190,9 @@ impl Grouper {
     /// new datasets are `added`, vanished ones `removed`, and so on. The first scan reports
     /// every dataset as `added`.
     pub fn full_scan<V: DirectoryView + ?Sized>(&mut self, view: &V, root: Frn) -> GroupDelta {
-        let units: BTreeSet<Frn> = walk(view, root).into_iter().collect();
+        let (order, dirs) = walk(view, root);
+        self.dirs = dirs;
+        let units: BTreeSet<Frn> = order.into_iter().collect();
         let dropped = self
             .units
             .keys()
@@ -214,8 +224,10 @@ impl Grouper {
     ///   regroups the parent if a relevant file is not known yet: a missed `Created`);
     /// - directories: `Created`/`Renamed` regroup the directory itself (its name decides
     ///   whether it is a `.gdb`, and its children may have arrived first); `Renamed` also
-    ///   reports it in `moved_dirs`, as does a `Created` for a directory that already holds
-    ///   datasets (an unpaired rename); `Deleted` drops its datasets; `Modified` is ignored.
+    ///   reports it in `moved_dirs`, as does a `Created` for a known directory whose parent
+    ///   or name changed (an unpaired rename); `Deleted` drops the datasets of the directory
+    ///   and of its whole subtree (known directories), so children need not be deleted
+    ///   first; `Modified` is ignored.
     pub fn apply_batch<V: DirectoryView + ?Sized>(
         &mut self,
         view: &V,
@@ -225,24 +237,50 @@ impl Grouper {
         let mut dropped = BTreeSet::new();
         let mut moved_dirs = BTreeSet::new();
         let mut touched = Vec::new();
+        // Directory bookkeeping first, so subtree deletion sees the final parents.
+        let mut deleted_dirs = Vec::new();
+        for event in events {
+            let rec = event.record();
+            if !rec.is_dir() {
+                continue;
+            }
+            match event {
+                SourceEvent::Deleted(_) => deleted_dirs.push(rec.frn),
+                SourceEvent::Renamed { .. } | SourceEvent::Created(_) => {
+                    let now = (rec.parent, rec.name.as_wtf8().to_vec().into_boxed_slice());
+                    let prev = self.dirs.insert(rec.frn, now.clone());
+                    if matches!(event, SourceEvent::Renamed { .. })
+                        || prev.is_some_and(|p| p != now)
+                    {
+                        moved_dirs.insert(rec.frn);
+                    }
+                }
+                SourceEvent::Modified(_) => {}
+            }
+        }
+        // A deleted directory takes its whole subtree with it, whatever order the per-file
+        // deletions arrive in.
+        if !deleted_dirs.is_empty() {
+            let mut children: HashMap<Frn, Vec<Frn>> = HashMap::new();
+            for (&d, (p, _)) in &self.dirs {
+                children.entry(*p).or_default().push(d);
+            }
+            let mut stack = deleted_dirs;
+            while let Some(d) = stack.pop() {
+                if !dropped.insert(d) {
+                    continue;
+                }
+                self.dirs.remove(&d);
+                if let Some(kids) = children.get(&d) {
+                    stack.extend(kids.iter().copied().filter(|k| *k != d));
+                }
+            }
+        }
         for event in events {
             let rec = event.record();
             if rec.is_dir() {
-                match event {
-                    SourceEvent::Deleted(_) => {
-                        dropped.insert(rec.frn);
-                    }
-                    SourceEvent::Renamed { .. } => {
-                        units.insert(rec.frn);
-                        moved_dirs.insert(rec.frn);
-                    }
-                    SourceEvent::Created(_) => {
-                        units.insert(rec.frn);
-                        if self.units.contains_key(&rec.frn) {
-                            moved_dirs.insert(rec.frn);
-                        }
-                    }
-                    SourceEvent::Modified(_) => {}
+                if matches!(event, SourceEvent::Renamed { .. } | SourceEvent::Created(_)) {
+                    units.insert(rec.frn);
                 }
                 continue;
             }
@@ -278,6 +316,7 @@ impl Grouper {
         }
         // Delete wins: a deleted directory is not regrouped even if other events point at it.
         units.retain(|u| !dropped.contains(u));
+        moved_dirs.retain(|d| !dropped.contains(d));
         self.regroup(view, units, dropped, &touched, moved_dirs)
     }
 
@@ -425,18 +464,21 @@ impl Grouper {
     }
 }
 
-/// Directories reachable from `root` (included), breadth first, each once.
-fn walk<V: DirectoryView + ?Sized>(view: &V, root: Frn) -> Vec<Frn> {
+/// Directories reachable from `root` (included), breadth first, each once, plus a
+/// directory → (parent, name) index of them.
+fn walk<V: DirectoryView + ?Sized>(view: &V, root: Frn) -> (Vec<Frn>, DirIndex) {
     let mut seen = HashSet::from([root]);
     let mut order = vec![root];
+    let mut dirs = HashMap::from([(root, (root, Box::<[u8]>::default()))]);
     let mut queue = VecDeque::from([root]);
     while let Some(dir) = queue.pop_front() {
         view.for_each_child(dir, &mut |e| {
             if e.is_dir && e.frn != dir && seen.insert(e.frn) {
                 order.push(e.frn);
+                dirs.insert(e.frn, (dir, e.name.to_vec().into_boxed_slice()));
                 queue.push_back(e.frn);
             }
         });
     }
-    order
+    (order, dirs)
 }

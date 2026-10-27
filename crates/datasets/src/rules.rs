@@ -451,6 +451,10 @@ impl Listing<'_> {
             if extension(&file.key) != Some(b"DBF") || claimed.get(i).copied().unwrap_or(true) {
                 continue;
             }
+            // `x.tif.vat.dbf` is a raster value-attribute table: never a standalone table.
+            if file.key.ends_with(b".VAT.DBF") {
+                continue;
+            }
             let (Some(stem_key), Some(stem)) = (strip(&file.key, 4), strip(&file.name, 4)) else {
                 continue;
             };
