@@ -7,7 +7,8 @@
 //! (synthetic average: ~24 bytes per name).
 //! Record numbers are dense and ascending (like MFT enumeration order); sequence numbers vary.
 //!
-//! Not part of the production API: it exists so benchmarks (here and in stage01/4.3) and
+//! Behind the `synth` feature (dev-dependencies only). Not part of the production API: it exists
+//! so benchmarks (here and in stage01/4.3) and
 //! property tests share one realistic, reproducible name distribution.
 
 use whereabouts_core::{FileAttributes, FileName, FileRecord, Frn};

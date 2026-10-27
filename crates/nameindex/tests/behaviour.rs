@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use whereabouts_core::{FileAttributes, FileName, FileRecord, Frn};
 use whereabouts_nameindex::{
-    EntryId, IndexError, KindFilter, MAX_NAME_BYTES, NameIndex, PathError, Query, synth,
+    EntryId, IndexError, KindFilter, MAX_NAME_BYTES, MatchMode, NameIndex, PathError, Query, synth,
 };
 use whereabouts_source::SourceEvent;
 
@@ -154,6 +154,47 @@ fn deep_chains_hit_the_depth_limit() {
     }
     assert!(path(&index, f(100 + 16_000)).is_ok());
     assert_eq!(path(&index, f(100 + 19_999)), Err(PathError::Cycle));
+    // Path-mode search agrees with `path()`: exactly the entries at depth ≤ MAX_DEPTH (the first
+    // 16,384 of the chain) can match, whichever chunk happens to evaluate a deep entry first.
+    let max = whereabouts_nameindex::MAX_DEPTH as u64;
+    assert!(path(&index, f(100 + max - 1)).is_ok());
+    assert_eq!(path(&index, f(100 + max)), Err(PathError::Cycle));
+    let within: BTreeSet<Frn> = (0..max).map(|n| f(100 + n)).collect();
+    for (q, skip_top) in [
+        (Query::substring("d").in_path(true), false),
+        (Query::substring("d\\d").in_path(true), true), // `\d` itself has no `d\d`
+        (Query::substring("").in_path(true), false),
+        (Query::wildcard("*d").in_path(true), false),
+    ] {
+        let mut want = within.clone();
+        if skip_top {
+            want.remove(&f(100));
+        }
+        // Wildcards build every candidate's full path (quadratic on this chain): run them once.
+        let runs = if q.mode == MatchMode::Wildcard { 1 } else { 3 };
+        for _ in 0..runs {
+            let got = index.search(&q);
+            let frns: BTreeSet<Frn> = got.hits.iter().map(|&h| index.frn(h).unwrap()).collect();
+            assert_eq!(got.total, want.len(), "{q:?}");
+            assert_eq!(frns, want, "{q:?}");
+        }
+    }
+    // Evaluating the deepest entry first (a lone chain hanging below the limit) gives the same.
+    // Children are inserted before their parents, so the deepest entry has the lowest index.
+    let mut deep_first = NameIndex::new(ROOT);
+    for n in (0..20_000_u64).rev() {
+        let parent = if n == 0 { ROOT } else { f(100_000 + n - 1) };
+        deep_first
+            .insert(&rec(f(100_000 + n), parent, "d", true))
+            .unwrap();
+    }
+    assert_eq!(deep_first.stats().unresolved, 0);
+    assert_eq!(
+        deep_first
+            .search(&Query::substring("d").in_path(true))
+            .total,
+        whereabouts_nameindex::MAX_DEPTH
+    );
 }
 
 #[test]

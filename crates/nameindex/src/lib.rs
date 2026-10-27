@@ -41,6 +41,7 @@ mod frnmap;
 mod index;
 mod search;
 mod snapshot;
+#[cfg(feature = "synth")]
 pub mod synth;
 
 pub use error::{IndexError, PathError, SnapshotError};

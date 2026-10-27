@@ -16,7 +16,7 @@
 //! `total` always counts every match even when `limit` truncates `hits`.
 
 use std::ops::Range;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use memchr::memmem::Finder;
 use rayon::prelude::*;
@@ -213,11 +213,18 @@ impl Hits {
     }
 }
 
-// Path-mode memo states.
-const UNKNOWN: u8 = 0;
-const MATCH: u8 = 1;
-const NO_MATCH: u8 = 2;
-const UNREACHABLE: u8 = 3;
+// Path-mode memo, one `u32` per entry: `((depth − 1) << 2) | state`, where depth = number of path
+// components (1 for a child of the root; the root itself is never stored). Depth is at most
+// `MAX_DEPTH` = 2^14, so `depth − 1` fits the 14 high bits. `UNKNOWN` (0) means not computed yet
+// (every stored state is non-zero); `UNREACHABLE` covers orphans, cycles and entries deeper than
+// `MAX_DEPTH` — exactly the entries for which `NameIndex::path` fails.
+const UNKNOWN: u32 = 0;
+const MATCH: u32 = 1;
+const NO_MATCH: u32 = 2;
+const UNREACHABLE: u32 = 3;
+const STATE_BITS: u32 = 2;
+const STATE_MASK: u32 = 0b11;
+const _: () = assert!((MAX_DEPTH - 1) < (1 << (32 - STATE_BITS)));
 
 /// Per-query path-mode state shared by all chunks.
 struct PathScan<'a> {
@@ -225,7 +232,7 @@ struct PathScan<'a> {
     finder: Option<Finder<'a>>,
     /// The needle contains a separator, so a match may span path components.
     spans: bool,
-    memo: Vec<AtomicU8>,
+    memo: Vec<AtomicU32>,
 }
 
 /// Per-thread scratch buffers for path mode.
@@ -359,7 +366,7 @@ impl NameIndex {
             finder: (!needle.is_empty()).then(|| Finder::new(needle)),
             spans: needle.contains(&SEPARATOR),
             memo: (0..self.frn.len())
-                .map(|_| AtomicU8::new(UNKNOWN))
+                .map(|_| AtomicU32::new(UNKNOWN))
                 .collect(),
         };
         let ranges = chunk_ranges(1, self.frn.len());
@@ -387,41 +394,71 @@ impl NameIndex {
     }
 
     /// Memoised "does the folded path of `x` contain the needle" (`x` live, non-root).
-    fn path_state(&self, scan: &PathScan<'_>, x: u32, bufs: &mut PathBufs) -> u8 {
-        let state = |i: u32| {
+    ///
+    /// Walks up to the root, a memoised ancestor or a broken link, recording the chain, then
+    /// assigns every chain entry its exact depth on the way back down, so an entry deeper than
+    /// [`MAX_DEPTH`] is `UNREACHABLE` no matter which entry was evaluated first (this keeps path
+    /// mode in agreement with `NameIndex::path`). Cycles are detected with Brent's algorithm, so
+    /// the walk needs no depth cap; a length cap at the slot count is kept as a backstop.
+    fn path_state(&self, scan: &PathScan<'_>, x: u32, bufs: &mut PathBufs) -> u32 {
+        let load = |i: u32| {
             scan.memo
                 .get(i as usize)
                 .map_or(UNREACHABLE, |m| m.load(Ordering::Relaxed))
         };
         bufs.chain.clear();
         let mut cur = x;
-        let base = loop {
+        let (mut mark, mut power, mut steps) = (x, 1_usize, 0_usize);
+        // (state, depth) of the node above the chain.
+        let (base, base_depth) = loop {
             if cur == 0 {
-                break NO_MATCH;
+                break (NO_MATCH, 0);
             }
-            let s = state(cur);
-            if s != UNKNOWN {
-                break s;
+            let v = load(cur);
+            if v != UNKNOWN {
+                break (v & STATE_MASK, v >> STATE_BITS);
             }
-            if bufs.chain.len() >= MAX_DEPTH {
-                break UNREACHABLE;
+            if bufs.chain.len() > self.frn.len() {
+                break (UNREACHABLE, 0);
             }
             bufs.chain.push(cur);
-            match self.link(cur) {
-                Link::Entry(p) => cur = p,
-                Link::Broken => break UNREACHABLE,
+            let next = match self.link(cur) {
+                Link::Entry(p) => p,
+                Link::Broken => break (UNREACHABLE, 0),
+            };
+            if next == mark {
+                break (UNREACHABLE, 0); // cycle
             }
+            steps += 1;
+            if steps == power {
+                mark = next;
+                power *= 2;
+                steps = 0;
+            }
+            cur = next;
         };
-        let mut st = base;
+        let (mut st, mut depth) = (base, base_depth as usize);
         let chain = std::mem::take(&mut bufs.chain);
         for &e in chain.iter().rev() {
+            if st != UNREACHABLE {
+                depth += 1;
+                if depth > MAX_DEPTH {
+                    st = UNREACHABLE;
+                }
+            }
             st = match st {
                 UNREACHABLE | MATCH => st,
                 _ if self.window_matches(scan, e, bufs) => MATCH,
                 _ => NO_MATCH,
             };
+            let packed = if st == UNREACHABLE {
+                UNREACHABLE
+            } else {
+                // depth ≤ MAX_DEPTH (16,384), so the shift cannot overflow.
+                ((depth as u32) << STATE_BITS) | st
+            };
             if let Some(m) = scan.memo.get(e as usize) {
-                m.store(st, Ordering::Relaxed);
+                m.store(packed, Ordering::Relaxed);
             }
         }
         bufs.chain = chain;

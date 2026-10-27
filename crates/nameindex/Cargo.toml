@@ -12,6 +12,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Exposes `synth` (deterministic synthetic volumes) for tests and benchmarks, here and in other
+# crates (e.g. stage01/4.3). Enable only from `[dev-dependencies]`; not part of the production API.
+synth = []
+
 [dependencies]
 whereabouts-core.workspace = true
 whereabouts-source.workspace = true
@@ -21,6 +26,8 @@ rayon.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# Self dev-dependency: turns on `synth` for this crate's tests, benches and examples only.
+whereabouts-nameindex = { path = ".", features = ["synth"] }
 # `test-fixtures` exposes `record::build` (synthetic USN enumeration buffers) for the #26
 # ingestion benchmark. Pure code: builds and runs on Linux.
 whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }

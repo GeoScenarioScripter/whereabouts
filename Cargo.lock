@@ -959,6 +959,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "whereabouts-core",
+ "whereabouts-nameindex",
  "whereabouts-ntfs",
  "whereabouts-source",
 ]
