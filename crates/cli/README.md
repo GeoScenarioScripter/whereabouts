@@ -11,7 +11,8 @@ whereabouts query roads --db catalog.db --format shp --epsg 4326 --bbox 170,-20,
 volume access or elevation. Query reads the catalog and `<db>.names`; it does not
 refresh the index. Run `index` again to pick up changes. A snapshot with a missing,
 corrupt, ambiguous, or mismatched checkpoint fails with a diagnostic rather than
-mixing states. If the source checkpoint advances while a query runs, retry after it catches up.
+mixing states. Checkpoint selection, filters, and result records share one catalog read snapshot,
+so concurrent source updates and metadata-only retries cannot mix database states within a query.
 For a catalog with multiple sources, provide each source's distinct `--snapshot`
 and, if checkpoint matching is ambiguous, `--volume-id` (the catalog's numeric ID).
 
@@ -28,7 +29,8 @@ match the same layer; west greater than east crosses the antimeridian.
 Inspect groups a path with its siblings and extracts through the same native
 reader/CRS pipeline as indexing. A member path can resolve to multiple datasets
 (for example a shared `.prj`). Paths directly inside a recognized `.gdb` resolve to that folder dataset.
-Directory discovery is capped at 100,000 entries and does not recurse or traverse symlinks;
+The requested path is canonicalized; directory discovery is capped at 100,000 entries,
+does not recurse, and skips symlink entries;
 readers retain their normal byte/time budgets. No index, catalog, or transaction
 sidecars are created. Inspect JSON IDs are temporary grouping IDs (volume 0),
 not catalog identities. A malformed dataset is reported with an `error` status;
@@ -48,3 +50,9 @@ cargo test --release -p whereabouts-cli --test startup -- --ignored --nocapture
 This measures 1,000,010 names, five catalog datasets (one orphan hidden), ten
 runs per term and the time to the first **dataset row**, excluding the header.
 It is a warm-cache process startup measurement, not real-volume indexing evidence.
+
+To measure candidate-dataset scaling separately (10,000 and 100,000 one-layer datasets):
+
+```console
+cargo test --release -p whereabouts-cli --test startup query_at_gis_scale -- --ignored --nocapture
+```

@@ -9,6 +9,82 @@ use std::{
 };
 
 #[test]
+#[ignore = "measurement: cargo test --release -p whereabouts-cli --test startup query_at_gis_scale -- --ignored --nocapture"]
+fn query_at_gis_scale() {
+    use whereabouts_core::*;
+    use whereabouts_source::SourceIdentity;
+    for count in [10_000_u64, 100_000] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut catalog = whereabouts_catalog::Catalog::open(dir.path().join("gis.db")).unwrap();
+        let mut names = whereabouts_nameindex::NameIndex::new(Frn(1));
+        let volume = catalog
+            .write(|tx| {
+                let volume = tx.register_volume(&SourceIdentity {
+                    kind: "synthetic".into(),
+                    key: "gis-scale".into(),
+                    label: "offline".into(),
+                })?;
+                for i in 0..count {
+                    let name = format!("road_{i:06}");
+                    let frn = i + 10;
+                    common::add(&mut names, frn, 1, &format!("{name}.shp"));
+                    tx.upsert_dataset(&DatasetRecord {
+                        dataset: Dataset::new(
+                            DatasetId::new(volume, Frn(frn)),
+                            DatasetKind::Vector,
+                            Format::Shapefile,
+                            vec![Member {
+                                frn: Frn(frn),
+                                role: MemberRole::Main,
+                            }],
+                        )
+                        .unwrap(),
+                        name: name.clone(),
+                        primary_path: format!("offline/{name}.shp"),
+                        total_size: None,
+                        mtime: Some(Timestamp(i as i64)),
+                        status: ExtractionStatus::Ok,
+                        extracted_at: Some(Timestamp(1)),
+                        layers: vec![common::layer(4326, 10., 20.)],
+                    })?;
+                }
+                Ok(volume)
+            })
+            .unwrap();
+        let engine = whereabouts_query::QueryEngine::new(0).unwrap();
+        for term in ["road_000001", "road_000", "road", ""] {
+            if std::env::var("WHEREABOUTS_BENCH_TERM").is_ok_and(|selected| selected != term) {
+                continue;
+            }
+            let mut times = Vec::new();
+            let request = whereabouts_query::Request {
+                text: term.into(),
+                limit: 100,
+                ..Default::default()
+            };
+            // Warm the SQLite/name-index caches once before the five timed calls.
+            assert!(
+                !engine
+                    .search(&names, &catalog, volume, &request)
+                    .unwrap()
+                    .is_empty()
+            );
+            for _ in 0..5 {
+                let start = Instant::now();
+                let rows = engine.search(&names, &catalog, volume, &request).unwrap();
+                times.push(start.elapsed().as_secs_f64() * 1000.);
+                assert_eq!(rows.len(), if term == "road_000001" { 1 } else { 100 });
+            }
+            times.sort_by(f64::total_cmp);
+            eprintln!(
+                "[query-gis-scale] datasets={count}, names={count}, one layer/dataset, term={term:?}, limit=100, n=5, warm reused query p50/max-of-five={:.3}/{:.3} ms",
+                times[2], times[4]
+            );
+        }
+    }
+}
+
+#[test]
 #[ignore = "measurement: cargo test --release -p whereabouts-cli --test startup -- --ignored --nocapture"]
 fn startup_to_first_dataset() {
     let dir = tempfile::tempdir().unwrap();

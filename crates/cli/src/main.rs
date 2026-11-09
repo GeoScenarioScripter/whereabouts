@@ -156,6 +156,7 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
         .checkpoint
         .as_ref()
         .context("snapshot has no checkpoint; run index first")?;
+    let records = catalog.read_snapshot(|catalog| -> anyhow::Result<_> {
     let mut volumes = Vec::new();
     for volume in catalog.volumes()? {
         if args.volume_id.is_some_and(|id| id != volume.id.0) {
@@ -174,7 +175,7 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
     let engine = QueryEngine::new(0)?;
     let records = engine.search(
         &snapshot.index,
-        &catalog,
+        catalog,
         volume,
         &Request {
             text: args.text,
@@ -184,10 +185,8 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
             limit: args.limit,
         },
     )?;
-    ensure!(
-        catalog.checkpoint(volume)?.as_ref() == Some(checkpoint),
-        "catalog changed during query; retry after indexing catches up"
-    );
+    Ok(records)
+    })?;
     output(&records, args.json)
 }
 

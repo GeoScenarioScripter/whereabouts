@@ -146,6 +146,112 @@ fn upsert(cat: &mut Catalog, rec: &DatasetRecord) {
     cat.write(|tx| tx.upsert_dataset(rec)).unwrap();
 }
 
+#[test]
+fn ranking_summaries_are_volume_scoped_and_do_not_hydrate_layers() {
+    let mut db = db();
+    let a = volume(&mut db.cat, "summary-a");
+    let b = volume(&mut db.cat, "summary-b");
+    let record = shapefile(a, 10, vector_layer("layer", 4326, wsen(1., 2., 3., 4.)));
+    upsert(&mut db.cat, &record);
+    upsert(&mut db.cat, &pending(b, 10, Format::GeoTiff, 2));
+    let raw = rusqlite::Connection::open(&db.path).unwrap();
+    raw.execute("UPDATE layers SET fields_json = 'invalid JSON'", [])
+        .unwrap();
+    let expected = whereabouts_catalog::DatasetSummary {
+        id: record.dataset.id(),
+        name: record.name.clone(),
+        mtime: record.mtime,
+        members: record
+            .dataset
+            .members()
+            .iter()
+            .map(|member| member.frn)
+            .collect(),
+    };
+    assert_eq!(
+        db.cat.dataset_summary(expected.id).unwrap(),
+        Some(expected.clone())
+    );
+    assert_eq!(db.cat.dataset_summaries(a).unwrap(), vec![expected]);
+    assert_eq!(db.cat.dataset_summaries(b).unwrap().len(), 1);
+    assert!(
+        db.cat
+            .dataset_summary(DatasetId::new(a, Frn(999)))
+            .unwrap()
+            .is_none()
+    );
+    assert!(db.cat.get_dataset(record.dataset.id()).is_err());
+}
+
+#[test]
+fn read_snapshot_retains_metadata_across_same_checkpoint_commits() {
+    let mut db = db();
+    let volume = volume(&mut db.cat, "snapshot");
+    let checkpoint = Checkpoint::new(1, b"unchanged".to_vec()).unwrap();
+    let old = shapefile(volume, 10, vector_layer("old", 4326, wsen(1., 2., 3., 4.)));
+    db.cat
+        .write(|tx| {
+            tx.upsert_dataset(&old)?;
+            tx.set_checkpoint(volume, &checkpoint)
+        })
+        .unwrap();
+    let view = Catalog::open_read_only(&db.path).unwrap();
+    let mut new = old.clone();
+    new.layers = vec![vector_layer("new", 3857, wsen(20., 30., 40., 50.))];
+    let filter = DatasetFilter {
+        epsg: Some(4326),
+        bbox: Some(wsen(1., 2., 3., 4.)),
+        ..Default::default()
+    };
+    view.read_snapshot(|view| -> whereabouts_catalog::Result<()> {
+        assert_eq!(view.find_datasets(&filter)?, vec![old.dataset.id()]);
+        upsert(&mut db.cat, &new);
+        assert_eq!(view.checkpoint(volume)?, Some(checkpoint.clone()));
+        view.read_snapshot(|nested| -> whereabouts_catalog::Result<()> {
+            assert_eq!(nested.get_dataset(old.dataset.id())?, Some(old.clone()));
+            Ok(())
+        })?;
+        // Leaving the nested closure must not release the outer read view.
+        assert_eq!(view.get_dataset(old.dataset.id())?, Some(old.clone()));
+        Ok(())
+    })
+    .unwrap();
+    assert!(view.find_datasets(&filter).unwrap().is_empty());
+    assert_eq!(view.get_dataset(new.dataset.id()).unwrap(), Some(new));
+    assert_eq!(view.checkpoint(volume).unwrap(), Some(checkpoint));
+}
+
+#[test]
+fn read_snapshot_releases_its_view_on_error_and_panic() {
+    let mut db = db();
+    let volume = volume(&mut db.cat, "cleanup");
+    let mut record = pending(volume, 10, Format::GeoTiff, 1);
+    upsert(&mut db.cat, &record);
+    let view = Catalog::open_read_only(&db.path).unwrap();
+    let result = view.read_snapshot(|view| -> whereabouts_catalog::Result<()> {
+        assert_eq!(view.get_dataset(record.dataset.id())?, Some(record.clone()));
+        record.name = "after error".into();
+        upsert(&mut db.cat, &record);
+        Err(CatalogError::OutOfRange("test closure error".into()))
+    });
+    assert!(matches!(result, Err(CatalogError::OutOfRange(_))));
+    assert_eq!(
+        view.get_dataset(record.dataset.id()).unwrap(),
+        Some(record.clone())
+    );
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        view.read_snapshot(|view| -> whereabouts_catalog::Result<()> {
+            assert_eq!(view.get_dataset(record.dataset.id())?, Some(record.clone()));
+            record.name = "after panic".into();
+            upsert(&mut db.cat, &record);
+            panic!("test closure panic");
+        })
+        .unwrap();
+    }));
+    assert!(result.is_err());
+    assert_eq!(view.get_dataset(record.dataset.id()).unwrap(), Some(record));
+}
+
 fn find(cat: &Catalog, filter: DatasetFilter) -> Vec<u64> {
     cat.find_datasets(&filter)
         .unwrap()

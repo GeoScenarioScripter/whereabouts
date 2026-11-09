@@ -60,6 +60,56 @@ pub struct DatasetFilter {
     pub limit: Option<u32>,
 }
 
+/// Lightweight ranking facts, without reading layers, CRS, raster facts or field schemas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatasetSummary {
+    /// Stable dataset identity (volume and anchor FRN).
+    pub id: DatasetId,
+    /// Dataset display name.
+    pub name: String,
+    /// Latest member modification timestamp, when known.
+    pub mtime: Option<Timestamp>,
+    /// Member FRNs used to match the name index, in stored order.
+    pub members: Vec<Frn>,
+}
+
+pub(crate) fn dataset_summaries(
+    conn: &Connection,
+    volume: VolumeId,
+    anchor: Option<Frn>,
+) -> Result<Vec<DatasetSummary>> {
+    let all = "SELECT d.anchor_frn, d.name, d.mtime, f.frn FROM datasets d
+               LEFT JOIN dataset_files f ON f.dataset_id = d.id
+               WHERE d.volume_id = ?1 ORDER BY d.id, f.rowid";
+    let single = "SELECT d.anchor_frn, d.name, d.mtime, f.frn FROM datasets d
+                  LEFT JOIN dataset_files f ON f.dataset_id = d.id
+                  WHERE d.volume_id = ?1 AND d.anchor_frn = ?2 ORDER BY d.id, f.rowid";
+    let mut stmt = conn.prepare_cached(if anchor.is_some() { single } else { all })?;
+    let mut rows = if let Some(anchor) = anchor {
+        stmt.query(params![volume.0, frn_to_sql(anchor)])?
+    } else {
+        stmt.query([volume.0])?
+    };
+    let mut summaries: Vec<DatasetSummary> = Vec::new();
+    while let Some(row) = rows.next()? {
+        let id = DatasetId::new(volume, frn_from_sql(row.get(0)?));
+        if summaries.last().is_none_or(|last| last.id != id) {
+            summaries.push(DatasetSummary {
+                id,
+                name: row.get(1)?,
+                mtime: row.get::<_, Option<i64>>(2)?.map(Timestamp),
+                members: Vec::new(),
+            });
+        }
+        if let Some(member) = row.get::<_, Option<i64>>(3)?
+            && let Some(summary) = summaries.last_mut()
+        {
+            summary.members.push(frn_from_sql(member));
+        }
+    }
+    Ok(summaries)
+}
+
 // ---------------------------------------------------------------------------------------------
 // Volumes
 

@@ -29,6 +29,7 @@ whereabouts-catalog.workspace = true
 whereabouts-query.workspace = true
 
 [dev-dependencies]
+rusqlite.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true
 whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }

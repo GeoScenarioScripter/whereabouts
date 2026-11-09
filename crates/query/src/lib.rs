@@ -57,7 +57,9 @@ impl QueryEngine {
     ///
     /// Orphan/cyclic paths are hidden. Exact names (including dataset display stems) rank
     /// before prefixes, then substrings; latest member mtime breaks ties, then dataset ID.
-    /// The caller must ensure the snapshot checkpoint matches the catalog's volume.
+    /// Catalog reads share one read transaction. The caller must ensure the name snapshot
+    /// checkpoint matches the catalog's volume (wrap both that check and this search in
+    /// [`Catalog::read_snapshot`] to keep them in the same view).
     pub fn search(
         &self,
         names: &NameIndex,
@@ -68,6 +70,16 @@ impl QueryEngine {
         if request.limit == 0 {
             return Ok(Vec::new());
         }
+        catalog.read_snapshot(|catalog| self.search_snapshot(names, catalog, volume, request))
+    }
+
+    fn search_snapshot(
+        &self,
+        names: &NameIndex,
+        catalog: &Catalog,
+        volume: VolumeId,
+        request: &Request,
+    ) -> Result<Vec<DatasetRecord>, CatalogError> {
         let hits = (!request.text.is_empty()).then(|| {
             self.pool
                 .install(|| names.search(&Query::substring(&request.text)))
@@ -100,9 +112,12 @@ impl QueryEngine {
             Some(hits) if hits.hits.len() > 256 => {
                 let candidates = match &allowed {
                     Some(ids) => ids.len() as u64,
-                    None => catalog.stats()?.datasets,
+                    None => catalog.dataset_ids(volume)?.len() as u64,
                 };
-                hits.hits.len() as u64 > candidates.saturating_mul(4)
+                // A batched summary scan becomes cheaper when name hits cover a material
+                // fraction of catalog candidates. Keep indexed lookups for intermediate
+                // terms (e.g. 1,000 hits among 100,000 datasets).
+                hits.hits.len() as u64 > candidates / 4
             }
             Some(_) => false,
         };
@@ -117,31 +132,38 @@ impl QueryEngine {
             members.insert(frn, hit);
         }
         let mut rows = Vec::new();
-        // Broad terms should cost O(catalog datasets), not one SQL call for every
-        // non-GIS filename. Keep indexed member lookups for selective terms.
+        // Rank lightweight summaries first. Full layer/CRS/raster hydration is restricted
+        // to the final result page, not every matching dataset.
         let mut ranks: HashMap<DatasetId, u8> = HashMap::new();
         if broad {
-            let ids: Vec<_> = match &allowed {
-                Some(ids) => ids.iter().copied().collect(),
-                None => catalog.dataset_ids(volume)?,
+            let summaries = match &allowed {
+                // A restrictive spatial/attribute filter should not scan the entire volume.
+                Some(ids) if ids.len() <= 256 => ids
+                    .iter()
+                    .filter_map(|id| catalog.dataset_summary(*id).transpose())
+                    .collect::<Result<Vec<_>, _>>()?,
+                _ => catalog.dataset_summaries(volume)?,
             };
-            for id in ids {
-                if let Some(record) = catalog.get_dataset(id)?
-                    && let Some(rank) = if request.text.is_empty() {
-                        Some(1)
-                    } else {
-                        record
-                            .dataset
-                            .members()
-                            .iter()
-                            .filter_map(|member| {
-                                names
-                                    .lookup(member.frn)
-                                    .and_then(|entry| member_rank(names, entry, &needle))
-                            })
-                            .min()
-                    }
+            for record in summaries {
+                if allowed
+                    .as_ref()
+                    .is_some_and(|ids| !ids.contains(&record.id))
                 {
+                    continue;
+                }
+                if let Some(rank) = if request.text.is_empty() {
+                    Some(1)
+                } else {
+                    record
+                        .members
+                        .iter()
+                        .filter_map(|member| {
+                            names
+                                .lookup(*member)
+                                .and_then(|entry| member_rank(names, entry, &needle))
+                        })
+                        .min()
+                } {
                     rows.push((rank, record));
                 }
             }
@@ -162,14 +184,14 @@ impl QueryEngine {
             }
         }
         for (id, rank) in ranks {
-            if let Some(record) = catalog.get_dataset(id)? {
+            if let Some(record) = catalog.dataset_summary(id)? {
                 rows.push((rank, record));
             }
         }
         // An accessible sidecar must not make an orphan anchor visible.
         rows.retain(|(_, row)| {
             names
-                .lookup(row.dataset.anchor())
+                .lookup(row.id.anchor)
                 .is_some_and(|entry| names.path(entry).is_ok())
         });
         for (rank, record) in &mut rows {
@@ -178,10 +200,12 @@ impl QueryEngine {
         rows.sort_by(|(ar, a), (br, b)| {
             ar.cmp(br)
                 .then_with(|| b.mtime.cmp(&a.mtime))
-                .then_with(|| a.dataset.id().cmp(&b.dataset.id()))
+                .then_with(|| a.id.cmp(&b.id))
         });
         rows.truncate(request.limit);
-        Ok(rows.into_iter().map(|(_, row)| row).collect())
+        rows.into_iter()
+            .filter_map(|(_, summary)| catalog.get_dataset(summary.id).transpose())
+            .collect()
     }
 }
 

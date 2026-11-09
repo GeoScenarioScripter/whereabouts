@@ -6,6 +6,27 @@ use whereabouts_catalog::Catalog;
 use whereabouts_source::Checkpoint;
 
 #[test]
+fn only_the_ranked_page_hydrates_layer_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("catalog.db");
+    fixture(&db, 300);
+    let raw = rusqlite::Connection::open(&db).unwrap();
+    raw.execute("UPDATE layers SET fields_json = 'invalid JSON' WHERE dataset_id = (SELECT id FROM datasets WHERE name = 'road_old')", []).unwrap();
+    // Selective member lookups and the broad/empty summary paths must all rank and
+    // apply the limit before touching the unselected record's malformed layer body.
+    for (term, expected) in [("road", "road"), ("o", "broad"), ("", "broad")] {
+        let rows = json(&["query", term, "--json", "--limit", "1"], &db);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, expected);
+        assert!(
+            !run(&["query", term, "--limit", "100"], &db)
+                .status
+                .success()
+        );
+    }
+}
+
+#[test]
 fn ranking_members_filters_and_output() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("catalog.db");
