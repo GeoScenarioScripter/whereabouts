@@ -7,6 +7,7 @@
 //! [`Check`]s it is ready to be held to.
 
 mod geopackage;
+mod geotiff;
 mod native;
 mod shapefile;
 
@@ -78,7 +79,11 @@ pub static ADAPTERS: &[Adapter] = &[
         checks: geopackage::CHECKS,
         read: geopackage::read,
     },
-    // 3.2: Adapter { format: "geotiff", checks: &[...], read: geotiff::read },
+    Adapter {
+        format: "geotiff",
+        checks: geotiff::CHECKS,
+        read: geotiff::read,
+    },
     Adapter {
         format: "shapefile",
         checks: shapefile::CHECKS,

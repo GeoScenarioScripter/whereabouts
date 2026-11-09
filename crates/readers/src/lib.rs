@@ -26,6 +26,7 @@ mod gpkg;
 mod io;
 mod prj;
 mod shapefile;
+mod tiff;
 
 use std::path::Path;
 
@@ -37,10 +38,11 @@ pub use dbf::DbfReader;
 pub use gpkg::GeoPackageReader;
 pub use io::{IoStats, measure};
 pub use shapefile::ShapefileReader;
+pub use tiff::TiffReader;
 
 /// The reader registry: **one line per reader**, sorted by reader name. Sessions adding a reader
 /// add exactly one line here (3.1: GeoPackage, 3.2: GeoTIFF).
-static READERS: &[&dyn FormatReader] = &[&DbfReader, &GeoPackageReader, &ShapefileReader];
+static READERS: &[&dyn FormatReader] = &[&DbfReader, &GeoPackageReader, &ShapefileReader, &TiffReader];
 
 /// Every registered reader, in registry order.
 pub fn readers() -> &'static [&'static dyn FormatReader] {
