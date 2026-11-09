@@ -85,7 +85,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 - **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
 - **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 → 2.7 — merged as each became ready; the only shared files were `Cargo.lock` and (2.7) a small `ci.yml` change, so the order made no difference.*
 - **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`. Actual (2026-11-08): 3.1 (#57) → 3.2 (#59) → 3.3 (#58), with rebases and fresh green CI between merges.
-- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
+- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3. Completed in that order on 2026-11-09: #65 → #66 → #67, with final-head CI after each rebase.
 
 ---
 
@@ -315,7 +315,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
 | 4.1 | query-and-inspect-cli | #14 | ✅ merged (2026-11-09, V3, PR #66) | [note](sessions/4.1-query-and-inspect-cli.md) |
 | 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
-| 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |
+| 4.3 | benchmarks-and-coverage | #16 | ✅ merged (2026-11-09, V2, PR #67); V4 carried to 5.1/#68 | [note](sessions/4.3-benchmarks-and-coverage.md) |
 | 5.1 | exit-verification | #17 | ⏳ planned | |
 
 ## Stage retro
