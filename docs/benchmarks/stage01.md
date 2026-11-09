@@ -154,3 +154,10 @@ effects; they do not isolate CRS preparation. The frozen cache is capped at 128 
 and 1 MiB of definition text per worker, plus prepared transformer structures. These measurements
 show the practical cost without adding a production cache-control API.
 
+
+## Owner workstation run — 2026-11-09 (session 5.1)
+Actual D: index and immediate restart passed: 2,865,960 names, 5,209 datasets, zero retries; restart performed no full scan and zero extractions. SQLite integrity check passed. See `stage01-v4-20261109/` and the session 5.1 exit checklist.
+
+USN uncontrolled first/repeat: 37.127/14.998 s (5.6 MiB peak); raw MFT: 15.832/15.203 s (171.3 MiB peak), zero skipped/lost records. Counts drifted during builds: 2,864,402 / 2,865,951 / 2,865,970 / 2,865,972; stable-set equality is not demonstrated. No cold-cache claim: last boot October 9; first scans overlapped build/test activity.
+
+Release CLI queries: 20 samples per each of 8 terms, nearest-rank percentiles, one discarded warmup; per-term p50 531.7–559.2 ms, p95 557.9–608.4 ms, p99 569.0–620.3 ms. Samples include process startup and loading the ~2.87M-name snapshot; these do not establish instant search. Everything/ES unavailable, so no comparison measured. Q-16/Q-18 and full V4 performance acceptance remain open pending boot-separated measurements and owner decisions. Fresh local oracle passed all strict checks on 62 committed cases; one optional external sample skipped.

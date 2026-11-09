@@ -1,0 +1,13 @@
+volume        D: label="新加卷" fs=NTFS serial=CA385364
+journal       id=0x1db8ca5d3a07345 first_usn=12071206912 next_usn=13190178496 max_size=953 MiB
+root frn      0x0005000000000005
+geometry      sector=512 cluster=4096 record=1024 mft_start_lcn=786432 mft_valid=8762.5 MiB
+mode          raw $MFT, 4 MiB chunks (count only)
+records       2865970 (455094 directories, 2410876 files); 8972800 record slots in $MFT, 5793598 unused
+lost          0 (torn 0 after 0 retries, malformed 0, not-FILE in use 0, extension errors 0; expected 0); 4 records without a name (legitimate)
+details       313115 extension records, 358093 hard-linked files, 0 extension reads (0 errors), 0 free chunks skipped
+reads         56038 returning 8792.2 MiB
+name length   53863055 WTF-8 bytes total
+elapsed       15.832 s (181024 records/s); open 0.593 s, reading 14.143 s, in user code 1.096 s
+working set   before 4.6 MiB, after 5.8 MiB, peak 171.3 MiB
+exit=0
