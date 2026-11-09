@@ -1,0 +1,910 @@
+{
+  "schema": 1,
+  "case": "ext_ne_10m_admin_0_countries",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "ne_10m_admin_0_countries",
+      "kind": "vector",
+      "geometry_type": "Polygon",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 258,
+      "extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.634100653
+      ],
+      "declared_extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.634100653
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "featurecla",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "scalerank",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "LABELRANK",
+          "type": "Integer",
+          "width": 2
+        },
+        {
+          "name": "SOVEREIGNT",
+          "type": "String",
+          "width": 32
+        },
+        {
+          "name": "SOV_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_DIF",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "LEVEL",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "TYPE",
+          "type": "String",
+          "width": 17
+        },
+        {
+          "name": "TLC",
+          "type": "String",
+          "width": 1
+        },
+        {
+          "name": "ADMIN",
+          "type": "String",
+          "width": 36
+        },
+        {
+          "name": "ADM0_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "GEOU_DIF",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "GEOUNIT",
+          "type": "String",
+          "width": 36
+        },
+        {
+          "name": "GU_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "SU_DIF",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "SUBUNIT",
+          "type": "String",
+          "width": 36
+        },
+        {
+          "name": "SU_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "BRK_DIFF",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "NAME",
+          "type": "String",
+          "width": 29
+        },
+        {
+          "name": "NAME_LONG",
+          "type": "String",
+          "width": 36
+        },
+        {
+          "name": "BRK_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "BRK_NAME",
+          "type": "String",
+          "width": 32
+        },
+        {
+          "name": "BRK_GROUP",
+          "type": "String",
+          "width": 17
+        },
+        {
+          "name": "ABBREV",
+          "type": "String",
+          "width": 16
+        },
+        {
+          "name": "POSTAL",
+          "type": "String",
+          "width": 4
+        },
+        {
+          "name": "FORMAL_EN",
+          "type": "String",
+          "width": 52
+        },
+        {
+          "name": "FORMAL_FR",
+          "type": "String",
+          "width": 35
+        },
+        {
+          "name": "NAME_CIAWF",
+          "type": "String",
+          "width": 45
+        },
+        {
+          "name": "NOTE_ADM0",
+          "type": "String",
+          "width": 16
+        },
+        {
+          "name": "NOTE_BRK",
+          "type": "String",
+          "width": 63
+        },
+        {
+          "name": "NAME_SORT",
+          "type": "String",
+          "width": 36
+        },
+        {
+          "name": "NAME_ALT",
+          "type": "String",
+          "width": 19
+        },
+        {
+          "name": "MAPCOLOR7",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "MAPCOLOR8",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "MAPCOLOR9",
+          "type": "Integer",
+          "width": 1
+        },
+        {
+          "name": "MAPCOLOR13",
+          "type": "Integer",
+          "width": 3
+        },
+        {
+          "name": "POP_EST",
+          "type": "Real",
+          "width": 12
+        },
+        {
+          "name": "POP_RANK",
+          "type": "Integer",
+          "width": 2
+        },
+        {
+          "name": "POP_YEAR",
+          "type": "Integer",
+          "width": 4
+        },
+        {
+          "name": "GDP_MD",
+          "type": "Integer",
+          "width": 8
+        },
+        {
+          "name": "GDP_YEAR",
+          "type": "Integer",
+          "width": 4
+        },
+        {
+          "name": "ECONOMY",
+          "type": "String",
+          "width": 26
+        },
+        {
+          "name": "INCOME_GRP",
+          "type": "String",
+          "width": 23
+        },
+        {
+          "name": "FIPS_10",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ISO_A2",
+          "type": "String",
+          "width": 5
+        },
+        {
+          "name": "ISO_A2_EH",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ISO_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ISO_A3_EH",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ISO_N3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ISO_N3_EH",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "UN_A3",
+          "type": "String",
+          "width": 4
+        },
+        {
+          "name": "WB_A2",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "WB_A3",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "WOE_ID",
+          "type": "Integer",
+          "width": 8
+        },
+        {
+          "name": "WOE_ID_EH",
+          "type": "Integer",
+          "width": 8
+        },
+        {
+          "name": "WOE_NOTE",
+          "type": "String",
+          "width": 167
+        },
+        {
+          "name": "ADM0_ISO",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_DIFF",
+          "type": "String",
+          "width": 1
+        },
+        {
+          "name": "ADM0_TLC",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_US",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_FR",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_RU",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_ES",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_CN",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_TW",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_IN",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_NP",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_PK",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_DE",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_GB",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_BR",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_IL",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_PS",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_SA",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_EG",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_MA",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_PT",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_AR",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_JP",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_KO",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_VN",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_TR",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_ID",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_PL",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_GR",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_IT",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_NL",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_SE",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_BD",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_UA",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_UN",
+          "type": "Integer",
+          "width": 3
+        },
+        {
+          "name": "ADM0_A3_WB",
+          "type": "Integer",
+          "width": 3
+        },
+        {
+          "name": "CONTINENT",
+          "type": "String",
+          "width": 23
+        },
+        {
+          "name": "REGION_UN",
+          "type": "String",
+          "width": 10
+        },
+        {
+          "name": "SUBREGION",
+          "type": "String",
+          "width": 25
+        },
+        {
+          "name": "REGION_WB",
+          "type": "String",
+          "width": 26
+        },
+        {
+          "name": "NAME_LEN",
+          "type": "Integer",
+          "width": 2
+        },
+        {
+          "name": "LONG_LEN",
+          "type": "Integer",
+          "width": 2
+        },
+        {
+          "name": "ABBREV_LEN",
+          "type": "Integer",
+          "width": 2
+        },
+        {
+          "name": "TINY",
+          "type": "Integer",
+          "width": 3
+        },
+        {
+          "name": "HOMEPART",
+          "type": "Integer",
+          "width": 3
+        },
+        {
+          "name": "MIN_ZOOM",
+          "type": "Real",
+          "width": 3
+        },
+        {
+          "name": "MIN_LABEL",
+          "type": "Real",
+          "width": 3
+        },
+        {
+          "name": "MAX_LABEL",
+          "type": "Real",
+          "width": 4
+        },
+        {
+          "name": "LABEL_X",
+          "type": "Real",
+          "width": 11
+        },
+        {
+          "name": "LABEL_Y",
+          "type": "Real",
+          "width": 10
+        },
+        {
+          "name": "NE_ID",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "WIKIDATAID",
+          "type": "String",
+          "width": 8
+        },
+        {
+          "name": "NAME_AR",
+          "type": "String",
+          "width": 72
+        },
+        {
+          "name": "NAME_BN",
+          "type": "String",
+          "width": 148
+        },
+        {
+          "name": "NAME_DE",
+          "type": "String",
+          "width": 46
+        },
+        {
+          "name": "NAME_EN",
+          "type": "String",
+          "width": 44
+        },
+        {
+          "name": "NAME_ES",
+          "type": "String",
+          "width": 44
+        },
+        {
+          "name": "NAME_FA",
+          "type": "String",
+          "width": 66
+        },
+        {
+          "name": "NAME_FR",
+          "type": "String",
+          "width": 54
+        },
+        {
+          "name": "NAME_EL",
+          "type": "String",
+          "width": 86
+        },
+        {
+          "name": "NAME_HE",
+          "type": "String",
+          "width": 78
+        },
+        {
+          "name": "NAME_HI",
+          "type": "String",
+          "width": 126
+        },
+        {
+          "name": "NAME_HU",
+          "type": "String",
+          "width": 112
+        },
+        {
+          "name": "NAME_ID",
+          "type": "String",
+          "width": 112
+        },
+        {
+          "name": "NAME_IT",
+          "type": "String",
+          "width": 48
+        },
+        {
+          "name": "NAME_JA",
+          "type": "String",
+          "width": 78
+        },
+        {
+          "name": "NAME_KO",
+          "type": "String",
+          "width": 50
+        },
+        {
+          "name": "NAME_NL",
+          "type": "String",
+          "width": 49
+        },
+        {
+          "name": "NAME_PL",
+          "type": "String",
+          "width": 66
+        },
+        {
+          "name": "NAME_PT",
+          "type": "String",
+          "width": 43
+        },
+        {
+          "name": "NAME_RU",
+          "type": "String",
+          "width": 94
+        },
+        {
+          "name": "NAME_SV",
+          "type": "String",
+          "width": 57
+        },
+        {
+          "name": "NAME_TR",
+          "type": "String",
+          "width": 43
+        },
+        {
+          "name": "NAME_UK",
+          "type": "String",
+          "width": 94
+        },
+        {
+          "name": "NAME_UR",
+          "type": "String",
+          "width": 67
+        },
+        {
+          "name": "NAME_VI",
+          "type": "String",
+          "width": 56
+        },
+        {
+          "name": "NAME_ZH",
+          "type": "String",
+          "width": 52
+        },
+        {
+          "name": "NAME_ZHT",
+          "type": "String",
+          "width": 48
+        },
+        {
+          "name": "FCLASS_ISO",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "TLC_DIFF",
+          "type": "String",
+          "width": 1
+        },
+        {
+          "name": "FCLASS_TLC",
+          "type": "String",
+          "width": 21
+        },
+        {
+          "name": "FCLASS_US",
+          "type": "String",
+          "width": 30
+        },
+        {
+          "name": "FCLASS_FR",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_RU",
+          "type": "String",
+          "width": 14
+        },
+        {
+          "name": "FCLASS_ES",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_CN",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_TW",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "FCLASS_IN",
+          "type": "String",
+          "width": 14
+        },
+        {
+          "name": "FCLASS_NP",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_PK",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "FCLASS_DE",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_GB",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_BR",
+          "type": "String",
+          "width": 12
+        },
+        {
+          "name": "FCLASS_IL",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "FCLASS_PS",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "FCLASS_SA",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "FCLASS_EG",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_MA",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_PT",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_AR",
+          "type": "String",
+          "width": 12
+        },
+        {
+          "name": "FCLASS_JP",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_KO",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_VN",
+          "type": "String",
+          "width": 12
+        },
+        {
+          "name": "FCLASS_TR",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_ID",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_PL",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_GR",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_IT",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_NL",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_SE",
+          "type": "String",
+          "width": 18
+        },
+        {
+          "name": "FCLASS_BD",
+          "type": "String",
+          "width": 24
+        },
+        {
+          "name": "FCLASS_UA",
+          "type": "String",
+          "width": 18
+        }
+      ],
+      "encoding": {
+        "source_encoding": "UTF-8",
+        "cpg": "UTF-8",
+        "encoding_from_cpg": "UTF-8",
+        "ldid": null,
+        "encoding_from_ldid": null
+      },
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]",
+        "declared_authority": null,
+        "wkt2": "GEOGCRS[\"WGS 84\",DATUM[\"World Geodetic System 1984\",ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],CS[ellipsoidal,2],AXIS[\"latitude\",north,ORDER[1],ANGLEUNIT[\"degree\",0.0174532925199433]],AXIS[\"longitude\",east,ORDER[2],ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4326]]",
+        "epsg": 4326,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "4326",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.634100653
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

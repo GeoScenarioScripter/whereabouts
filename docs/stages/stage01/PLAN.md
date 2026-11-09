@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done. Next: wave 1.
+**Status:** M0 complete for the v0.1.0 prerelease (2026-11-09), with owner-accepted gaps (D-50). [Release notes and audit](RELEASE.md). Waves 1–4 and session 5.1 (PR #70, `6cd518a`) are merged. Owner evidence and the timing/path investigation support the closure disposition. Stage02 handoffs are recorded in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md).
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -27,17 +27,21 @@ Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`
 
 1. **Indexes a real volume (V4):** `whereabouts index --volume <X:>` completes on the owner's GIS workstation volume; the catalog holds the SHP/GPKG/GeoTIFF datasets found there, each with status `ok`/`partial`/`error:<reason>` — no panics.
 2. **Stays live and survives restarts (V3):** after a restart it resumes from the saved checkpoint without a full rescan; journal wrap and journal re-creation trigger a correct full rescan. Proven in CI on a VHD test volume.
-3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets set in session 4.3, measured on the owner's volume alongside Everything.
+3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets proposed in session 4.3 and finalized with the owner in 5.1, measured on the owner's volume alongside Everything.
 4. **Correct metadata (V2):** on the committed corpus, oracle agreement meets the committed baseline: native bbox, geometry type and counts agree on ≥ 98% of cases; EPSG identification and WGS84 bbox agreement meet the targets recorded for Q-14. Enforced in CI.
 5. **Clean build (V1):** CI green on Windows + Linux; `cargo deny` green (no GDAL).
 6. **Docs:** Q-14, Q-16, Q-18 resolved in `02-decisions.md`; architecture doc matches the code; retro written; stage02 sketch updated.
+
+### Owner-approved exit disposition (2026-11-09)
+
+D-50 explicitly amends criteria 3 and 6 above: instant CLI startup remains an accepted gap, and numeric M1 budgets remain Open; USN is retained and six cold-boot scans move to stage02. This is acceptance of named gaps, not a passing speed/cold-performance result. Real-volume index/restart and corpus/CI evidence are retained in [5.1](sessions/5.1-exit-verification.md). Final-head CI and integration remain necessary before the separate release step. Earlier wave handoffs below describe their historical requirements; D-50 governs current closure.
 
 ## Gates
 
 | Gate | After | Question | Evidence | If it fails |
 |---|---|---|---|---|
-| **G1 — contracts + enumeration** | wave 1 | Are the core contracts (1.1) right for everything downstream? Does `FSCTL_ENUM_USN_DATA` enumerate fast enough to keep the USN-API approach (Q-16)? | 1.1 API summary; 1.3 enumeration timing and memory on CI + owner volume | Contract fixes before wave 2; or add a raw-`$MFT` session to wave 2 |
-| **G2 — CRS coverage** | wave 2 | Is pure-Rust CRS (`proj4rs` + embedded EPSG table) good enough (Q-14)? | 2.4 identification rate + WGS84 agreement on corpus + fixtures | Owner decides: PROJ via the `proj` crate as fallback (D-09), or widen 2.4's tables |
+| **G1 — contracts + enumeration** | wave 1 | Are the core contracts (1.1) right for everything downstream? Does `FSCTL_ENUM_USN_DATA` enumerate fast enough to keep the USN-API approach (Q-16)? | 1.1 API summary; 1.3 enumeration timing and memory on CI + owner volume | Contract fixes before wave 2; or add a raw-`$MFT` session to wave 2. **Outcome (2026-10-20, owner): go.** Contracts D-27…D-33 Agreed. Owner V4 run, D: on NVMe: 1.44M records in 41.0 s, above the ~10 s rule. Added session **2.7** (raw `$MFT` spike); Q-16 decided in 4.3 |
+| **G2 — CRS coverage** | wave 2 | Is pure-Rust CRS (`proj4rs` + embedded EPSG table) good enough (Q-14)? | 2.4 identification rate + WGS84 agreement on corpus + fixtures | Owner decides: PROJ via the `proj` crate as fallback (D-09), or widen 2.4's tables. **Outcome (2026-10-27, owner): go.** Pure Rust, no PROJ fallback (D-34; D-09 stands). Corpus 40/40 identification and 38/38 WGS84; 246 fixtures 99.2% / 99.1%; EPSG-wide sweep 99.0% WGS84. Q-14 targets: EPSG 0.98, WGS84 0.98, enforced from 4.3 via `baseline.toml`. Missing methods (Polyconic, AEQD first) are added natively only if real data needs them (#45) |
 
 Gates are owner go/no-go points: the orchestrator presents evidence and waits.
 
@@ -50,13 +54,13 @@ Gates are owner go/no-go points: the orchestrator presents evidence and waits.
 | 0 | bootstrap (orchestrator) | — | Repo, tooling, docs, this plan ✅ |
 | 1 | **1.1** core-contracts · **1.2** oracle-corpus · **1.3** ntfs-enumeration · **1.4** crs-wkt-parsing | wave 0 | Contracts + the two riskiest spikes + test oracle |
 | — | **Gate G1** | wave 1 merged | |
-| 2 | **2.1** nameindex · **2.2** ntfs-journal-source · **2.3** dataset-grouper · **2.4** crs-epsg-transform · **2.5** catalog · **2.6** reader-shapefile | G1 | Build every component against the frozen contracts (≤ 4 concurrent; see order below) |
+| 2 | **2.1** nameindex · **2.2** ntfs-journal-source · **2.3** dataset-grouper · **2.4** crs-epsg-transform · **2.5** catalog · **2.6** reader-shapefile · **2.7** ntfs-mft-reader *(added at G1)* | G1 (2.7: after 2.2 merges) | Build every component against the frozen contracts (≤ 4 concurrent; see order below) |
 | — | **Gate G2** | 2.4 merged | |
 | 3 | **3.1** reader-geopackage · **3.2** reader-geotiff · **3.3** index-pipeline | wave 2 + G2 | Remaining readers + end-to-end `index` |
 | 4 | **4.1** query-and-inspect-cli · **4.2** resilience · **4.3** benchmarks-and-coverage | wave 3 | Usable CLI, failure modes, numbers |
 | 5 | **5.1** exit-verification | wave 4 | Exit criteria evidence, docs sync, retro draft |
 
-Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6** first (longest / gate-relevant), then **2.3, 2.5** as slots free.
+Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6** first (longest / gate-relevant), then **2.3, 2.5** as slots free. **2.7** (added at G1) also writes `crates/ntfs`, so it starts only after 2.2 has merged.
 
 ### Dependency graph
 
@@ -72,6 +76,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 | 2.4 | 1.1, 1.4 (+1.2 for corpus checks) | Identification/transform on 1.4's model, `Bounds` from core |
 | 2.5 | 1.1 | Persists core types |
 | 2.6 | 1.1, 1.2 | Implements `FormatReader`; oracle wiring needs the corpus |
+| 2.7 | 1.3, 2.2 | Produces 1.3's raw records from `$MFT`; same crate as 2.2, so it runs after 2.2 merges |
 | 3.1, 3.2 | 2.6 (reader pattern), 2.4 (3.2 adds GeoKeys to `crs`) | Same pattern, same registry |
 | 3.3 | 2.1–2.6 | Wires everything |
 | 4.1 | 3.3 | Needs a populated catalog + snapshot |
@@ -81,10 +86,10 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 
 ### Watch points (shared files within a wave)
 
-- **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2.
-- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer, 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6.
-- **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`.
-- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
+- **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
+- **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 → 2.7 — merged as each became ready; the only shared files were `Cargo.lock` and (2.7) a small `ci.yml` change, so the order made no difference.*
+- **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`. Actual (2026-11-08): 3.1 (#57) → 3.2 (#59) → 3.3 (#58), with rebases and fresh green CI between merges.
+- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3. Completed in that order on 2026-11-09: #65 → #66 → #67, with final-head CI after each rebase.
 
 ---
 
@@ -144,6 +149,15 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 
 ### Wave 2 — components on frozen contracts
 
+**Wave 1 hand-offs (added at wave 1 close, 2026-10-19).** These are part of each spec below. Read the named notes. Decisions D-27…D-33 apply.
+- **All:** contracts are in `whereabouts-core`/`whereabouts-source` (API summary in the 1.1 note). `FileRecord::is_dir()` is a method derived from `attrs`. File names are WTF-8 (`FileName`, D-28). `Source::changes` returns `Changes::{Batch, FullRescanRequired}` (D-29). Test fixtures from `whereabouts-ntfs` are behind its `test-fixtures` feature (dev-dependency only).
+- **2.1:** seed the root entry from `Volume::root_frn()`, since enumeration never returns the root (D-31). Expect a few orphans under `$Extend` and keep the orphan guard. `Enumerator::next_batch()` gives zero-copy ingestion. Measure whether a borrowed `FileRecord` view in `RecordSink` is worth it (#26).
+- **2.2:** reuse `record::RecordIter` (`resume`/`position`) and `record::enum_step` for journal reads. Add `ERROR_JOURNAL_ENTRY_DELETED` to `error::win32`. `JournalInfo` already holds the checkpoint fields. `Checkpoint::new` is fallible (≤ 64 KiB). Reject or skip volumes that return 128-bit file IDs (ReFS, `FILE_ID_128`), which don't fit `Frn(u64)` (#24). Only drive letters are supported; mount points and volume-GUID paths are #25.
+- **2.4:** add the EPSG and Esri fixture attribution to the root `NOTICE` (#27). Decide WKT1/ESRI axis order (`AxisOrder::Unspecified`; GDAL assumes east/north for file data). Compare angular parameters modulo 360 (ESRI writes the EPSG:3375 azimuth as −36.97°). Extend the datum alias table if name matching needs it. G2 input is the goldens' `crs.raw` + `extent` + `epsg`/`wgs84_extent`, under 1.2's tolerances (D-33).
+- **2.5:** add the schema delta proposed in the 1.1 note: `datasets.anchor_frn` with `UNIQUE(volume_id, anchor_frn)`, `layers.ordinal`, `crs.authority`/`crs.auth_code`, `crs.status`, `def_kind` `'epsg'`, `rasters.geotransform` and an overview count; a `volumes` table holding `SourceIdentity` + checkpoint bytes. Call `DatasetRecord::validate()` before persisting. Record the delta for `03-architecture.md` §4.
+- **2.6 / 3.1 / 3.2:** one `Adapter` line each in `tests/oracle/src/adapters.rs`. Readers are scored against the **true** extent (D-33): an empty SHP reports no extent, 3.1 needs the R-tree fallback for stale `gpkg_contents` bounds, and 3.2 shifts PixelIsPoint by half a pixel. Use `GeometryKind::parse_lenient` for geometry names read from files (GPKG stores them upper-case).
+- **4.1:** use `Wgs84Extent::intersects_extent` for query boxes that cross the antimeridian.
+
 #### 2.1 — nameindex
 - **Reads:** `03-architecture.md` §3.4; D-10; 1.1 note.
 - **Write scope:** `crates/nameindex/**`.
@@ -186,7 +200,39 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Acceptance (V2):** oracle agreement on all non-corrupt shapefile cases for geometry type, count and native bbox; corrupt cases → `Error` status, no panic; bounded-read test shows < 64 KiB read per dataset.
 - **Out of scope:** geometry reading (previews, M3).
 
+#### 2.7 — ntfs-mft-reader *(added at gate G1, 2026-10-20)*
+- **Why:** the owner's V4 run read D: (NVMe, 1.44M records) in 41.0 s, of which 40.8 s was inside `FSCTL_ENUM_USN_DATA` and 0.19 s in our code. That's about 35 MB/s of MFT, consistent with small synchronous reads. C: did 812k records in 4.9 s. Raw `$MFT` reading with large sequential reads should cut the cold first-index time (Q-16).
+- **Reads:** 1.3 note, D-31, Q-16; NTFS on-disk format (FILE record header, update sequence array, attribute headers, `$FILE_NAME` 0x30, `$ATTRIBUTE_LIST` 0x20, non-resident runlists, `$MFT`'s own `$DATA` and `$BITMAP`).
+- **Write scope:** `crates/ntfs/**` (starts after 2.2 merges).
+- **Deliverables:**
+  - `FSCTL_GET_NTFS_VOLUME_DATA` for geometry; read `$MFT`'s own record to get its `$DATA` runlist and `$BITMAP`.
+  - Read the MFT in large sequential chunks (multi-MiB; overlapped I/O optional) and apply update-sequence fixups. Skip records not in use (bitmap + header flag).
+  - Parse `$FILE_NAME`: prefer Win32/Win32+DOS names, skip DOS-only names, follow `$ATTRIBUTE_LIST` into extension records.
+  - Yield the **same raw record type** as `enumerate()` (FRN with sequence number, parent FRN, `NtfsName`, attributes), so `Source` and its consumers don't change.
+  - Pure parsers over byte buffers with hand-built fixtures, plus truncation/mutation fuzzing (bad fixups, runlist bombs, attribute-length lies); every length/offset/count validated, allocations bounded.
+  - `enum_volume --mft` for side-by-side runs.
+  - Note in the session note whether sizes/timestamps could come from the same pass (input to stage02).
+- **Acceptance (V3, plus V4 requested):** on the CI Windows runner's C:, the record set equals USN enumeration (same FRNs, parents and names; any difference explained, e.g. hard-link names). Cold and warm timings for both methods recorded. Malformed input never panics. Owner asked to run cold and warm on D: with both methods.
+- **Out of scope:** choosing the default method (4.3 decides Q-16), wiring it into `NtfsVolumeSource` beyond an internal option, extracting sizes/timestamps.
+
 ### Wave 3 — remaining readers, end-to-end pipeline
+
+**Wave 2 hand-offs (added at wave 2 close, 2026-10-27).** These are part of each spec below and of the wave 4 specs they name. Read the notes in `sessions/`. Decisions D-34…D-42 apply.
+- **3.1 / 3.2:** add one line to `READERS` and one `Adapter` line each. Reuse `adapters::native::{resolve, read}`, do file I/O through `io::SourceFile` (budgets and `measure` apply; 3.1 also uses bounded native SQLite page reads, D-44), and use `readers::measure` for the bounded-read test. 3.2 can reuse `prj::read_prj`, and fills the `NativeRaster` per-band types and nodata if its reader reports them.
+- **3.2:** feed GeoKey codes straight into `whereabouts_crs::resolve`: codes 0 and 32767 (user-defined) come back `Unidentified`, and a code outside the table is `Unidentified` unless it is a known vertical or geocentric one. Add the `resolve` branch for the `geokeys` kind (it is `Unparsed` until then); `epsg_crs` already covers direct EPSG codes.
+- **3.3 (pipeline), from the notes:**
+  - Failed re-reads (D-36, owner decision): a **transient** extraction failure keeps the stored record and retries through a queue with back-off. Permanent failures are recorded as `error`/`unsupported`. There is no core contract change; the `DatasetRecord` invariant stays. Do not call `set_status` for a transient failure.
+  - Poll `Source::changes` until a batch is empty, and commit `batch.checkpoint` only **after** applying the batch (it may carry pending renames). Debounce writes in progress across batches (an open file is reported before its close).
+  - Apply a whole batch to the name index and the grouper before resolving paths: a file can arrive before the directory it moved into.
+  - Call `NameIndex::compact()` when `needs_compaction()` after a batch (and treat `EntryId`s as invalid afterwards); on `IndexError::CapacityExceeded`, compact and retry or rescan.
+  - Call `datasets::is_relevant_name` before listing directories; map `GroupDelta` to actions: `changed` and `modified` re-extract, `renamed` updates the catalog row only, `added` and `removed` insert and delete.
+  - `indexer::extract` uses `crs::resolve` and `Transformer`; cache them per CRS definition hash (the EPSG table and parameter index are built once on first use; benchmark the table build).
+  - Decide the journal-creation policy for a volume with no journal (the source never creates one, D-31). `SourceOptions::enumeration` now has `EnumerationMethod::RawMft` (D-43, strict: on `Error::Mft`/`MftIncomplete` discard the sink and fall back to the USN API); 4.3 decides which method the first index uses (Q-16).
+  - Partial extents from `transform_bounds` are widened only along the box boundary; an interior domain hole is not flagged (#46).
+  - Use the catalog's `datasets_with_member`, `find_datasets` and `pending_datasets`; consider skipping unchanged records on re-upsert (#47).
+- **4.1:** hide or mark name-index orphans (`path()` reports `Orphan`); load the snapshot at startup (about 1.1 s at 5M entries; startup-to-first-result is recorded); run queries on a **dedicated rayon pool**, not the global one; decide approximate totals or early exit for 1-character terms (25 ms at 5M, all per-hit work); path-mode search is optional and slow (76–190 ms at 5M, #48); need a batch variant of `datasets_with_member` (#47); build query boxes with `Wgs84Extent::from_west_south_east_north`.
+- **4.2:** reuse `whereabouts_ntfs::testvol::TestVolume` (`create_journal(m, a)`, `delete_journal()`) for wrap and recreate; test that Whereabouts' own reads produce no USN events for indexed files; test D-36 (transient failure keeps the record); hard-link behaviour is documented in D-38.
+- **4.3:** enable the nameindex `synth` feature from `[dev-dependencies]` and reuse `synth::volume`; use `readers::measure` for bytes read per dataset (corpus max today is 855 B synthetic, 5,758 B Natural Earth 10m); benchmark grouper memory at 10M files; add corpus cases (shapefile edge cases #43, CRS families #44; related #28); set the Q-14 targets in `baseline.toml` (EPSG 0.98, WGS84 0.98, D-34); raise the shapefile and other rates to measured values; fix the oracle's error/partial reasons (#40) and the `cargo doc` clash (#41); decide Q-16 with 2.7's numbers, and propose Q-18 using the 2.1 and 2.5 numbers in `06`.
 
 #### 3.1 — reader-geopackage
 - **Write scope:** `crates/readers/**` (gpkg module + one registry line), `tests/oracle/**` (one adapter line).
@@ -194,19 +240,26 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Acceptance (V2):** oracle agreement on all non-corrupt GPKG cases (including stale/missing bounds); a test proving the file's bytes, mtime and directory listing are unchanged after reading.
 
 #### 3.2 — reader-geotiff
-- **Write scope:** `crates/readers/**` (tiff module + one registry line), `crates/crs/src/geokeys.rs` (+ one `mod` line), `tests/oracle/**` (one adapter line).
+- **Write scope:** `crates/readers/**` (tiff module + one registry line), `crates/crs/src/geokeys.rs` (+ one `mod` line and common `resolve.rs` routing/tests, authorized at wave 3 review), `tests/oracle/**` (one adapter line).
 - **Deliverables:** bounded TIFF/BigTIFF IFD parser (first IFD + overview count); tags: dimensions, samples, bits, sample format, compression, ModelPixelScale/Tiepoint/Transformation, GeoKeyDirectory/Double/Ascii params, GDAL_NODATA, GDAL_METADATA; native bounds from the affine (all four corners for rotated rasters); PixelIsPoint handled the way GDAL does by default; georeferencing precedence mirrors GDAL's default `GDAL_GEOREF_SOURCES` (PAM `.aux.xml`, internal, world file); `.ovr` detection; GeoKeys → `Crs` (direct EPSG codes + user-defined projection keys).
 - **Acceptance (V2):** oracle agreement on all non-corrupt GeoTIFF cases incl. rotated, PixelIsPoint, BigTIFF, aux.xml-only and world-file cases; bounded-read test.
 
 #### 3.3 — index-pipeline
-- **Write scope:** `crates/indexer/**`, `crates/cli/**`.
+- **Write scope:** `crates/indexer/**`, `crates/cli/**`; `.github/workflows/ci.yml` solely for the elevated CLI/indexer acceptance invocation (authorized at wave 3 review).
 - **Deliverables:** `indexer::extract(resolved dataset) → extracted metadata` (reader → `crs` parse/identify/transform → status), the single function the oracle and the pipeline share; pipeline: `NtfsVolumeSource` enumerate → name index → grouper → extraction queue (worker threads, priority = recently modified first) → catalog; change loop: poll journal → name-index update → dirty datasets → coalesce per batch → re-extract; checkpoint commit order (catalog first, then snapshot) and restart replay; CLI `whereabouts index --volume X: [--db PATH] [--watch]` with progress output.
+- **Also (wave 2 hand-offs above):** a transient extraction failure keeps the stored record and retries via a queue (D-36); drain `changes` until empty and commit the checkpoint only after applying the batch; compact the name index when needed; cache `resolve`/`Transformer` per definition hash.
 - **Acceptance (V3):** on the CI VHD volume populated with corpus files: full index → catalog matches expectations; restart → no full rescan, picks up changes made while stopped; editing a `.prj` re-extracts only that dataset.
 
 ### Wave 4 — usable CLI, failure modes, numbers
 
+**Wave 3 hand-offs (2026-11-08):** D-44–D-46 are Proposed implementation conventions. No frozen core/source contracts changed.
+- **4.1:** reuse `indexer::extract` for inspect, including GeoKeys through the common CRS resolver. Load `<database>.names`; multiple sources sharing a catalog require distinct snapshots. Inspect must not mutate input datasets or create transaction sidecars. Preserve `index` CLI behavior.
+- **4.2:** the pipeline has a checkpoint-bound `<snapshot>.retry` ledger. Exercise crash points around ledger sync, atomic catalog/checkpoint commit and snapshot replacement; cover stale/corrupt/missing ledger and transient GeoPackage active-transaction failures while retaining stored metadata. Reopen after a pipeline method returns an error. Use isolated VHDs; no system-volume writes. The Windows CI elevated invocation includes both indexer and CLI.
+- **4.3:** switch all three adapters to shared extraction and verify EPSG/WGS84 together; D-34 already resolves Q-14 at 0.98/0.98 minimum, so report enforcement rather than reopening it. Preserve stricter measured native baselines. Measure worker/cache, grouping and persistence costs. Q-16/Q-18 remain proposals pending evidence, with V4 gaps explicit.
+- **Scope clarification:** 4.3 may also edit `tests/corpus/**` for the previously assigned #28/#43/#44 cases and wave 3 reader follow-ups; corpus changes require the oracle-golden drift check. This resolves the earlier hand-off/write-scope mismatch. 4.2 may update the existing CI elevated invocation only if its new test harness needs it, coordinated with 4.1; 4.1 owns every CLI change.
+
 #### 4.1 — query-and-inspect-cli
-- **Write scope:** `crates/query/**`, `crates/cli/**`.
+- **Write scope:** `crates/query/**`, `crates/cli/**`; at wave 4 review, minimal additive `crates/catalog/**` read-snapshot and lightweight ranking-summary APIs/tests authorized to prevent mixed query results during metadata-only retries and pre-limit full-layer hydration (D-47).
 - **Deliverables:** `whereabouts inspect <path>` (group + extract a single path without an index — the debugging tool); `whereabouts query "<text>" [--bbox minx,miny,maxx,maxy] [--format …] [--epsg N] [--limit N] [--json]`: name scan → member FRN → dataset, ∩ R*Tree bbox, simple ordering (exact > prefix > substring, then mtime); loads the snapshot instead of re-enumerating; table and JSON output.
 - **Acceptance (V3):** CLI integration tests on the VHD volume; startup-to-first-result time recorded.
 
@@ -215,16 +268,16 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Deliverables + acceptance (V3), each as a CI test on the VHD volume:** journal wrap (tiny journal via `fsutil usn createjournal m=… a=…` plus file churn) → full rescan, catalog consistent; journal deleted/recreated → rescan; process killed mid-index → restart converges; corrupt snapshot → detected → rescan; catalog/snapshot checkpoint mismatch → reconcile; Whereabouts' own reads produce no USN events for indexed files; hard-link behaviour documented.
 
 #### 4.3 — benchmarks-and-coverage
-- **Write scope:** `tests/oracle/**`, `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
-- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; **proposed answers** to Q-14, Q-16, Q-18 (as *Decisions proposed*).
-- **Acceptance (V2 in CI + V4 numbers from the owner's run).**
+- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`. Wave 4 review also authorizes test-only corpus expectation updates in `crates/readers/tests/shapefile_corpus.rs` and `crates/crs/tests/g2.rs`; also authorizes the narrow MultiPatch declared-layer mapping/regression in `crates/readers/src/shapefile.rs` and core rustdoc clarification (D-49), plus fixture attribution. Production CRS and core type contracts remain unchanged.
+- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; enforcement of Q-14 targets already agreed in D-34; **proposed answers** to Q-16 and Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
+- **Acceptance:** software/oracle delivery requires V2 in CI. **Explicit wave-close handoff (2026-11-09):** the originally required V4 owner-volume/Everything measurements are unverified and move to 5.1 stage-exit verification. The owner confirmed no existing logs; the session is not OS-elevated and no Everything CLI/catalog was found in the checked locations. This permits engineering wave closure, not a V4 pass or stage completion. Q-16/Q-18 stay Open (D-48).
 
 ### Wave 5 — exit
 
 #### 5.1 — exit-verification
 - **Write scope:** `docs/stages/stage01/**`, `docs/benchmarks/**`, small fixes anywhere (each listed in the note; anything larger becomes a follow-up).
 - **Deliverables:** an exit-criteria checklist with evidence links (CI runs, benchmark doc, the owner's V4 run output); a proposed docs sync (architecture deltas, decisions, open questions) for the orchestrator to apply; a retro draft (what worked, what to change for stage02).
-- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy.
+- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy. **Wave 4 carry-forward:** collect V4 owner-volume USN/raw cold and warm measurements, a populated real-data catalog/snapshot and Everything comparison using `scripts/bench/bench-vs-everything.ps1`; record raw evidence, resolve Q-16/Q-18 with the owner and verify real-volume indexing/query exit criteria. V1–V3 and synthetic benchmarks do not satisfy these requirements. Stage closure cannot claim completion until they are evidenced.
 
 Then the orchestrator runs `/close-stage` (retro, docs sync, `develop → main`, tag `v0.1.0`) and `/plan-stage` for stage02.
 
@@ -237,7 +290,7 @@ Then the orchestrator runs `/close-stage` (retro, docs sync, `develop → main`,
 | Core contracts turn out wrong after the fan-out | Wave 1 freezes them deliberately; G1 review before wave 2; flagged contract-change process |
 | USN enumeration too slow / memory-heavy | Measured in 1.3 at G1; raw `$MFT` parsing kept as a planned fallback (Q-16) |
 | Pure-Rust CRS coverage insufficient | Measured in 2.4 at G2; PROJ via `proj` crate is the documented fallback (D-09) |
-| No local Rust toolchain on the owner's machine yet | CI is the verification source (V1–V3); V4 waits for the toolchain — the owner installs it before wave 4 |
+| Owner-volume / Everything evidence is missing; the agent shell is not Windows-elevated | Local Rust component tests and elevated CI establish V1–V3 only; 5.1/#68 must collect the real-volume, separate-boot and Everything evidence before stage closure |
 | Elevated tests are hard to run safely | Isolated VHD test volumes in CI; tests never write outside their own volume/temp dir |
 | Our own reads dirty the user's files (SQLite `-wal`, mtime) and trigger re-index loops | Read-only opens + explicit tests in 3.1 and 4.2 |
 | Corpus licensing | Synthetic data generated by us; real-world samples only with recorded provenance and a redistributable licence, large ones not committed |
@@ -250,24 +303,33 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | Session | Theme | Issue | Status | Note |
 |---|---|---|---|---|
 | 0 | Bootstrap: repo, tooling, docs, stage plan | — | ✅ done (2026-10-19) | [note](sessions/0-bootstrap.md) |
-| 1.1 | core-contracts | | ⏳ planned | |
-| 1.2 | oracle-corpus | | ⏳ planned | |
-| 1.3 | ntfs-enumeration | | ⏳ planned | |
-| 1.4 | crs-wkt-parsing | | ⏳ planned | |
-| 2.1 | nameindex | | ⏳ planned | |
-| 2.2 | ntfs-journal-source | | ⏳ planned | |
-| 2.3 | dataset-grouper | | ⏳ planned | |
-| 2.4 | crs-epsg-transform | | ⏳ planned | |
-| 2.5 | catalog | | ⏳ planned | |
-| 2.6 | reader-shapefile | | ⏳ planned | |
-| 3.1 | reader-geopackage | | ⏳ planned | |
-| 3.2 | reader-geotiff | | ⏳ planned | |
-| 3.3 | index-pipeline | | ⏳ planned | |
-| 4.1 | query-and-inspect-cli | | ⏳ planned | |
-| 4.2 | resilience | | ⏳ planned | |
-| 4.3 | benchmarks-and-coverage | | ⏳ planned | |
-| 5.1 | exit-verification | | ⏳ planned | |
+| 1.1 | core-contracts | #1 | ✅ done (2026-10-19, V1, PR #21) | [note](sessions/1.1-core-contracts.md) |
+| 1.2 | oracle-corpus | #2 | ✅ done (2026-10-19, V2, PR #22) | [note](sessions/1.2-oracle-corpus.md) |
+| 1.3 | ntfs-enumeration | #3 | ✅ done (2026-10-19, V3, PR #20; V4 owner run 2026-10-20 → G1) | [note](sessions/1.3-ntfs-enumeration.md) |
+| 1.4 | crs-wkt-parsing | #4 | ✅ done (2026-10-19, V1, PR #23) | [note](sessions/1.4-crs-wkt-parsing.md) |
+| 2.1 | nameindex | #5 | ✅ done (2026-10-27, V1, PR #35) | [note](sessions/2.1-nameindex.md) |
+| 2.2 | ntfs-journal-source | #6 | ✅ done (2026-10-27, V3, PR #34) | [note](sessions/2.2-ntfs-journal-source.md) |
+| 2.3 | dataset-grouper | #7 | ✅ done (2026-10-27, V1, PR #38) | [note](sessions/2.3-dataset-grouper.md) |
+| 2.4 | crs-epsg-transform | #8 | ✅ done (2026-10-27, V2, PR #37; G2 go) | [note](sessions/2.4-crs-epsg-transform.md) |
+| 2.5 | catalog | #9 | ✅ done (2026-10-27, V1, PR #36) | [note](sessions/2.5-catalog.md) |
+| 2.6 | reader-shapefile | #10 | ✅ done (2026-10-27, V2, PR #33) | [note](sessions/2.6-reader-shapefile.md) |
+| 2.7 | ntfs-mft-reader (added at G1) | #31 | ✅ done (2026-10-27, V3, PR #39; owner V4 on D: requested) | [note](sessions/2.7-ntfs-mft-reader.md) |
+| 3.1 | reader-geopackage | #11 | ✅ done (2026-11-08, V2, PR #57) | [note](sessions/3.1-reader-geopackage.md) |
+| 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
+| 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
+| 4.1 | query-and-inspect-cli | #14 | ✅ merged (2026-11-09, V3, PR #66) | [note](sessions/4.1-query-and-inspect-cli.md) |
+| 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
+| 4.3 | benchmarks-and-coverage | #16 | ✅ merged (2026-11-09, V2, PR #67); V4 carried to 5.1/#68 | [note](sessions/4.3-benchmarks-and-coverage.md) |
+| 5.1 | exit-verification | #17 | ✅ merged (2026-11-09, PR #70); accepted gaps D-50 | [note](sessions/5.1-exit-verification.md) |
 
 ## Stage retro
 
-_(written at stage close)_
+**Keep:** frozen contracts and crate boundaries; bounded native readers and immutable input access; explicit V1–V4 evidence; isolated elevated VHD resilience tests; raw benchmark samples.
+
+**Improve:** prepare Rust/release binaries and Everything before owner measurements, reserve reboot windows in advance, avoid builds during performance runs, distinguish file records from hard-link paths and datasets, and separate resident latency from one-shot CLI startup.
+
+**Plan deltas:** G1 added raw-MFT session 2.7; wave 4 moved owner evidence to 5.1 without waiving it; 5.1 and follow-up measurements exposed startup and path-coverage limits. The owner explicitly accepted these named M0 gaps and deferred cold scans (D-50).
+
+**Carry-forward:** #68 boot-separated enumeration; #72 resident service performance/budgets with #48/#47 optimization; #52 all-link path coverage. Acceptance criteria and evidence are in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md). No numeric M1 budget or future hard-link contract is selected here.
+
+**Evidence:** 2.866M names and 5,209 datasets in the owner index; 62 committed oracle cases at strict 100% agreement. Warm timing diagnostics isolate approximately 500 ms snapshot load/reconstruction and 5 ms search. CI minutes are unknown; calendar duration is not a work-effort measure. The release audit and v0.1.0 scope are recorded in [RELEASE.md](RELEASE.md).

@@ -5,3 +5,11 @@
 //! restart replay and the full-rescan path.
 //!
 //! Spec: `docs/03-architecture.md` §3. Filled in by stage01 sessions 3.3 and 4.2.
+
+#![warn(missing_docs)]
+
+mod extract;
+mod pipeline;
+
+pub use extract::{ExtractedMetadata, extract};
+pub use pipeline::{IndexError, IndexOptions, IndexProgress, Indexer};

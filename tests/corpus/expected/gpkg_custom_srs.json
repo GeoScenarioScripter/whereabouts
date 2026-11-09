@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "case": "gpkg_custom_srs",
+  "format": "geopackage",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "fields",
+      "kind": "vector",
+      "geometry_type": "Polygon",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 3,
+      "extent": [
+        417038.118662558,
+        58713.675347276,
+        1672449.79506028,
+        526805.404306496
+      ],
+      "declared_extent": [
+        417038.118662558,
+        58713.675347276,
+        1672449.79506028,
+        526805.404306496
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "width": 0
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": null,
+      "crs": {
+        "status": "unidentified",
+        "source": "gpkg_srs",
+        "raw_kind": "wkt1",
+        "raw": "PROJCS[\"Custom LCC\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",40],PARAMETER[\"central_meridian\",-97.5],PARAMETER[\"standard_parallel_1\",33.25],PARAMETER[\"standard_parallel_2\",46.75],PARAMETER[\"false_easting\",1000000],PARAMETER[\"false_northing\",500000],UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+        "declared_authority": {
+          "name": "NONE",
+          "code": "100000",
+          "srs_id": 100000
+        },
+        "wkt2": "PROJCRS[\"Custom LCC\",BASEGEOGCRS[\"WGS 84\",DATUM[\"World Geodetic System 1984\",ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]]],CONVERSION[\"unnamed\",METHOD[\"Lambert Conic Conformal (2SP)\",ID[\"EPSG\",9802]],PARAMETER[\"Latitude of false origin\",40,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8821]],PARAMETER[\"Longitude of false origin\",-97.5,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8822]],PARAMETER[\"Latitude of 1st standard parallel\",33.25,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8823]],PARAMETER[\"Latitude of 2nd standard parallel\",46.75,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8824]],PARAMETER[\"Easting at false origin\",1000000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8826]],PARAMETER[\"Northing at false origin\",500000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8827]]],CS[Cartesian,2],AXIS[\"easting\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"northing\",north,ORDER[2],LENGTHUNIT[\"metre\",1]]]",
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": [
+        -104.384974661,
+        35.744223241,
+        -89.563376569,
+        40.242998165
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

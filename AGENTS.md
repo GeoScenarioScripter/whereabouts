@@ -71,10 +71,10 @@ Toolchain is pinned by `rust-toolchain.toml` (Rust 1.99, edition 2024, MSVC on W
 
 - Rust 2024 edition, `rustfmt.toml` formatting, clippy clean with `-D warnings`. Workspace lints: `unsafe_code = "deny"` (only `crates/ntfs` opts out, with `// SAFETY:` on every block), `unwrap_used` warns (allowed in tests).
 - Errors: `thiserror` enums in library crates; `anyhow` only in the CLI binary and test helpers.
-- Logging: `tracing`; no `println!` outside the CLI.
+- Logging: `tracing`; no `println!` in library code outside the CLI. Tests, `examples/` and benches may print, e.g. measurement output.
 - Public items have rustdoc. The crate-level doc comment states the crate's responsibility and links its spec.
 - Dependencies: one used by more than one crate goes in root `[workspace.dependencies]` (alphabetical) and is referenced with `{ workspace = true }`. New dependencies must be permissively licensed (see `deny.toml`) and justified in the PR. Prefer small pure-Rust crates; no C/C++ build dependencies without a decision.
-- Tests: unit tests next to the code; cross-crate tests in `crates/<x>/tests/`; corpus-driven tests go through `tests/oracle`. Tests that need admin or a raw volume are `#[ignore]` with a comment saying so, and must use an isolated test volume or temp dir.
+- Tests: unit tests next to the code; cross-crate tests in `crates/<x>/tests/`; corpus-driven tests go through `tests/oracle`. Tests that need admin or a raw volume are `#[ignore]` with a comment saying so. Tests that **write**, or that create/delete a USN journal, must use an isolated test volume (VHD) or temp dir. Strictly read-only enumeration or journal queries may target the system volume, when a session spec asks for it.
 - Commit messages: Conventional Commits with the crate as scope — `feat(nameindex): add wildcard scan`, `fix(readers): handle empty .dbf`.
 
 ## Workflow

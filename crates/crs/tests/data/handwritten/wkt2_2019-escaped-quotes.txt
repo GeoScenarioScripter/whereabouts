@@ -1,0 +1,13 @@
+geogcrs["Somebody's ""custom"" WGS 84",
+    datum["World Geodetic System 1984",
+        ellipsoid["WGS 84",6378137,298.257223563,
+            lengthunit["metre",1]]],
+    primem["Greenwich",0,
+        angleunit["degree",0.0174532925199433]],
+    cs[ellipsoidal,2],
+        axis["longitude",east,
+            order[1]],
+        axis["latitude",north,
+            order[2]],
+        angleunit["degree",0.0174532925199433],
+    remark["Hand-written: lower-case keywords, escaped quotes, lon/lat axis order."]]

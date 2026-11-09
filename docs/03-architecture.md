@@ -28,23 +28,23 @@ Everything here is a design sketch to guide implementation — refine it as code
 
 ## 2. Proposed Rust workspace layout
 
-Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 crates exist as stubs; `tiles`, `ipc`, `service` and `app/` are added by later stages.
+Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 components include the indexing pipeline and query/inspect CLI; `tiles`, `ipc`, `service` and `app/` are added by later stages.
 
 | Crate | Responsibility |
 |---|---|
-| `whereabouts-core` | Shared types: `DatasetId`, `Dataset`, `Layer`, `Bounds`, `CrsRef`, errors |
-| `whereabouts-source` | `Source` trait; event types (Created/Deleted/Renamed/Modified) |
-| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` |
-| `whereabouts-nameindex` | Compact in-memory filename index, path reconstruction, substring/wildcard/regex scan, snapshot I/O |
-| `whereabouts-datasets` | Dataset grouping rules (file sets → datasets/layers) |
-| `whereabouts-readers` | Native format readers (header/metadata; later full-geometry reads for previews) |
-| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKey parsing, EPSG identification, bounds → WGS84 (proj4rs) |
-| `whereabouts-catalog` | SQLite schema, migrations, R*Tree, query building |
-| `whereabouts-query` | Search syntax parser → name-index scan + catalog query plan |
+| `whereabouts-core` | Shared types (contracts summary at the top of `core/src/lib.rs`): identities `VolumeId`/`Frn`/`DatasetId`/`LayerId` (D-27), `FileRecord`/`FileName` (WTF-8, D-28), `Format`/`DatasetKind`, `Dataset`/`Member`, `Bounds`/`Wgs84Extent`, `CrsDefinition`/`ResolvedCrs`, `LayerMetadata`/`DatasetMetadata`, `DatasetRecord`/`LayerRecord`, `ExtractionStatus`, the `FormatReader` trait, errors |
+| `whereabouts-source` | `Source` trait, `SourceEvent` (Created/Deleted/Renamed/Modified), `Changes::{Batch, FullRescanRequired}`, opaque versioned `Checkpoint` (D-29) |
+| `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` (D-38), optional raw `$MFT` enumeration (`EnumerationMethod::RawMft`, D-43), VHD `testvol` helper; local NTFS drive letters only (D-31) |
+| `whereabouts-nameindex` | Compact in-memory filename index (struct-of-arrays, string pool plus folded pool, FRN map), upsert/tombstone/`compact()`, path reconstruction with orphan/cycle guards, substring/wildcard/extension/path search with a rayon scan (regex is out), checksummed snapshot v1 with an embedded `Checkpoint`; `synth` feature for synthetic volumes (D-37) |
+| `whereabouts-datasets` | Stateful per-volume `Grouper` over a `DirectoryView`: sidecar/folder rules, `full_scan`, `apply_batch` → `GroupDelta`, `is_relevant_name`; names only, no file contents (D-39) |
+| `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile/lone-DBF (D-42), bounded native SQLite GeoPackage (D-44), and TIFF/BigTIFF/COG readers (D-45); later full-geometry reads for previews |
+| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKeys parsing (D-45), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
+| `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41), `read_snapshot` and lightweight dataset/member summaries for query consistency and ranking (D-47) |
+| `whereabouts-query` | Dedicated rayon query pool; literal folded name scan → member FRNs → datasets, catalog format/EPSG/R*Tree filters, exact/prefix/substring ranking, orphan suppression and limit after deduplication; shared catalog read snapshot (D-47) |
 | `whereabouts-tiles` | MVT encoder, raster warping, tile cache |
 | `whereabouts-ipc` | Named-pipe protocol (serde messages) |
 | `whereabouts-service` | The elevated indexer service binary |
-| `whereabouts-indexer` | Pipeline shared by the CLI and the service: source → name index → grouper → extraction queue → `extract` (readers + CRS) → catalog; checkpoints (D-24) |
+| `whereabouts-indexer` | Pipeline shared by the CLI and the service: source → name index → grouper → extraction queue → `extract` (readers + CRS) → catalog; catalog-before-snapshot checkpoints and durable transient-retry ledger (D-46) |
 | `whereabouts-cli` | M0 CLI (index, inspect, query) |
 | `app/` (Tauri) | UI process and frontend |
 | `tests/oracle` | GDAL-diff harness (dev/CI only) |
@@ -53,7 +53,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 ### 3.1 Initial enumeration (per NTFS volume)
 1. Open the volume handle (`\\.\C:`) — requires elevation (hence the service).
-2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. Raw `$MFT` parsing is a later optimization (faster, gives sizes/timestamps in one pass, but must handle attribute lists, fixups, fragmented runs).
+2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. D-50 retains USN as the default; six boot-separated comparisons are deferred to stage02/#68 before reconsidering raw-first selection. It can also deliver sizes and timestamps from the same pass (stage02).
 3. Build the name index: store **(FRN, parent, name)**, not full paths; reconstruct paths on demand by walking parent links to the root.
 4. Feed candidate GIS files (by extension and by folder signature, e.g. `*.gdb` directories) to the dataset grouper.
 
@@ -62,6 +62,11 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 - Apply to the name index; emit `Source` events; the grouper maps events to affected datasets and enqueues re-extraction.
 - Persist snapshot + last processed USN + journal ID. On restart, replay from the saved USN.
 - **Full rescan** when the journal ID changed, the journal was deleted/disabled, or the saved USN has been overwritten (journal wrapped).
+- **Behaviours verified on real volumes (stage01/2.2, D-38):**
+  - `StartUsn = 0` is special: the kernel reads from the first record instead of failing with `ERROR_JOURNAL_ENTRY_DELETED`. The source compares the checkpoint with `FirstUsn` before reading, and re-queries after a read that started at 0.
+  - Enumeration (`FSCTL_ENUM_USN_DATA`) works without a journal. The checkpoint records "no journal", `changes` asks for a rescan until one exists, and the source never creates one.
+  - Records are coalesced per file per batch (delete, create, rename, modify); a rename split across batches is carried in the checkpoint (up to 64 pending). Debouncing across batches is the pipeline's job.
+  - NTFS keeps more than the requested maximum before trimming (a 1 MiB journal reached `FirstUsn` 41M after 20k create/delete cycles).
 
 ### 3.3 Edge cases to handle
 - **Hard links:** one file, several names/parents.
@@ -79,6 +84,12 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 - Native readers read **only the bytes needed** (bounded reads). GeoJSON/KML need streaming scans — apply size thresholds/timeouts and record "extent pending/approximate" if needed.
 - Output per dataset/layer: format, CRS (native definition + identified EPSG if any), native bounds, WGS84 bounds (densified transform), simplified footprint, geometry type, feature/point count, raster width/height/bands/dtype/resolution/nodata/overviews, field list.
 - Record extraction status and errors per dataset (`ok`, `partial`, `unsupported`, `error:<reason>`), and the source mtime/size so re-extraction happens only on change.
+
+**Stage01 implementation (wave 3):** `indexer::extract` is the shared reader → CRS resolution/identification → WGS84 transformation path, with bounded per-worker CRS/transform caches. `Indexer::open` and `catch_up` apply whole source batches before resolving paths, coalesce dirty datasets, compact the name index and drain changes until empty. Worker jobs prioritize recent mtimes. Native facts survive CRS failures.
+
+Transient extraction failures retain the stored record and enter a durable retry queue (D-36/D-46). Catalog records and checkpoint commit before the name snapshot; a checkpoint-bound `.retry` ledger is synced first and shrunk last. Restart resumes matching state, or rescans on corrupt/mismatched state. Catalog/snapshot output paths are excluded from grouping, and output-only journal batches advance the in-memory cursor without another output write. Journal creation remains explicit; unavailable history is an error rather than a rescan loop.
+
+The CLI supports `index --volume X: [--db PATH] [--watch]`, with progress on stderr; query and inspect are implemented in wave 4.1 (D-47). Windows CI invokes ignored CLI/indexer VHD acceptance tests as well as the NTFS tests. This is a CLI pipeline; the service process shown above comes later.
 
 ## 4. Catalog schema (sketch)
 
@@ -134,7 +145,28 @@ CREATE TABLE crs (
 CREATE VIRTUAL TABLE layer_extents USING rtree(id, minx, maxx, miny, maxy);
 ```
 
+**Schema as built in stage01/2.5 (schema v1; deltas against the sketch above, D-41):**
+
+| Table | Change |
+|---|---|
+| `volumes` (new) | `id INTEGER PK AUTOINCREMENT` (= `VolumeId`, catalog-assigned), `kind`, `key`, `label` (= `SourceIdentity`), `checkpoint BLOB` (`Checkpoint::to_bytes()`), `checkpoint_at INTEGER` (ns); `UNIQUE(kind, key)` |
+| `datasets` | + `anchor_frn INTEGER NOT NULL`, `UNIQUE(volume_id, anchor_frn)` (D-27); `volume_id` is an FK to `volumes ON DELETE CASCADE`; `kind` codes include `table` and `unknown`; indexes `(format)`, `(status, mtime)` |
+| `dataset_files` | `PRIMARY KEY (dataset_id, frn)`; FK `ON DELETE CASCADE`; index `(frn)`; role codes per `MemberRole` (`main`, `shx`, `dbf`, `prj`, `cpg`, `sbn`, `sbx`, `qix`, `xml`, `qmd`, `aux_xml`, `ovr`, `msk`, `world_file`, `internal`, `other`) |
+| `layers` | + `ordinal INTEGER NOT NULL`, `UNIQUE(dataset_id, ordinal)`; + `wgs84_parts INTEGER` (R*Tree rows for the layer); `name` and `fields_json` NOT NULL; FK `ON DELETE CASCADE`; index `(crs_id)`; `footprint` stays NULL until M1 (D-16) |
+| `rasters` | `has_overviews` becomes `overview_count INTEGER`; + `geotransform TEXT` (JSON array of 6, GDAL order); FK `ON DELETE CASCADE` |
+| `crs` | + `def_hash INTEGER` (indexed; stable FNV-1a), `authority`, `auth_code`, `status` (`identified`/`unidentified`/`unparsed`); `def_kind` adds `'epsg'`; index `(epsg)`; rows are de-duplicated and pruned when unused |
+| `layer_extents` | `rtree(id, minx, maxx, miny, maxy, +layer_id, +west, +south, +east, +north)`: one row per `Wgs84Extent` part (at most 4), `id = layer_id * 4 + part`; the auxiliary columns hold exact f64 edges |
+| trigger | `layers_delete_extents`: deleting a layer (also by cascade) deletes its R*Tree rows by rowid |
+
+Connection settings: `journal_mode = WAL`, `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, `busy_timeout = 5 s`; writers use `BEGIN IMMEDIATE`. Migrations are an append-only list keyed by `PRAGMA user_version`, and a newer version is refused.
+
 Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_mtime, z, x, y, format, data)`.
+
+## M0 closure and resident-service handoff
+
+The implemented CLI reloads and validates the name snapshot and constructs a query pool for every process. Opt-in `query --timings` reports phase durations on stderr while preserving stdout results. Owner warm diagnostics measured approximately 500 ms in snapshot loading/reconstruction and 5 ms in search; this does not satisfy the instant-search target (D-50).
+
+Stage02 #72 must reuse the loaded index, catalog access and dedicated pool across requests, while preserving a fresh consistent catalog read view per query (D-47); a service-long SQLite read transaction is not intended. IPC/concurrency contracts and numeric budgets remain stage02 decisions. Both USN and raw-MFT enumeration currently keep one name per FRN; complete hard-link enumeration, journal updates, name persistence and dataset grouping remain #52. See [handoff acceptance criteria](stages/stage01/STAGE02-HANDOFF.md).
 
 ## 5. Query pipeline
 
@@ -143,6 +175,12 @@ Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_
 3. Spatial term (map extent, drawn box, or gazetteer place) → `layer_extents` R*Tree filter → exact intersection against `footprint` with the `geo` crate (D-16).
 4. Attribute filters → SQL on `datasets`/`layers`/`rasters`/`crs`.
 5. Intersect, rank (name relevance, spatial relevance such as overlap ratio, recency), page, stream to UI.
+
+**Stage01 implementation (wave 4):** CLI `query` loads a checksummed name snapshot and a read-only catalog, requires an unambiguous matching volume/checkpoint, and uses one catalog read view for checkpoint selection, filtering and record materialization. Metadata-only retries cannot change the rows halfway through that view (D-47). Literal case-insensitive names map through member FRNs to datasets; format, EPSG and bbox constraints retain same-layer semantics and antimeridian handling. Selective searches use indexed member lookup; broad searches work from lightweight catalog summaries. Full layer metadata is hydrated only for the final selected IDs. Ranking is exact > prefix > substring, then newest mtime and stable ID, with limit applied after deduplication. Orphan/cyclic anchors and matching orphan members are hidden.
+
+`inspect <path>` builds a bounded directory view, uses the same grouper and `indexer::extract`, and creates no catalog or input sidecars. Folder signatures determine containers; a `.gdb` suffix alone is insufficient. Discovery IDs are temporary. Query and inspect emit table or JSON output; query syntax (Q-11), spatial ranking (Q-17), footprints and the resident service remain later work.
+
+Wave 4.2 verifies journal wrap/recreation, process death, persistence faults and corrupt/mismatched state on isolated VHDs, including catalog/R*Tree consistency and preservation of metadata during transient GeoPackage transactions. It also checks raw USN records to prove reads do not write indexed files. M0 hard-link alias completeness remains limited (D-38/#52).
 
 Goal: typing feels instant; spatial queries should not noticeably slow the result list.
 

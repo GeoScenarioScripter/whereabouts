@@ -1,0 +1,9 @@
+datasets:            100000 (batches of 1000)
+rows:                CatalogStats { volumes: 1, datasets: 100000, files: 400000, layers: 100000, crs: 8, extents: 100144 }
+first insert:        20.55s (4867 datasets/s)
+re-upsert (same):    23.20s (4310 datasets/s)
+db size:             65.1 MiB (+ WAL 8.1 MiB), 682 bytes/dataset
+bbox 1°x1°:          p50 162.8µs  p95 360.7µs  p99 600.5µs  (avg 3.9 hits)
+epsg + bbox 10°x10°: p50 2.7ms  p95 20.6ms  p99 32.8ms
+member lookup:       58.9µs avg
+get_dataset:         219.4µs avg

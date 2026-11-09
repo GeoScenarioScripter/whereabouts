@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "case": "shp_lcc_2154_lines",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "roads",
+      "kind": "vector",
+      "geometry_type": "LineString",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 6,
+      "extent": [
+        336102.595812446,
+        6267183.375964676,
+        845245.167838302,
+        6733894.66160868
+      ],
+      "declared_extent": [
+        336102.595812446,
+        6267183.375964676,
+        845245.167838302,
+        6733894.66160868
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": {
+        "source_encoding": "ISO-8859-1",
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
+      },
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "PROJCS[\"RGF_1993_Lambert_93\",GEOGCS[\"GCS_RGF_1993\",DATUM[\"D_RGF_1993\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Lambert_Conformal_Conic\"],PARAMETER[\"False_Easting\",700000.0],PARAMETER[\"False_Northing\",6600000.0],PARAMETER[\"Central_Meridian\",3.0],PARAMETER[\"Standard_Parallel_1\",49.0],PARAMETER[\"Standard_Parallel_2\",44.0],PARAMETER[\"Latitude_Of_Origin\",46.5],UNIT[\"Meter\",1.0]]",
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"RGF93 v1 / Lambert-93\",BASEGEOGCRS[\"RGF93 v1\",DATUM[\"Reseau Geodesique Francais 1993 v1\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4171]],CONVERSION[\"Lambert-93\",METHOD[\"Lambert Conic Conformal (2SP)\",ID[\"EPSG\",9802]],PARAMETER[\"Latitude of false origin\",46.5,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8821]],PARAMETER[\"Longitude of false origin\",3,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8822]],PARAMETER[\"Latitude of 1st standard parallel\",49,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8823]],PARAMETER[\"Latitude of 2nd standard parallel\",44,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8824]],PARAMETER[\"Easting at false origin\",700000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8826]],PARAMETER[\"Northing at false origin\",6600000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8827]]],CS[Cartesian,2],AXIS[\"easting (X)\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"northing (Y)\",north,ORDER[2],LENGTHUNIT[\"metre\",1]],USAGE[SCOPE[\"Engineering survey, topographic mapping.\"],AREA[\"France - onshore and offshore, mainland and Corsica (France métropolitaine including Corsica).\"],BBOX[41.15,-9.86,51.56,10.38]],ID[\"EPSG\",2154]]",
+        "epsg": 2154,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "2154",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        -1.846254457,
+        43.410565678,
+        4.936366937,
+        47.705410906
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

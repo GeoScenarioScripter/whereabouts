@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "case": "shp_fiji_3460_antimeridian",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "islands",
+      "kind": "vector",
+      "geometry_type": "Polygon",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 5,
+      "extent": [
+        1803841.406670696,
+        3820873.312303724,
+        2311755.593433553,
+        4066195.362345654
+      ],
+      "declared_extent": [
+        1803841.406670696,
+        3820873.312303724,
+        2311755.593433553,
+        4066195.362345654
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": {
+        "source_encoding": "ISO-8859-1",
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
+      },
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "PROJCS[\"Fiji_1986_Fiji_Map_Grid\",GEOGCS[\"GCS_Fiji_1986\",DATUM[\"D_Fiji_1986\",SPHEROID[\"WGS_1972\",6378135.0,298.26]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",2000000.0],PARAMETER[\"False_Northing\",4000000.0],PARAMETER[\"Central_Meridian\",178.75],PARAMETER[\"Scale_Factor\",0.99985],PARAMETER[\"Latitude_Of_Origin\",-17.0],UNIT[\"Meter\",1.0]]",
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"Fiji 1986 / Fiji Map Grid\",BASEGEOGCRS[\"Fiji 1986\",DATUM[\"Fiji Geodetic Datum 1986\",ELLIPSOID[\"WGS 72\",6378135,298.26,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4720]],CONVERSION[\"Fiji Map Grid\",METHOD[\"Transverse Mercator\",ID[\"EPSG\",9807]],PARAMETER[\"Latitude of natural origin\",-17,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],PARAMETER[\"Longitude of natural origin\",178.75,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],PARAMETER[\"Scale factor at natural origin\",0.99985,SCALEUNIT[\"unity\",1],ID[\"EPSG\",8805]],PARAMETER[\"False easting\",2000000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",4000000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"(E)\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"(N)\",north,ORDER[2],LENGTHUNIT[\"metre\",1]],USAGE[SCOPE[\"Cadastre, engineering survey, topographic mapping.\"],AREA[\"Fiji - onshore. Includes Viti Levu, Vanua Levu, Taveuni, the Yasawa Group, the Kadavu Group, the Lau Islands and Rotuma Islands.\"],BBOX[-20.81,176.81,-12.42,-178.15]],ID[\"EPSG\",3460]]",
+        "epsg": 3460,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "3460",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        176.891432537,
+        -18.618619197,
+        -178.296648269,
+        -16.381472473
+      ],
+      "crosses_antimeridian": true,
+      "wgs84_error": null
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2825ee233063653d1362e72ed55e421c088679855a3de137df48fe27be3f3f7a # shrinks to ops = [Upsert { frn: 23, parent: 32, name: [], dir: false, utf16: false }, Upsert { frn: 0, parent: 23, name: [], dir: false, utf16: false }], queries = [Query { text: "\\\\", mode: Substring, match_path: true, extensions: [], kind: Any, limit: 18446744073709551615 }]
+cc 831c51ae80e666bba254cd468e6ea046d69d7e45d2a2b8ac8addacc175e8003a # shrinks to ops = [Upsert { frn: 7, parent: 32, name: [26085], dir: false, utf16: false }, Upsert { frn: 7, parent: 32, name: [], dir: false, utf16: false }], queries = [Query { text: "日", mode: Substring, match_path: false, extensions: [], kind: Any, limit: 18446744073709551615 }]
+cc 6a656af5d1235ead961bb5dfdc8c73062866c5cb7726b4829b7c6b5a0b07776c # shrinks to ops = [Upsert { frn: 0, parent: 28, name: [], dir: false, utf16: false }, Upsert { frn: 28, parent: 32, name: [], dir: false, utf16: false }, Remove(28), Compact], queries = [Query { text: "", mode: Substring, match_path: false, extensions: [], kind: Any, limit: 18446744073709551615 }]

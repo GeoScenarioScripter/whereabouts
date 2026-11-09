@@ -1,0 +1,41 @@
+{
+  "$schema": "https://proj.org/schemas/v0.7/projjson.schema.json",
+  "type": "DerivedGeographicCRS",
+  "name": "Rotated_pole",
+  "base_crs": {
+    "type": "GeographicCRS",
+    "name": "WGS 84",
+    "datum": {
+      "type": "GeodeticReferenceFrame",
+      "name": "World Geodetic System 1984",
+      "ellipsoid": {
+        "name": "WGS 84",
+        "semi_major_axis": 6378137,
+        "inverse_flattening": 298.257223563
+      }
+    },
+    "coordinate_system": {
+      "subtype": "ellipsoidal",
+      "axis": [
+        {"name": "Geodetic latitude", "abbreviation": "Lat", "direction": "north", "unit": "degree"},
+        {"name": "Geodetic longitude", "abbreviation": "Lon", "direction": "east", "unit": "degree"}
+      ]
+    }
+  },
+  "conversion": {
+    "name": "Pole rotation (netCDF CF convention)",
+    "method": {"name": "Pole rotation (netCDF CF convention)"},
+    "parameters": [
+      {"name": "Grid north pole latitude (netCDF CF convention)", "value": 37.5, "unit": "degree"},
+      {"name": "Grid north pole longitude (netCDF CF convention)", "value": 177.5, "unit": "degree"},
+      {"name": "North pole grid longitude (netCDF CF convention)", "value": 0, "unit": "degree"}
+    ]
+  },
+  "coordinate_system": {
+    "subtype": "ellipsoidal",
+    "axis": [
+      {"name": "Latitude", "abbreviation": "lat", "direction": "north", "unit": "degree"},
+      {"name": "Longitude", "abbreviation": "lon", "direction": "east", "unit": "degree"}
+    ]
+  }
+}

@@ -20,7 +20,7 @@ The original v1 format wish list from discussion: SHP, GPKG, GeoTIFF/COG, GeoJSO
 | Format | Metadata location | Effort | Notes |
 |---|---|---|---|
 | Shapefile | `.shp` 100-byte header: bbox + shape type. `.dbf` header: record count + field list. `.prj`: WKT (often ESRI flavour, often without EPSG). `.cpg`: DBF encoding | Easy | Feature count from `.dbf` (or `.shx` length) |
-| GeoPackage | SQLite: `gpkg_contents` (min_x/min_y/max_x/max_y, srs_id), `gpkg_spatial_ref_sys` (definitions), `gpkg_geometry_columns` | Easy | `gpkg_contents` bounds are optional and can be stale → fall back to the layer's R-tree (`rtree_<table>_<geom>`) min/max. Many layers per file. Open read-only |
+| GeoPackage | SQLite: `gpkg_contents` (min_x/min_y/max_x/max_y, srs_id), `gpkg_spatial_ref_sys` (definitions), `gpkg_geometry_columns` | Easy | `gpkg_contents` bounds are optional and can be stale → fall back to the layer's R-tree (`rtree_<table>_<geom>`) min/max. Many layers per file. Bounded native SQLite page reads; active transactions defer extraction (D-44) |
 | FlatGeobuf | Header: envelope, geometry type, feature count, CRS | Easy | Has a packed Hilbert R-tree — great for previews |
 | GeoParquet | Parquet footer `geo` metadata JSON: bbox, CRS as PROJJSON, geometry types | Easy | Needs the `parquet` crate (footer only for indexing) |
 | LAS/LAZ | Public header: bounds, point count. CRS in VLRs/EVLRs (GeoTIFF keys or OGC WKT) | Easy | LAZ header is uncompressed |
@@ -30,6 +30,8 @@ The original v1 format wish list from discussion: SHP, GPKG, GeoTIFF/COG, GeoJSO
 | KML / KMZ | Always WGS84; extent requires streaming XML. KMZ = zip | Easy code, slow on big files | |
 | DXF | Header `$EXTMIN` / `$EXTMAX` | Easy | **No CRS** — store extent in native units, flag "unknown CRS"; exclude from WGS84 spatial index unless user assigns CRS (Open) |
 | File Geodatabase | Folder with `.gdbtable`/`.gdbtablx`; system table `GDB_Items` holds layer definitions incl. extents and CRS (XML) | Hard-ish (weeks) | Follow the published OpenFileGDB specification |
+
+**Wave 3 implementation:** GeoPackage extraction never opens a SQL connection or creates sidecars; limits and retry semantics are in D-44. GeoTIFF handles classic/BigTIFF, rotated bounds, PixelIsPoint, linked/SubIFD overviews, PAM/internal/world-file precedence and raw GeoKeys JSON through the common CRS resolver (D-45). These readers expose metadata only; raster pixels and general geometry coordinates are not scanned.
 
 ## 3. Dataset grouping rules (D-04)
 
@@ -67,7 +69,7 @@ Steps:
 
 Precision bar: metres of error from ignoring datum grid shifts are acceptable — this is a search index.
 
-Coverage expectation: projections covering nearly all real data — UTM/Transverse Mercator, Lambert Conformal Conic, Albers, Web Mercator, polar stereographic, geographic. **Validate against a real corpus.** If coverage is insufficient, fall back to PROJ via the `proj` crate (still far lighter to package than GDAL).
+Coverage expectation: projections covering nearly all real data — UTM/Transverse Mercator, Lambert Conformal Conic, Albers, Web Mercator, polar stereographic, geographic. **Validate against a real corpus.** Gate G2 retained the pure-Rust layer with no PROJ fallback (D-34); add missing native methods only when real data requires them.
 
 Unidentified/unsupported CRS: keep native bounds, mark `crs_status = unknown`, exclude from the spatial index, still searchable by name and attributes.
 
@@ -77,6 +79,8 @@ Unidentified/unsupported CRS: keep native bounds, mark `crs_status = unknown`, e
 - In CI: run `gdalinfo -json` / `ogrinfo -json -so` across the corpus and diff against native readers — extents (with tolerance), CRS identification, geometry types, counts, raster sizes.
 - Track a per-format agreement rate; regressions fail the build.
 - GDAL is **dev/CI-only** here — it is never linked into the core binary.
+
+**Wave 4 verification:** every native adapter uses the pipeline's `indexer::extract` path for CRS/EPSG/WGS84 as well as native metadata. Committed cases must be present and compared by registered adapters. Retryable I/O errors cannot count as successful corrupt-input handling, and a missing native raster resolution cannot pass against a present golden value. Per-format native/CRS baselines retain measured 1.0 rates, above D-34's global 0.98 CRS floor. Known CP437 field-name fallback remains explicitly Partial (D-42/#42), separately tested rather than hidden in generic geometry/bounds rates. MultiPatch reports the unknown declared layer type rather than assuming PolyhedralSurface (D-49).
 
 ## 6. Preview readiness by format (for the roadmap)
 

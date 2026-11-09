@@ -38,6 +38,7 @@ Create `docs/stages/stageNN/sessions/W.N-<theme>.md` using the template in `docs
 - `git push -u origin <branch>`
 - `gh pr create --base develop --title "[stageNN/W.N] <theme>" --body-file <filled template>`. Fill in every section of `.github/pull_request_template.md` and include `Closes #<issue>` (find it with `gh issue list --milestone stageNN --search "[stageNN/W.N]"`).
 - If acceptance isn't met: `--draft`, and say exactly what's missing.
+- The scratchpad directory is shared with sibling sessions. Give every scratch file a session-specific name (e.g. `pr23-body.md`, `s01-1.4-notes.md`), never a generic one like `pr-body.md`.
 
 ## 7. Report back (your final message to the orchestrator)
 ```

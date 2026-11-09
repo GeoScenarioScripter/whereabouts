@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "case": "shp_ne_110m_land",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "ne_110m_land",
+      "kind": "vector",
+      "geometry_type": "Polygon",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 127,
+      "extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.64513
+      ],
+      "declared_extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.64513
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "featurecla",
+          "type": "String",
+          "width": 15
+        },
+        {
+          "name": "scalerank",
+          "type": "Integer",
+          "width": 4
+        },
+        {
+          "name": "min_zoom",
+          "type": "Real",
+          "width": 6
+        }
+      ],
+      "encoding": {
+        "source_encoding": "UTF-8",
+        "cpg": "UTF-8",
+        "encoding_from_cpg": "UTF-8",
+        "ldid": null,
+        "encoding_from_ldid": null
+      },
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.017453292519943295]]",
+        "declared_authority": null,
+        "wkt2": "GEOGCRS[\"WGS 84\",DATUM[\"World Geodetic System 1984\",ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],CS[ellipsoidal,2],AXIS[\"latitude\",north,ORDER[1],ANGLEUNIT[\"degree\",0.0174532925199433]],AXIS[\"longitude\",east,ORDER[2],ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4326]]",
+        "epsg": 4326,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "4326",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        -180.0,
+        -90.0,
+        180.0,
+        83.64513
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

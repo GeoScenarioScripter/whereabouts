@@ -1,0 +1,11 @@
+volume        D: label="新加卷" fs=NTFS serial=CA385364
+journal       id=0x1db8ca5d3a07345 first_usn=12071206912 next_usn=13189447760 max_size=953 MiB
+root frn      0x0005000000000005
+mode          count-only (zero-copy batches) (buffer 1024 KiB)
+records       2864402 (454806 directories, 2409596 files)
+skipped       0 (records with parse errors; expected 0)
+kernel calls  279 returning 278.3 MiB
+name length   56681931 UTF-16 units total
+elapsed       37.127 s (77152 records/s); in kernel 37.095 s, in user code 0.032 s
+working set   before 4.6 MiB, after 5.5 MiB, peak 5.6 MiB
+exit=0

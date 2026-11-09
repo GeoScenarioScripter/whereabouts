@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "case": "shp_lone_dbf",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "owners",
+      "kind": "attributes",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 2,
+      "extent": null,
+      "declared_extent": null,
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": {
+        "source_encoding": "ISO-8859-1",
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
+      },
+      "crs": {
+        "status": "missing",
+        "source": "none",
+        "raw_kind": null,
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": null,
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": null,
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

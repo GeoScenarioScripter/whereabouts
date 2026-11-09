@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "case": "gpkg_undefined_srs",
+  "format": "geopackage",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "sketch",
+      "kind": "vector",
+      "geometry_type": "Point",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 5,
+      "extent": [
+        0.0,
+        0.0,
+        40.0,
+        20.0
+      ],
+      "declared_extent": [
+        0.0,
+        0.0,
+        40.0,
+        20.0
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer",
+          "width": 0
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": null,
+      "crs": {
+        "status": "missing",
+        "source": "gpkg_srs",
+        "raw_kind": null,
+        "raw": null,
+        "declared_authority": {
+          "name": "NONE",
+          "code": "-1",
+          "srs_id": -1
+        },
+        "wkt2": null,
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": null,
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

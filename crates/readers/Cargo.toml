@@ -13,5 +13,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Decodes DBF field names (.cpg / language driver code pages such as GBK, Windows-1251) and
+# non-UTF-8 .prj text. Pure Rust, (Apache-2.0 OR MIT) AND BSD-3-Clause. Only this crate needs it.
+encoding_rs = "0.8.35"
+# Bounded PAM/GDAL metadata XML; no DTD or external entity resolution.
+roxmltree = "0.21"
+serde_json.workspace = true
 whereabouts-core.workspace = true
 whereabouts-crs.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true

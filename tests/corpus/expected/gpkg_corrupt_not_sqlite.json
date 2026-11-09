@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "case": "gpkg_corrupt_not_sqlite",
+  "format": "geopackage",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "error",
+  "error": "`fake.gpkg' not recognized as being in a supported file format.",
+  "messages": [],
+  "layers": []
+}

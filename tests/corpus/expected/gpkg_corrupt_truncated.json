@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "case": "gpkg_corrupt_truncated",
+  "format": "geopackage",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "error",
+  "error": "sqlite3_prepare_v2(SELECT COUNT(*) FROM sqlite_master WHERE name IN ('gpkg_metadata', 'gpkg_metadata_reference') AND type IN ('table', 'view')) failed: database disk image is malformed May be caused by: database disk image is malformed",
+  "messages": [],
+  "layers": []
+}

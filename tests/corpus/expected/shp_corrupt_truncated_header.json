@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "case": "shp_corrupt_truncated_header",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "error",
+  "error": ".shp file is unreadable, or corrupt.",
+  "messages": [],
+  "layers": []
+}

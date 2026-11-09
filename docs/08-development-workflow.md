@@ -54,6 +54,9 @@ Each session spec states its *required* level. "Not verified at the required lev
 - Session branches start from `develop` at wave open. No direct pushes to `main`/`develop`, no `--no-verify`, no plain `--force` (branch protection + the `guard-git` hook).
 - Merge one PR at a time in watch-point order; rebase the rest onto the new `develop` and let CI re-run before the next merge.
 - `Cargo.lock` is committed. On conflict: take `develop`'s, run `cargo check`, commit.
+- Watch-point order exists to keep conflicts trivial. When the only shared file is `Cargo.lock`, the orchestrator may merge a ready PR ahead of a PR still in review fixes; record the actual order at wave close.
+- `Closes #<issue>` doesn't fire on merges into `develop` (it isn't the default branch). The orchestrator closes session issues by hand, linking the PR.
+- Changes to `tests/corpus/` (scripts, data, goldens, manifest) trigger the `oracle-golden` drift check on the PR. Regenerating needs Docker or that workflow's artifact (D-33).
 
 ## 7. Session lifecycle (sub-agent in its worktree)
 
@@ -104,7 +107,7 @@ Date: YYYY-MM-DD · Issue: #N · PR: #M · Verification reached: V?
 **Wave** (`/run-wave`):
 1. Preconditions: previous wave closed, `develop` green, issues exist for the wave's sessions.
 2. Spawn one `session-worker` per session (`isolation: "worktree"`), **at most 4 concurrently** — Rust builds are heavy per worktree; queue the rest.
-3. Review each PR: CI, required verification level, write scope, guardrails (no GDAL, datasets-not-files, hot path), code review (`/code-review` or `pr-review-toolkit`).
+3. Review each PR: CI, required verification level, write scope, guardrails (no GDAL, datasets-not-files, hot path), code review (`/code-review` or `pr-review-toolkit`). Run one forked PR review at a time, because it may check the PR out in the main checkout.
 4. Merge in order (§6).
 5. Close with one docs PR `docs/s01-wave-W-close`: tick status, fold decisions/open questions/architecture deltas, adjust later waves if scope moved.
 6. Gate (if defined): present evidence to the owner; wait for go/no-go.

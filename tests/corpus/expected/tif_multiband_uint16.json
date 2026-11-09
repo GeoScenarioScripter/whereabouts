@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "case": "tif_multiband_uint16",
+  "format": "geotiff",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "rgbn",
+      "kind": "raster",
+      "geometry_type": null,
+      "has_z": false,
+      "has_m": false,
+      "feature_count": null,
+      "extent": [
+        -75.5,
+        39.8,
+        -75.3,
+        40.0
+      ],
+      "declared_extent": null,
+      "raster": {
+        "width": 40,
+        "height": 40,
+        "band_count": 4,
+        "data_types": [
+          "UInt16",
+          "UInt16",
+          "UInt16",
+          "UInt16"
+        ],
+        "nodata": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "geotransform": [
+          -75.5,
+          0.005,
+          0.0,
+          40.0,
+          0.0,
+          -0.005
+        ],
+        "resolution": [
+          0.005,
+          0.005
+        ],
+        "georef_source": "geotiff_tags",
+        "pixel_is_point": false,
+        "overview_count": 0,
+        "bigtiff": false,
+        "layout": null,
+        "compression": null
+      },
+      "fields": null,
+      "encoding": null,
+      "crs": {
+        "status": "identified",
+        "source": "geokeys",
+        "raw_kind": "geokeys",
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": "GEOGCRS[\"WGS 84\",ENSEMBLE[\"World Geodetic System 1984 ensemble\",MEMBER[\"World Geodetic System 1984 (Transit)\"],MEMBER[\"World Geodetic System 1984 (G730)\"],MEMBER[\"World Geodetic System 1984 (G873)\"],MEMBER[\"World Geodetic System 1984 (G1150)\"],MEMBER[\"World Geodetic System 1984 (G1674)\"],MEMBER[\"World Geodetic System 1984 (G1762)\"],MEMBER[\"World Geodetic System 1984 (G2139)\"],MEMBER[\"World Geodetic System 1984 (G2296)\"],ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]],ENSEMBLEACCURACY[2.0]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],CS[ellipsoidal,2],AXIS[\"geodetic latitude (Lat)\",north,ORDER[1],ANGLEUNIT[\"degree\",0.0174532925199433]],AXIS[\"geodetic longitude (Lon)\",east,ORDER[2],ANGLEUNIT[\"degree\",0.0174532925199433]],USAGE[SCOPE[\"Horizontal component of 3D system.\"],AREA[\"World.\"],BBOX[-90,-180,90,180]],ID[\"EPSG\",4326]]",
+        "epsg": 4326,
+        "epsg_method": "authority",
+        "epsg_confidence": 100,
+        "candidates": []
+      },
+      "wgs84_extent": [
+        -75.5,
+        39.8,
+        -75.3,
+        40.0
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

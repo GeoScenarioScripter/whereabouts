@@ -1,0 +1,12 @@
+ENGCRS["A construction site CRS",
+    EDATUM["P1",
+        ANCHOR["Peg in south corner"]],
+    CS[Cartesian,2],
+        AXIS["site east",southWest,
+            ORDER[1]],
+        AXIS["site north",southEast,
+            ORDER[2]],
+        LENGTHUNIT["metre",1.0],
+    USAGE[
+        SCOPE["Construction."],
+        AREA["Hypothetical site."]]]

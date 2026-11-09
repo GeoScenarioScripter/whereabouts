@@ -13,4 +13,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+rusqlite.workspace = true
+# `float_roundtrip`: geotransforms are stored as JSON and must read back bit-exact.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+thiserror.workspace = true
+tracing.workspace = true
 whereabouts-core.workspace = true
+whereabouts-source.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

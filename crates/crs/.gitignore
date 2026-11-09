@@ -1,0 +1,3 @@
+# EPSG-wide G2 sweep: ~6k records, regenerated locally with
+# `crates/crs/scripts/run-in-gdal.sh g2_fixture_oracle.py --epsg-sweep`.
+/tests/g2/epsg-sweep.jsonl

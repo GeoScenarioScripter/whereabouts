@@ -17,16 +17,18 @@ Details: [01-vision-and-scope.md](01-vision-and-scope.md).
 
 ### M0 — CLI indexer prototype (D-20) → [stage01](stages/stage01/PLAN.md)
 Prove the risky core before any UI.
-- [ ] `whereabouts-ntfs`: enumerate one volume via `FSCTL_ENUM_USN_DATA`; tail the USN journal; persist snapshot + last USN + journal ID; detect when a full rescan is needed.
-- [ ] `whereabouts-nameindex`: compact string-pool index; path reconstruction from FRN chains; substring/wildcard search; benchmark against Everything on the same volume.
-- [ ] `whereabouts-datasets`: grouping rules for shapefile, GPKG, GeoTIFF+sidecars, single-file formats.
-- [ ] `whereabouts-readers`: Shapefile, GeoPackage, GeoTIFF first.
-- [ ] `whereabouts-crs`: WKT1/ESRI parsing, EPSG identification, densified bounds → WGS84.
-- [ ] `whereabouts-catalog`: SQLite schema + R*Tree.
-- [ ] `whereabouts-cli`: `index`, `inspect <path>`, `query "<text>" --bbox …`.
-- [ ] `tests/oracle`: GDAL-diff harness + initial corpus.
+- [x] `whereabouts-ntfs`: enumerate one volume via `FSCTL_ENUM_USN_DATA`; tail the USN journal; persist snapshot + last USN + journal ID; detect when a full rescan is needed.
+- [x] `whereabouts-nameindex`: compact string-pool index; path reconstruction from FRN chains; substring/wildcard search; benchmark against Everything on the same volume.
+- [x] `whereabouts-datasets`: grouping rules for shapefile, GPKG, GeoTIFF+sidecars, single-file formats.
+- [x] `whereabouts-readers`: Shapefile, GeoPackage, GeoTIFF first.
+- [x] `whereabouts-crs`: WKT1/ESRI parsing, EPSG identification, densified bounds → WGS84.
+- [x] `whereabouts-catalog`: SQLite schema + R*Tree.
+- [x] `whereabouts-cli`: `index`, `inspect <path>`, `query "<text>" --bbox …`.
+- [x] `tests/oracle`: GDAL-diff harness + initial corpus.
 
 **Exit criteria:** indexes a real GIS workstation volume; filename search feels instant; extents/CRS agree with GDAL on the corpus within tolerance; survives journal wrap and service restart.
+
+**Closure disposition (2026-11-09, D-50):** M0 is delivered as the v0.1.0 prerelease after the correctness audit, with owner-accepted gaps; see the [release notes](stages/stage01/RELEASE.md). Instant CLI startup is not passed. Retain USN; defer six cold-boot scans, resident-service performance and complete hard-link path coverage to the [stage02 handoff](stages/stage01/STAGE02-HANDOFF.md). Corpus correctness and clean final-head CI remain required. Checked deliverables above do not establish exact owner dataset inventory completeness.
 
 ### M1 — Indexer service + complete Tier 1 readers
 - [ ] Elevated Windows service; named-pipe IPC (`whereabouts-ipc`).

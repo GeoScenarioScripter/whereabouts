@@ -1,0 +1,62 @@
+{
+  "$schema": "https://proj.org/schemas/v0.7/projjson.schema.json",
+  "type": "BoundCRS",
+  "source_crs": {
+    "type": "GeographicCRS",
+    "name": "OSGB 1936",
+    "datum": {
+      "type": "GeodeticReferenceFrame",
+      "name": "OSGB 1936",
+      "ellipsoid": {
+        "name": "Airy 1830",
+        "semi_major_axis": 6377563.396,
+        "inverse_flattening": 299.3249646
+      }
+    },
+    "coordinate_system": {
+      "subtype": "ellipsoidal",
+      "axis": [
+        {"name": "Geodetic latitude", "abbreviation": "Lat", "direction": "north", "unit": "degree"},
+        {"name": "Geodetic longitude", "abbreviation": "Lon", "direction": "east", "unit": "degree"}
+      ]
+    },
+    "id": {"authority": "EPSG", "code": 4277}
+  },
+  "target_crs": {
+    "type": "GeographicCRS",
+    "name": "WGS 84",
+    "datum": {
+      "type": "GeodeticReferenceFrame",
+      "name": "World Geodetic System 1984",
+      "ellipsoid": {
+        "name": "WGS 84",
+        "semi_major_axis": 6378137,
+        "inverse_flattening": 298.257223563
+      }
+    },
+    "coordinate_system": {
+      "subtype": "ellipsoidal",
+      "axis": [
+        {"name": "Latitude", "abbreviation": "lat", "direction": "north", "unit": "degree"},
+        {"name": "Longitude", "abbreviation": "lon", "direction": "east", "unit": "degree"}
+      ]
+    },
+    "id": {"authority": "EPSG", "code": 4326}
+  },
+  "transformation": {
+    "name": "OSGB 1936 to WGS 84 (hand-written example)",
+    "method": {
+      "name": "Coordinate Frame rotation (geog2D domain)",
+      "id": {"authority": "EPSG", "code": 9607}
+    },
+    "parameters": [
+      {"name": "X-axis translation", "value": 446.448, "unit": "metre", "id": {"authority": "EPSG", "code": 8605}},
+      {"name": "Y-axis translation", "value": -125.157, "unit": "metre", "id": {"authority": "EPSG", "code": 8606}},
+      {"name": "Z-axis translation", "value": 542.06, "unit": "metre", "id": {"authority": "EPSG", "code": 8607}},
+      {"name": "X-axis rotation", "value": -0.15, "unit": {"type": "AngularUnit", "name": "arc-second", "conversion_factor": 4.84813681109536e-06}, "id": {"authority": "EPSG", "code": 8608}},
+      {"name": "Y-axis rotation", "value": -0.247, "unit": {"type": "AngularUnit", "name": "arc-second", "conversion_factor": 4.84813681109536e-06}, "id": {"authority": "EPSG", "code": 8609}},
+      {"name": "Z-axis rotation", "value": -0.842, "unit": {"type": "AngularUnit", "name": "arc-second", "conversion_factor": 4.84813681109536e-06}, "id": {"authority": "EPSG", "code": 8610}},
+      {"name": "Scale difference", "value": -20.489, "unit": {"type": "ScaleUnit", "name": "parts per million", "conversion_factor": 1e-06}, "id": {"authority": "EPSG", "code": 8611}}
+    ]
+  }
+}
