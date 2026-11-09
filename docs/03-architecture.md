@@ -39,7 +39,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 | `whereabouts-datasets` | Stateful per-volume `Grouper` over a `DirectoryView`: sidecar/folder rules, `full_scan`, `apply_batch` → `GroupDelta`, `is_relevant_name`; names only, no file contents (D-39) |
 | `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile/lone-DBF (D-42), bounded native SQLite GeoPackage (D-44), and TIFF/BigTIFF/COG readers (D-45); later full-geometry reads for previews |
 | `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKeys parsing (D-45), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
-| `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41) |
+| `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41), `read_snapshot` and lightweight dataset/member summaries for query consistency and ranking (D-47) |
 | `whereabouts-query` | Dedicated rayon query pool; literal folded name scan → member FRNs → datasets, catalog format/EPSG/R*Tree filters, exact/prefix/substring ranking, orphan suppression and limit after deduplication; shared catalog read snapshot (D-47) |
 | `whereabouts-tiles` | MVT encoder, raster warping, tile cache |
 | `whereabouts-ipc` | Named-pipe protocol (serde messages) |

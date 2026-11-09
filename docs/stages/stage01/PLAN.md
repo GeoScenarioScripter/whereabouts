@@ -27,7 +27,7 @@ Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`
 
 1. **Indexes a real volume (V4):** `whereabouts index --volume <X:>` completes on the owner's GIS workstation volume; the catalog holds the SHP/GPKG/GeoTIFF datasets found there, each with status `ok`/`partial`/`error:<reason>` — no panics.
 2. **Stays live and survives restarts (V3):** after a restart it resumes from the saved checkpoint without a full rescan; journal wrap and journal re-creation trigger a correct full rescan. Proven in CI on a VHD test volume.
-3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets set in session 4.3, measured on the owner's volume alongside Everything.
+3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets proposed in session 4.3 and finalized with the owner in 5.1, measured on the owner's volume alongside Everything.
 4. **Correct metadata (V2):** on the committed corpus, oracle agreement meets the committed baseline: native bbox, geometry type and counts agree on ≥ 98% of cases; EPSG identification and WGS84 bbox agreement meet the targets recorded for Q-14. Enforced in CI.
 5. **Clean build (V1):** CI green on Windows + Linux; `cargo deny` green (no GDAL).
 6. **Docs:** Q-14, Q-16, Q-18 resolved in `02-decisions.md`; architecture doc matches the code; retro written; stage02 sketch updated.
@@ -313,7 +313,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 3.1 | reader-geopackage | #11 | ✅ done (2026-11-08, V2, PR #57) | [note](sessions/3.1-reader-geopackage.md) |
 | 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
 | 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
-| 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
+| 4.1 | query-and-inspect-cli | #14 | ✅ merged (2026-11-09, V3, PR #66) | [note](sessions/4.1-query-and-inspect-cli.md) |
 | 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
 | 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |
 | 5.1 | exit-verification | #17 | ⏳ planned | |
