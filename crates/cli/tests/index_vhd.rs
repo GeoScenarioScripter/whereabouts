@@ -42,11 +42,15 @@ fn index(volume: &str, db: &Path) -> String {
 fn corpus_full_index_restart_and_prj_edit() {
     let volume = TestVolume::create(64).unwrap();
     volume.create_journal(8 << 20, 1 << 20).unwrap();
-    let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/corpus/data/shapefile/shp_utm33n_points");
-    for dir in ["a", "b"] {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/corpus");
+    for (dir, case) in [
+        ("a", "shapefile/shp_utm33n_points"),
+        ("b", "shapefile/shp_utm33n_points"),
+        ("c", "geopackage/gpkg_multi_layer"),
+        ("d", "geotiff/tif_northup_utm"),
+    ] {
         fs::create_dir(volume.path(dir)).unwrap();
-        for entry in fs::read_dir(&corpus).unwrap() {
+        for entry in fs::read_dir(corpus.join("data").join(case)).unwrap() {
             let entry = entry.unwrap();
             fs::copy(entry.path(), volume.path(dir).join(entry.file_name())).unwrap();
         }
@@ -59,39 +63,47 @@ fn corpus_full_index_restart_and_prj_edit() {
     let ids = catalog.dataset_ids(vol).unwrap();
     assert_eq!(
         ids.len(),
-        2,
+        4,
         "sidecars must not become independent datasets"
     );
-    let golden: serde_json::Value = serde_json::from_slice(
-        &fs::read(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/corpus/expected/shp_utm33n_points.json"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
     for id in &ids {
         let row = catalog.get_dataset(*id).unwrap().unwrap();
-        assert_eq!(row.status, ExtractionStatus::Ok);
-        assert_eq!(row.dataset.members().len(), 4);
-        assert_eq!(row.layers.len(), 1);
-        let layer = &row.layers[0];
-        assert_eq!(
-            layer.metadata.feature_count,
-            golden["layers"][0]["feature_count"].as_u64()
-        );
-        assert_eq!(
-            layer.crs.as_ref().unwrap().epsg().map(u64::from),
-            golden["layers"][0]["crs"]["epsg"].as_u64()
-        );
-        let b = layer.metadata.native_bounds.unwrap();
-        for (actual, expected) in [b.min_x(), b.min_y(), b.max_x(), b.max_y()]
-            .iter()
-            .zip(golden["layers"][0]["extent"].as_array().unwrap())
-        {
-            assert!((actual - expected.as_f64().unwrap()).abs() < 1e-6);
+        let (case, members) = match row.dataset.format() {
+            whereabouts_core::Format::Shapefile => ("shp_utm33n_points", 4),
+            whereabouts_core::Format::GeoPackage => ("gpkg_multi_layer", 1),
+            whereabouts_core::Format::GeoTiff => ("tif_northup_utm", 1),
+            format => panic!("unexpected dataset format {format:?}"),
+        };
+        let golden: serde_json::Value = serde_json::from_slice(
+            &fs::read(corpus.join("expected").join(format!("{case}.json"))).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(row.status, ExtractionStatus::Ok, "{case}");
+        assert_eq!(row.dataset.members().len(), members, "{case}");
+        let expected = golden["layers"].as_array().unwrap();
+        assert_eq!(row.layers.len(), expected.len(), "{case}");
+        for layer in &row.layers {
+            let golden = expected
+                .iter()
+                .find(|g| g["name"].as_str() == Some(&layer.metadata.name))
+                .unwrap();
+            assert_eq!(
+                layer.metadata.feature_count,
+                golden["feature_count"].as_u64()
+            );
+            assert_eq!(
+                layer.crs.as_ref().unwrap().epsg().map(u64::from),
+                golden["crs"]["epsg"].as_u64()
+            );
+            let b = layer.metadata.native_bounds.unwrap();
+            for (actual, expected) in [b.min_x(), b.min_y(), b.max_x(), b.max_y()]
+                .iter()
+                .zip(golden["extent"].as_array().unwrap())
+            {
+                assert!((actual - expected.as_f64().unwrap()).abs() < 1e-6);
+            }
+            assert!(layer.wgs84.is_some(), "{case}: {}", layer.metadata.name);
         }
-        assert!(layer.wgs84.is_some());
     }
     let before: Vec<_> = ids
         .iter()
@@ -124,6 +136,6 @@ fn corpus_full_index_restart_and_prj_edit() {
     let result = index(&volume.volume(), &db);
     assert!(result.contains("0 events, 0 extractions"), "{result}");
     eprintln!(
-        "[index-vhd] 2 corpus datasets match golden facts; restart resumed; .prj updated exactly 1 dataset; idle restart did no extraction"
+        "[index-vhd] 4 corpus datasets (SHP/GPKG/TIFF) match golden facts; restart resumed; .prj updated exactly 1 dataset; idle restart did no extraction"
     );
 }
