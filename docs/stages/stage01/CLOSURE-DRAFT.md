@@ -55,9 +55,10 @@ The three accepted gaps are not blanket acceptance of every open issue. Existing
 #25 mount/GUID volume support is outside M0 and has moved to stage02. #26 borrowed
 record ingestion measurement and #29 release-enumeration CI are closed with existing
 session/CI evidence; no borrowed-record contract change was adopted.
-#50 non-finite `RasterInfo` validation remains explicitly outstanding for the
-release audit; this docs sync neither fixes it nor accepts it away. Audit remaining
-stage01 issues before closing the milestone.
+#50 non-finite `RasterInfo` validation is addressed by the D-51 core/catalog/indexer
+contract fix ([verification note](sessions/issue-50-raster-validation.md)). Close
+the issue only after reviewed integration into develop and green final-head CI.
+It is not an accepted gap. Audit remaining stage01 issues before closing the milestone.
 
 ## Separate release sequence (not performed by this work)
 

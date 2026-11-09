@@ -187,6 +187,9 @@ code_enum! {
 }
 
 /// Facts about a raster layer (catalog `rasters` table).
+///
+/// Present resolutions and geotransform components must be finite when carried by a
+/// [`crate::LayerRecord`] (checked by its `validate` method). Nodata remains verbatim text.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RasterInfo {
     /// Width in pixels.

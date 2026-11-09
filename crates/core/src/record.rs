@@ -13,7 +13,9 @@ use crate::{
 /// - `crs.is_some() == metadata.crs.is_some()`;
 /// - `wgs84` is `Some` only if `metadata.native_bounds` is `Some` and `crs` is `Identified` or
 ///   `Unidentified` (an `Unparsed` or missing CRS cannot be transformed);
-/// - a raster layer (`metadata.raster` is `Some`) has no `geometry_type`.
+/// - a raster layer (`metadata.raster` is `Some`) has no `geometry_type`;
+/// - present raster resolutions and all geotransform components are finite. Nodata is text
+///   and may contain values such as `"nan"`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LayerRecord {
     /// What the reader returned for this layer.
@@ -45,6 +47,20 @@ impl LayerRecord {
         }
         if self.metadata.raster.is_some() && self.metadata.geometry_type.is_some() {
             return invalid("raster layer with a geometry type");
+        }
+        if let Some(raster) = &self.metadata.raster {
+            for (name, value) in [("res_x", raster.res_x), ("res_y", raster.res_y)] {
+                if value.is_some_and(|v| !v.is_finite()) {
+                    return invalid(&format!("raster {name} must be finite"));
+                }
+            }
+            if let Some(gt) = raster.geotransform {
+                for (i, value) in gt.iter().enumerate() {
+                    if !value.is_finite() {
+                        return invalid(&format!("raster geotransform[{i}] must be finite"));
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -226,6 +242,70 @@ mod tests {
             Err(CoreError::InvalidRecord(msg)) => assert!(msg.contains(needle), "{msg}"),
             other => panic!("expected InvalidRecord containing {needle:?}, got {other:?}"),
         }
+    }
+
+    fn raster_record() -> DatasetRecord {
+        let mut rec = valid_record();
+        rec.layers[0].metadata.geometry_type = None;
+        rec.layers[0].metadata.raster = Some(crate::RasterInfo {
+            width: 1,
+            height: 1,
+            bands: 1,
+            dtype: crate::RasterDataType::Float64,
+            res_x: Some(2.0),
+            res_y: Some(3.0),
+            nodata: Some("nan".into()),
+            overview_count: 0,
+            geotransform: Some([10.0, -2.0, 0.5, 20.0, 0.0, -3.0]),
+        });
+        rec
+    }
+
+    #[test]
+    fn rejects_each_non_finite_raster_float() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for field in 0..8 {
+                let mut rec = raster_record();
+                let raster = rec.layers[0].metadata.raster.as_mut().unwrap();
+                let name = match field {
+                    0 => {
+                        raster.res_x = Some(value);
+                        "res_x".to_owned()
+                    }
+                    1 => {
+                        raster.res_y = Some(value);
+                        "res_y".to_owned()
+                    }
+                    i => {
+                        raster.geotransform.as_mut().unwrap()[i - 2] = value;
+                        format!("geotransform[{}]", i - 2)
+                    }
+                };
+                assert!(matches!(
+                    rec.layers[0].validate(),
+                    Err(CoreError::InvalidRecord(_))
+                ));
+                assert_invalid(&rec, &format!("layer 0: raster {name} must be finite"));
+            }
+        }
+    }
+
+    #[test]
+    fn accepts_finite_and_absent_raster_floats_and_text_nodata() {
+        let mut rec = raster_record();
+        rec.validate().unwrap();
+        for value in [0.0, -0.0, -1.0, f64::MAX, f64::MIN, f64::MIN_POSITIVE] {
+            let raster = rec.layers[0].metadata.raster.as_mut().unwrap();
+            raster.res_x = Some(value);
+            raster.res_y = Some(value);
+            raster.geotransform = Some([value; 6]);
+            rec.validate().unwrap();
+        }
+        let raster = rec.layers[0].metadata.raster.as_mut().unwrap();
+        raster.res_x = None;
+        raster.res_y = None;
+        raster.geotransform = None;
+        rec.validate().unwrap();
     }
 
     #[test]

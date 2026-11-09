@@ -147,6 +147,15 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 16 — Release-audit raster validation (#50, 2026-11-09)
+
+- **Owner direction:** fix #50 before release; use Bash for GitHub access. Live issue inspection confirmed the requested core contract change and stage01 milestone.
+- **Contract change:** D-51 proposes rejecting non-finite raster resolutions and geotransform components in `LayerRecord::validate`, replacing D-41's silent store-as-absent behavior. Nodata text such as `"nan"` remains valid.
+- **Dependants:** catalog writes stop filtering these values; the shared extractor converts invalid facts to a dataset-local error before the catalog transaction. A real TIFF regression covers finite coefficients/corners whose derived resolution overflows, continued indexing of other datasets, and restart persistence.
+- **Release boundary:** #50 can close after the fix is reviewed, final-head CI passes and the PR lands in develop. This change does not release M0, waive other release checks, or close the milestone. Verification is recorded in [the fix note](stages/stage01/sessions/issue-50-raster-validation.md).
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).

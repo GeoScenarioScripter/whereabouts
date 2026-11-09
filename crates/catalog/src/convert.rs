@@ -34,11 +34,6 @@ pub(crate) fn u32_from_sql(v: i64, what: &str) -> Result<u32> {
     u32::try_from(v).map_err(|_| corrupt(format!("{what} = {v}")))
 }
 
-/// Non-finite floats can't be stored faithfully (SQLite turns NaN into NULL): keep finite ones.
-pub(crate) fn finite(v: Option<f64>) -> Option<f64> {
-    v.filter(|x| x.is_finite())
-}
-
 /// Stable 64-bit FNV-1a hash of a CRS definition, used to de-duplicate `crs` rows.
 ///
 /// Not `std::hash`: its output may change between Rust releases, and the hash is persisted.
@@ -135,7 +130,5 @@ mod tests {
         assert_eq!(u64_to_sql(5, "x").unwrap(), 5);
         assert!(u64_from_sql(-1, "x").is_err());
         assert!(volume_from_sql(i64::from(u32::MAX) + 1).is_err());
-        assert_eq!(finite(Some(f64::NAN)), None);
-        assert_eq!(finite(Some(1.5)), Some(1.5));
     }
 }
