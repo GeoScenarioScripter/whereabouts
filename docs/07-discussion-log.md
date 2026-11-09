@@ -162,3 +162,19 @@ First session: 2026-10-19.
 - Run name availability checks for Whereabouts.
 
 - **Integration and issue reconciliation:** PR #71 head `f0dfb15` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42582146914) and merged as `8f14a45`, following PR #70 (`6cd518a`). #26 (ingestion measurement) and #29 (release-enumeration CI) closed with existing evidence; #25 moved to its original stage02 scope. #50 remains an outstanding release-audit item, outside the three accepted gaps. This documentation PR is the final closure-sync integration gate; no main merge, tag, release or stage-milestone closure was performed.
+
+## Thread 17 — M0 release (2026-11-09)
+
+- **Owner direction:** do the M0 release. This supersedes the documentation-only
+  authorization boundary in the earlier closure preparation.
+- **Audit:** #74 merged as `8c74046`; #50 is closed. Final develop CI
+  [42588045021](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42588045021)
+  passed Windows/Linux, elevated acceptance, formatting and dependency policy.
+  No stage01 milestone issues remain open; dependency update PRs are unrelated.
+- **Release scope:** v0.1.0 is a pre-alpha CLI prerelease. D-50's startup,
+  hard-link and deferred cold-scan gaps remain explicit; stage02 remains a sketch
+  pending its separate planning step. No new performance acceptance is claimed.
+- **Delivery:** release documentation goes through develop, followed by a green
+  develop-to-main PR merged with a merge commit, annotated v0.1.0 tag, GitHub
+  prerelease and stage01 milestone closure. [Release notes](stages/stage01/RELEASE.md)
+  retain the exit evidence, retro, commands and accepted limitations.

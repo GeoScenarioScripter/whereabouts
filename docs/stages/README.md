@@ -1,13 +1,13 @@
 # Stages — v1 Delivery Plan
 
-Active stage: stage01 — M0 closure prepared with owner-accepted gaps (D-50); release audit and release pending. Stage02 remains a sketch.
+Stage01 (M0) is complete for the v0.1.0 prerelease with owner-accepted gaps (D-50). Next: stage02 (M1), awaiting detailed planning; its scope remains a sketch.
 
 How stages, waves and sessions work: [`../08-development-workflow.md`](../08-development-workflow.md).
 Only the active stage is planned in detail; the next one is sketched here and detailed when the active stage closes.
 
 | Stage | Milestone ([roadmap](../05-roadmap.md)) | Objective | Plan | Status |
 |---|---|---|---|---|
-| [stage01](stage01/PLAN.md) | M0 | CLI indexer prototype: NTFS enumeration + USN, name index, dataset grouping, SHP/GPKG/GeoTIFF readers, CRS → WGS84, SQLite catalog, GDAL oracle, benchmarks | Detailed | 🟡 closure prepared with accepted gaps; release audit/release pending (D-50) |
+| [stage01](stage01/PLAN.md) | M0 | CLI indexer prototype: NTFS enumeration + USN, name index, dataset grouping, SHP/GPKG/GeoTIFF readers, CRS → WGS84, SQLite catalog, GDAL oracle, benchmarks | Detailed | ✅ complete — v0.1.0 prerelease with accepted gaps (D-50) |
 | stage02 | M1 | Elevated indexer service + named-pipe IPC; remaining Tier 1 readers; footprints + two-stage spatial query; extraction queue polish; hard links | Sketch below | ⏳ |
 | stage03 | M2 | Desktop UI: Tauri + MapLibre, search syntax (Q-11), results list, map footprints, offline basemap + gazetteer, hand-off actions | Roadmap only | ⏳ |
 | stage04 | M3 | Previews via the local tile server: vector MVT, raster warping, point clouds | Roadmap only | ⏳ |

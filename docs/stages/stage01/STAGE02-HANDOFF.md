@@ -68,8 +68,8 @@ Acceptance:
 #25 mount/GUID volume support was already outside M0 and is a stage02 handoff.
 The three gaps above do not waive unrelated open issues. In particular #50
 non-finite `RasterInfo` validation has a D-51 contract fix with a
-[verification note](sessions/issue-50-raster-validation.md); it requires reviewed
-integration and green final-head CI before closure, rather than a stage02 deferral;
+[verification note](sessions/issue-50-raster-validation.md); it completed reviewed
+integration in PR #74 and green final-head CI before #50 closed;
 #26/#29 are closed with the completed ingestion measurement and release-enumeration
 CI evidence. Their closure does not approve a new source contract.
 
