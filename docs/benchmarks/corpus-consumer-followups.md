@@ -8,7 +8,7 @@ PR #67, with no removed read-budget assertions, rate reductions or case-specific
   asserts MultiPatch declared-layer semantics and lone-DBF non-spatial metadata, and retains
   the <64 KiB budget for every fixture. SBN/SBX roles are resolved explicitly.
 - `crates/crs/tests/g2.rs` adds the exact expected text-only skip for binary custom GeoKeys and
-  two missing-CRS entries (lone DBF and the upstream SBN point sample without PRJ). The full
+  one missing-CRS entry (lone DBF; the genuine upstream SBN county sample supplies its PRJ). The full
   extraction oracle still exercises GeoKeys; no CRS rate or disagreement assertion is weakened.
 - A separately authorized production fix changes MultiPatch's claimed PolyhedralSurface Z to
   existing `Geometry(false,false)`, meaning unknown declared layer geometry. Individual patches
