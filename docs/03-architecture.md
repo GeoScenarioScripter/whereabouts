@@ -28,7 +28,7 @@ Everything here is a design sketch to guide implementation — refine it as code
 
 ## 2. Proposed Rust workspace layout
 
-Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 crates exist as stubs; `tiles`, `ipc`, `service` and `app/` are added by later stages.
+Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 components are implemented through the indexing pipeline; query/inspect arrive in wave 4; `tiles`, `ipc`, `service` and `app/` are added by later stages.
 
 | Crate | Responsibility |
 |---|---|
@@ -37,14 +37,14 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 | `whereabouts-ntfs` | `NtfsVolumeSource`: `FSCTL_ENUM_USN_DATA`, `FSCTL_QUERY_USN_JOURNAL`, `FSCTL_READ_USN_JOURNAL` (D-38), optional raw `$MFT` enumeration (`EnumerationMethod::RawMft`, D-43), VHD `testvol` helper; local NTFS drive letters only (D-31) |
 | `whereabouts-nameindex` | Compact in-memory filename index (struct-of-arrays, string pool plus folded pool, FRN map), upsert/tombstone/`compact()`, path reconstruction with orphan/cycle guards, substring/wildcard/extension/path search with a rayon scan (regex is out), checksummed snapshot v1 with an embedded `Checkpoint`; `synth` feature for synthetic volumes (D-37) |
 | `whereabouts-datasets` | Stateful per-volume `Grouper` over a `DirectoryView`: sidecar/folder rules, `full_scan`, `apply_batch` → `GroupDelta`, `is_relevant_name`; names only, no file contents (D-39) |
-| `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile and lone-DBF readers (D-42); GPKG and GeoTIFF arrive in wave 3; later full-geometry reads for previews |
-| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON parsing (GeoKeys in 3.2), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
+| `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile/lone-DBF (D-42), bounded native SQLite GeoPackage (D-44), and TIFF/BigTIFF/COG readers (D-45); later full-geometry reads for previews |
+| `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKeys parsing (D-45), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
 | `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41) |
 | `whereabouts-query` | Search syntax parser → name-index scan + catalog query plan |
 | `whereabouts-tiles` | MVT encoder, raster warping, tile cache |
 | `whereabouts-ipc` | Named-pipe protocol (serde messages) |
 | `whereabouts-service` | The elevated indexer service binary |
-| `whereabouts-indexer` | Pipeline shared by the CLI and the service: source → name index → grouper → extraction queue → `extract` (readers + CRS) → catalog; checkpoints (D-24) |
+| `whereabouts-indexer` | Pipeline shared by the CLI and the service: source → name index → grouper → extraction queue → `extract` (readers + CRS) → catalog; catalog-before-snapshot checkpoints and durable transient-retry ledger (D-46) |
 | `whereabouts-cli` | M0 CLI (index, inspect, query) |
 | `app/` (Tauri) | UI process and frontend |
 | `tests/oracle` | GDAL-diff harness (dev/CI only) |
@@ -84,6 +84,12 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 - Native readers read **only the bytes needed** (bounded reads). GeoJSON/KML need streaming scans — apply size thresholds/timeouts and record "extent pending/approximate" if needed.
 - Output per dataset/layer: format, CRS (native definition + identified EPSG if any), native bounds, WGS84 bounds (densified transform), simplified footprint, geometry type, feature/point count, raster width/height/bands/dtype/resolution/nodata/overviews, field list.
 - Record extraction status and errors per dataset (`ok`, `partial`, `unsupported`, `error:<reason>`), and the source mtime/size so re-extraction happens only on change.
+
+**Stage01 implementation (wave 3):** `indexer::extract` is the shared reader → CRS resolution/identification → WGS84 transformation path, with bounded per-worker CRS/transform caches. `Indexer::open` and `catch_up` apply whole source batches before resolving paths, coalesce dirty datasets, compact the name index and drain changes until empty. Worker jobs prioritize recent mtimes. Native facts survive CRS failures.
+
+Transient extraction failures retain the stored record and enter a durable retry queue (D-36/D-46). Catalog records and checkpoint commit before the name snapshot; a checkpoint-bound `.retry` ledger is synced first and shrunk last. Restart resumes matching state, or rescans on corrupt/mismatched state. Catalog/snapshot output paths are excluded from grouping, and output-only journal batches advance the in-memory cursor without another output write. Journal creation remains explicit; unavailable history is an error rather than a rescan loop.
+
+The CLI supports `index --volume X: [--db PATH] [--watch]`, with progress on stderr; query and inspect are wave 4.1. Windows CI invokes ignored CLI/indexer VHD acceptance tests as well as the NTFS tests. This is a CLI pipeline; the service process shown above comes later.
 
 ## 4. Catalog schema (sketch)
 

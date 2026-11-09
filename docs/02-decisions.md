@@ -54,6 +54,9 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-41 | Catalog conventions: R*Tree row ids, exact f64 post-filter, CRS latest-write-wins, same-layer filters, `set_status` drops layers, `synchronous = NORMAL` | Proposed |
 | D-42 | Shapefile reader conventions: `.shx`-then-`.dbf` count, `.shp` decides record presence, corrupt `.dbf` is `partial`, `measure` meter, `encoding_rs`, limits | Proposed |
 | D-43 | Raw `$MFT` enumeration: same raw-record API, name rule, strict mode (`MftIncomplete` → USN fallback), torn retry, 1 MiB replay margin snapped to a record boundary, read caps | Proposed |
+| D-44 | GeoPackage metadata uses bounded native SQLite page reads; active transactions defer extraction | Proposed |
+| D-45 | GeoTIFF metadata limits and raw GeoKeys JSON representation | Proposed |
+| D-46 | Pipeline retries persist separately; inconsistent restart state triggers a rescan | Proposed |
 
 ---
 
@@ -404,3 +407,24 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - **Read caps:** 4 MiB chunks, free chunks skipped through `$BITMAP`, at most 2^20 runs, 4096 extension records per file, `$ATTRIBUTE_LIST` up to 1 MiB, an extension cache of 128 MiB, deferred files capped at 64 MiB. `FILE_FLAG_NO_BUFFERING` and overlapped read-ahead were not adopted.
 - **Rationale:** On the CI runner raw reads take about 6 s cold and warm, against USN 36–62 s cold and 2.0–2.7 s warm; the record sets agree (1,355,125 identical, 17 raw-only metadata records). Strictness avoids a silently incomplete index; the margin covers metadata that is not yet on disk.
 - **Consequences:** Q-16 stays **Open** and is decided in 4.3 with the owner's D: numbers. The session proposes raw for the first (cold) index and USN for changes, with USN as the fallback. Not handled: `$BITMAP`/`$DATA` pieces in extension records, compressed or sparse `$MFT`, 4Kn hardware (#53), ReFS. Hard-link names are counted but not all reported (#52).
+
+## D-44 — Bounded native GeoPackage metadata reads
+- **Status:** Proposed
+- **Context:** stage01/3.1 ([note](stages/stage01/sessions/3.1-reader-geopackage.md)); the frozen reader contract caps physical reads and forbids writes and locks on user data.
+- **Decision:** Read SQLite metadata/table b-tree pages through `SourceFile`, without executing SQL or opening a SQLite connection. Counts use `gpkg_ogr_contents`, R-tree row counts, then bounded table-leaf counting. Bounds use contents checked against R-tree bounds, with bounded geometry-envelope refinement. Active WAL/rollback transactions and detected concurrent changes return `ReadError::Io(WouldBlock)` for the D-36 retry path. Metadata records are capped at 64 KiB, columns and layers at 1,024, and traversed rows at 100,000 per table, within the caller's total byte/time limits.
+- **Rationale:** A safe SQL connection cannot enforce the physical read cap; page reads also avoid lock and sidecar creation. Envelope refinement avoids float32 R-tree rounding without scanning coordinate arrays.
+- **Consequences:** This is a limited metadata parser, not a general SQL engine or transactional snapshot. Unusual SQL definitions, views and WITHOUT ROWID tables can yield partial metadata. Active writers may defer discovery until checkpoint/close. R-tree fallback counts can omit NULL/empty geometries. Broader SQL support is #60 (stage02); committed reader edge cases are #61 (stage01). Inactive PERSIST rollback journals with zeroed headers are accepted under the same byte budget.
+
+## D-45 — GeoTIFF metadata and GeoKeys representation
+- **Status:** Proposed
+- **Context:** stage01/3.2 ([note](stages/stage01/sessions/3.2-reader-geotiff.md)); readers retain raw CRS definitions while the CRS crate interprets them.
+- **Decision:** `CrsDefinitionKind::GeoKeys.text` contains JSON arrays `directory` and `doubles`, plus `ascii` including a trailing NUL when present. The common CRS resolver routes this representation to the GeoKeys parser. TIFF metadata reads are limited to 1 MiB per dataset (also capped by the caller), 64 KiB per block/sidecar, 1,024 entries per IFD and 64 IFDs per file. Imagery offsets are never followed. PAM overrides internal georeferencing, which overrides world-file georeferencing; PixelIsPoint shifts the affine by half a pixel.
+- **Rationale:** Raw keys stay available for reinterpretation, and bounded IFD traversal avoids decoding raster data merely to index it.
+- **Consequences:** Oversized or broken optional metadata yields Error/Partial while usable facts are retained where possible. Unsupported projection methods/units remain unparsed. Generic compression/XML fields are not added to the frozen raster contract. Additional GDAL georeferencing sources are #62 (stage02); custom-projection corpus coverage is #61 (stage01). Signed pixel scales are preserved for flipped rasters.
+
+## D-46 — Durable extraction retries and conservative restart recovery
+- **Status:** Proposed
+- **Context:** stage01/3.3 ([note](stages/stage01/sessions/3.3-index-pipeline.md)); D-36 requires transient failures to retain stored metadata without changing core status invariants.
+- **Decision:** Persist retry IDs in a versioned, checkpoint-bound `<snapshot>.retry` ledger, bounded to 64 MiB and tied to source/volume/root identity. Write and sync the ledger before catalog changes, commit catalog records and checkpoint atomically, persist the name snapshot, then shrink the ledger. A catalog/snapshot/retry-state disagreement triggers a full rescan. Transient failures preserve stored records; new failures remain visible with error status and queued retry. No journal is created implicitly; unavailable history after enumeration is reported explicitly.
+- **Rationale:** A separate durable queue preserves the frozen dataset/layer invariants and survives restart. Conservative rescan is simpler to validate than replaying inconsistent persistent generations.
+- **Consequences:** Crashes between persistence steps can cost a rescan. Wave 4.2 tests crash and mismatch paths, and 4.3 measures persistence/queue overhead. Query consumers use the catalog plus the name snapshot; callers sharing a catalog across sources need distinct snapshot paths. Q-16 remains Open; this does not select raw MFT as the default.

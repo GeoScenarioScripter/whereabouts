@@ -112,6 +112,18 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 13 — stage01 wave 3 review, merge and wave 4 hand-off (2026-11-08)
+- **Request (owner):** merge wave 3 properly, then start wave 4 with parallel sub-agents in isolated worktrees.
+- **Merged in watch-point order:** [3.1 / #57](https://github.com/GeoScenarioScripter/whereabouts/pull/57) (V2, `47a1770`) → [3.2 / #59](https://github.com/GeoScenarioScripter/whereabouts/pull/59) (V2, `73e1588`) → [3.3 / #58](https://github.com/GeoScenarioScripter/whereabouts/pull/58) (V3, `0e5ba34`), rebasing and obtaining fresh CI between merges. Session issues #11–#13 closed explicitly.
+- **Final-head evidence:** [GeoPackage CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42557522475), [GeoTIFF CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42558523773), [pipeline CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42559141794) all passed Windows/Linux clippy/tests, rustfmt and cargo-deny. Pipeline CI additionally passed the elevated four-dataset SHP/GPKG/TIFF VHD test (golden facts, EPSG/WGS84 presence, restart, isolated `.prj` edit and idle restart). No V4 claim is made.
+- **Review fixes:** GeoPackage now accepts inactive SQLite PERSIST rollback journals (zeroed headers), with a regression that failed before the fix. GeoTIFF honors signed pixel scales for flipped rasters, with four-sign-combination and nonzero-tiepoint regression coverage. GeoKeys now route through the common CRS resolver instead of an adapter-only path.
+- **Pipeline integration:** authorized the CI scope addition needed to run elevated CLI/indexer VHD tests. Acceptance covers the combined readers, restart without enumeration, and one-dataset `.prj` re-extraction. Required V3 evidence is collected before promoting and merging the pipeline PR.
+- **Proposed decisions:** bounded native SQLite page reads and transaction deferral → D-44; GeoTIFF caps and raw GeoKeys JSON → D-45; durable retry ledger and conservative mismatch recovery → D-46. No frozen core/source contract changes. Q-14 stays resolved (D-34); Q-16/Q-18 stay Open for wave 4.3 evidence and owner decisions.
+- **Follow-ups:** #60 broader bounded SQLite schema support (stage02), #61 committed GPKG/TIFF edge cases (stage01/4.3), #62 additional TIFF georeferencing sources (stage02). Existing #28/#43/#44 corpus assignments are explicitly included in 4.3's write scope; corpus drift checks remain required.
+- **Wave 4 ownership:** 4.1 owns query/CLI and consumes the snapshot plus shared extraction; 4.2 owns indexer and NTFS tests, including retry-ledger/crash paths; 4.3 owns oracle/corpus, benchmarks and benchmark scripts. Merge order remains 4.2 → 4.1 → 4.3. No additional gate is defined between waves 3 and 4.
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).

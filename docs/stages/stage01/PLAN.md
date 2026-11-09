@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Next: wave 3.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Wave 3 merged and closed (2026-11-08); next: wave 4.
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -84,7 +84,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 
 - **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
 - **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 → 2.7 — merged as each became ready; the only shared files were `Cargo.lock` and (2.7) a small `ci.yml` change, so the order made no difference.*
-- **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`.
+- **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`. Actual (2026-11-08): 3.1 (#57) → 3.2 (#59) → 3.3 (#58), with rebases and fresh green CI between merges.
 - **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
 
 ---
@@ -214,7 +214,7 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 ### Wave 3 — remaining readers, end-to-end pipeline
 
 **Wave 2 hand-offs (added at wave 2 close, 2026-10-27).** These are part of each spec below and of the wave 4 specs they name. Read the notes in `sessions/`. Decisions D-34…D-42 apply.
-- **3.1 / 3.2:** add one line to `READERS` and one `Adapter` line each. Reuse `adapters::native::{resolve, read}`, do file I/O through `io::SourceFile` (budgets and `measure` apply; 3.1's SQLite access can't, so measure it differently), and use `readers::measure` for the bounded-read test. 3.2 can reuse `prj::read_prj`, and fills the `NativeRaster` per-band types and nodata if its reader reports them.
+- **3.1 / 3.2:** add one line to `READERS` and one `Adapter` line each. Reuse `adapters::native::{resolve, read}`, do file I/O through `io::SourceFile` (budgets and `measure` apply; 3.1 also uses bounded native SQLite page reads, D-44), and use `readers::measure` for the bounded-read test. 3.2 can reuse `prj::read_prj`, and fills the `NativeRaster` per-band types and nodata if its reader reports them.
 - **3.2:** feed GeoKey codes straight into `whereabouts_crs::resolve`: codes 0 and 32767 (user-defined) come back `Unidentified`, and a code outside the table is `Unidentified` unless it is a known vertical or geocentric one. Add the `resolve` branch for the `geokeys` kind (it is `Unparsed` until then); `epsg_crs` already covers direct EPSG codes.
 - **3.3 (pipeline), from the notes:**
   - Failed re-reads (D-36, owner decision): a **transient** extraction failure keeps the stored record and retries through a queue with back-off. Permanent failures are recorded as `error`/`unsupported`. There is no core contract change; the `DatasetRecord` invariant stays. Do not call `set_status` for a transient failure.
@@ -236,17 +236,23 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Acceptance (V2):** oracle agreement on all non-corrupt GPKG cases (including stale/missing bounds); a test proving the file's bytes, mtime and directory listing are unchanged after reading.
 
 #### 3.2 — reader-geotiff
-- **Write scope:** `crates/readers/**` (tiff module + one registry line), `crates/crs/src/geokeys.rs` (+ one `mod` line), `tests/oracle/**` (one adapter line).
+- **Write scope:** `crates/readers/**` (tiff module + one registry line), `crates/crs/src/geokeys.rs` (+ one `mod` line and common `resolve.rs` routing/tests, authorized at wave 3 review), `tests/oracle/**` (one adapter line).
 - **Deliverables:** bounded TIFF/BigTIFF IFD parser (first IFD + overview count); tags: dimensions, samples, bits, sample format, compression, ModelPixelScale/Tiepoint/Transformation, GeoKeyDirectory/Double/Ascii params, GDAL_NODATA, GDAL_METADATA; native bounds from the affine (all four corners for rotated rasters); PixelIsPoint handled the way GDAL does by default; georeferencing precedence mirrors GDAL's default `GDAL_GEOREF_SOURCES` (PAM `.aux.xml`, internal, world file); `.ovr` detection; GeoKeys → `Crs` (direct EPSG codes + user-defined projection keys).
 - **Acceptance (V2):** oracle agreement on all non-corrupt GeoTIFF cases incl. rotated, PixelIsPoint, BigTIFF, aux.xml-only and world-file cases; bounded-read test.
 
 #### 3.3 — index-pipeline
-- **Write scope:** `crates/indexer/**`, `crates/cli/**`.
+- **Write scope:** `crates/indexer/**`, `crates/cli/**`; `.github/workflows/ci.yml` solely for the elevated CLI/indexer acceptance invocation (authorized at wave 3 review).
 - **Deliverables:** `indexer::extract(resolved dataset) → extracted metadata` (reader → `crs` parse/identify/transform → status), the single function the oracle and the pipeline share; pipeline: `NtfsVolumeSource` enumerate → name index → grouper → extraction queue (worker threads, priority = recently modified first) → catalog; change loop: poll journal → name-index update → dirty datasets → coalesce per batch → re-extract; checkpoint commit order (catalog first, then snapshot) and restart replay; CLI `whereabouts index --volume X: [--db PATH] [--watch]` with progress output.
 - **Also (wave 2 hand-offs above):** a transient extraction failure keeps the stored record and retries via a queue (D-36); drain `changes` until empty and commit the checkpoint only after applying the batch; compact the name index when needed; cache `resolve`/`Transformer` per definition hash.
 - **Acceptance (V3):** on the CI VHD volume populated with corpus files: full index → catalog matches expectations; restart → no full rescan, picks up changes made while stopped; editing a `.prj` re-extracts only that dataset.
 
 ### Wave 4 — usable CLI, failure modes, numbers
+
+**Wave 3 hand-offs (2026-11-08):** D-44–D-46 are Proposed implementation conventions. No frozen core/source contracts changed.
+- **4.1:** reuse `indexer::extract` for inspect, including GeoKeys through the common CRS resolver. Load `<database>.names`; multiple sources sharing a catalog require distinct snapshots. Inspect must not mutate input datasets or create transaction sidecars. Preserve `index` CLI behavior.
+- **4.2:** the pipeline has a checkpoint-bound `<snapshot>.retry` ledger. Exercise crash points around ledger sync, atomic catalog/checkpoint commit and snapshot replacement; cover stale/corrupt/missing ledger and transient GeoPackage active-transaction failures while retaining stored metadata. Reopen after a pipeline method returns an error. Use isolated VHDs; no system-volume writes. The Windows CI elevated invocation includes both indexer and CLI.
+- **4.3:** switch all three adapters to shared extraction and verify EPSG/WGS84 together; D-34 already resolves Q-14 at 0.98/0.98 minimum, so report enforcement rather than reopening it. Preserve stricter measured native baselines. Measure worker/cache, grouping and persistence costs. Q-16/Q-18 remain proposals pending evidence, with V4 gaps explicit.
+- **Scope clarification:** 4.3 may also edit `tests/corpus/**` for the previously assigned #28/#43/#44 cases and wave 3 reader follow-ups; corpus changes require the oracle-golden drift check. This resolves the earlier hand-off/write-scope mismatch. 4.2 may update the existing CI elevated invocation only if its new test harness needs it, coordinated with 4.1; 4.1 owns every CLI change.
 
 #### 4.1 — query-and-inspect-cli
 - **Write scope:** `crates/query/**`, `crates/cli/**`.
@@ -258,8 +264,8 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Deliverables + acceptance (V3), each as a CI test on the VHD volume:** journal wrap (tiny journal via `fsutil usn createjournal m=… a=…` plus file churn) → full rescan, catalog consistent; journal deleted/recreated → rescan; process killed mid-index → restart converges; corrupt snapshot → detected → rescan; catalog/snapshot checkpoint mismatch → reconcile; Whereabouts' own reads produce no USN events for indexed files; hard-link behaviour documented.
 
 #### 4.3 — benchmarks-and-coverage
-- **Write scope:** `tests/oracle/**`, `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
-- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; **proposed answers** to Q-14, Q-16, Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
+- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
+- **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; enforcement of Q-14 targets already agreed in D-34; **proposed answers** to Q-16 and Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
 - **Acceptance (V2 in CI + V4 numbers from the owner's run).**
 
 ### Wave 5 — exit
@@ -304,9 +310,9 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 2.5 | catalog | #9 | ✅ done (2026-10-27, V1, PR #36) | [note](sessions/2.5-catalog.md) |
 | 2.6 | reader-shapefile | #10 | ✅ done (2026-10-27, V2, PR #33) | [note](sessions/2.6-reader-shapefile.md) |
 | 2.7 | ntfs-mft-reader (added at G1) | #31 | ✅ done (2026-10-27, V3, PR #39; owner V4 on D: requested) | [note](sessions/2.7-ntfs-mft-reader.md) |
-| 3.1 | reader-geopackage | #11 | ⏳ planned | |
-| 3.2 | reader-geotiff | #12 | ⏳ planned | |
-| 3.3 | index-pipeline | #13 | ⏳ planned | |
+| 3.1 | reader-geopackage | #11 | ✅ done (2026-11-08, V2, PR #57) | [note](sessions/3.1-reader-geopackage.md) |
+| 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
+| 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
 | 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
 | 4.2 | resilience | #15 | ⏳ planned | |
 | 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |

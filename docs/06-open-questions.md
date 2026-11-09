@@ -3,6 +3,9 @@
 Undecided items. Coding agents: **do not silently pick an answer** for anything here — choose the default noted (if any) only when blocked, and flag it.
 When resolved, record the answer in `02-decisions.md` and remove or strike it here.
 
+## Wave 3 close (2026-11-08)
+
+The reader and pipeline implementation conventions are recorded as Proposed in D-44–D-46. No Open product question is silently resolved by these changes. Q-14 remains resolved by D-34; wave 4.3 is tasked with enforcing its EPSG/WGS84 targets through the shared extraction path. Q-16 (default enumeration method) and Q-18 (performance targets) remain Open until the wave 4.3 evidence and owner decision. Wave 3 adds GeoPackage/GeoTIFF bounded-read and full-pipeline validation, not owner-volume performance evidence.
 ## Product & business
 
 | # | Question | Notes / default |
