@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** M0 closure prepared with accepted gaps (2026-11-09, D-50); release audit and release pending. Waves 1–4 and session 5.1 (PR #70, `6cd518a`) are merged. Owner evidence and the timing/path investigation support the closure disposition. Stage02 handoffs are recorded in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md).
+**Status:** M0 complete for the v0.1.0 prerelease (2026-11-09), with owner-accepted gaps (D-50). [Release notes and audit](RELEASE.md). Waves 1–4 and session 5.1 (PR #70, `6cd518a`) are merged. Owner evidence and the timing/path investigation support the closure disposition. Stage02 handoffs are recorded in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md).
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -332,4 +332,4 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 
 **Carry-forward:** #68 boot-separated enumeration; #72 resident service performance/budgets with #48/#47 optimization; #52 all-link path coverage. Acceptance criteria and evidence are in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md). No numeric M1 budget or future hard-link contract is selected here.
 
-**Evidence:** 2.866M names and 5,209 datasets in the owner index; 62 committed oracle cases at strict 100% agreement. Warm timing diagnostics isolate approximately 500 ms snapshot load/reconstruction and 5 ms search. CI minutes are unknown; calendar duration is not a work-effort measure. Release/tag/milestone closure remains a separate action.
+**Evidence:** 2.866M names and 5,209 datasets in the owner index; 62 committed oracle cases at strict 100% agreement. Warm timing diagnostics isolate approximately 500 ms snapshot load/reconstruction and 5 ms search. CI minutes are unknown; calendar duration is not a work-effort measure. The release audit and v0.1.0 scope are recorded in [RELEASE.md](RELEASE.md).

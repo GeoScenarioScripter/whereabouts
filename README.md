@@ -6,7 +6,7 @@
 
 Whereabouts is in the spirit of voidtools *Everything*: it reads the NTFS Master File Table and follows the USN change journal to keep a machine-wide filename index that answers as you type. On top of that it understands GIS data: it groups sidecar files into **datasets** (a shapefile is its `.shp/.shx/.dbf/.prj`, a GeoPackage is many layers, a File Geodatabase is a folder), reads each dataset's **extent and coordinate reference system** with fast native header readers, and lets you ask *"what data do I have for this area?"* by drawing a box on a map or typing a place name.
 
-> **Status: pre-alpha CLI prototype.** Index, inspect and query are implemented and exercised on a real Windows volume. M0 closure is prepared with accepted startup and hard-link coverage gaps; release audit and release are pending. The resident service and desktop UI are later work — see [stage status](docs/stages/README.md) and the [closure record](docs/stages/stage01/CLOSURE-DRAFT.md).
+> **Status: pre-alpha CLI prototype.** Index, inspect and query are implemented and exercised on a real Windows volume. M0 is delivered as the **v0.1.0 prerelease**, with accepted startup and hard-link coverage gaps. The resident service and desktop UI are later work — see [stage status](docs/stages/README.md) and the [closure record](docs/stages/stage01/CLOSURE-DRAFT.md).
 
 ## Planned for v1
 

@@ -1,73 +1,38 @@
-# Stage01 closure record — owner-accepted gaps; release pending
+# Stage01 closure record — v0.1.0 prerelease
 
-Updated 2026-11-09. The historical filename is retained for existing links. Owner
-acceptance is recorded in D-50; this record does not claim the release is complete.
+Updated 2026-11-09. The historical filename is retained for existing links.
+The owner requested the M0 release after accepting the gaps in D-50.
+[Release notes and audit](RELEASE.md) record the delivered CLI, verification,
+commands and known limitations. [PLAN.md](PLAN.md#stage-retro) contains the retro.
 
 ## Accepted disposition
 
-1. **Q-16:** retain USN as the current default. Defer six owner-coordinated
-   boot-separated scans (three USN, three raw MFT, with warm repeats) to stage02/#68.
-   Current timings are uncontrolled/warm diagnostics, not cold evidence.
-2. **Q-18:** accept one-shot CLI startup as a known M0 gap. Stage02/#72 owns
-   resident-service/IPC latency and explicit numeric budgets, with #48/#47 covering
-   snapshot/name and catalog optimization. The instant-search criterion remains
-   unmet; D-48's proposed budgets are not approved by this disposition.
-3. **Path coverage:** the requested investigation explains the large numerical gap
-   predominantly through additional hard-link paths to already indexed identities.
-   Complete multi-name support remains stage02/#52; exact simultaneous path parity
-   is not claimed. Raw MFT also keeps one name per FRN and is not a fix for this gap.
+- Retain USN as the current default; defer six boot-separated scans to stage02/#68.
+- Carry one-shot CLI startup and resident-service performance to #72/#48/#47;
+  numeric M1 budgets remain Open. Instant CLI startup is not a passing criterion.
+- Carry complete hard-link path support to #52. Live path reconciliation explains
+  the aggregate gap but does not establish atomic path parity.
+- [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md) retains acceptance criteria and evidence.
 
-## Evidence and integration
+## Final audit
 
-- Owner index/restart: approximately 2.866M names and 5,209 datasets, no restart
-  rescan or extractions; [session 5.1 checklist](sessions/5.1-exit-verification.md).
-- PR #70 head `0440a41` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42579220164), including Windows/Linux, elevated VHD/NTFS acceptance, fmt and dependency policy. It merged into develop as `6cd518a`.
-- Strict corpus agreement: 100% over 62 committed datasets; optional external case
-  excluded explicitly. Private owner datasets were not independently GDAL-validated.
-- [Query timing and path investigation](sessions/m0-query-timings-followup.md):
-  approximately 500 ms snapshot load/reconstruction and 5 ms search. Opt-in
-  `query --timings` keeps results on stdout and emits phase JSON on stderr.
-- Path reconciliation: 2,410,863 matching paths; 1,454,226 extra paths with known
-  identities (1,454,224 currently multi-link, two possible renames); 1,836 absent
-  identities all with post-snapshot creation times; three deleted snapshot paths;
-  four orphaned NTFS transaction metadata records. Live observations are non-atomic.
-- Timing PR #71 head `f0dfb15` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42582146914), including Windows/Linux and elevated tests, and merged as `8f14a45`.
-- This documentation update completes the closure sync and handoffs when merged
-  after final-head CI. Release audit and the separate release sequence remain;
-  the evidence and timing implementation are already integrated into develop.
+- All stage01 milestone issues are closed. #25 is assigned to stage02;
+  #26/#29 closed with existing measurement/CI evidence.
+- Correctness issue #50 closed after PR #74 merged as `8c74046`.
+  [Final develop CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42588045021)
+  passed Windows/Linux, elevated NTFS/VHD tests, rustfmt and cargo-deny.
+- [Owner evidence](sessions/5.1-exit-verification.md): 2,865,960 names and 5,209
+  datasets; restart without rescan or extraction. Corpus agreement is 100% over
+  62 available committed datasets, with one optional external case skipped.
+- Remaining accepted gaps do not waive correctness checks or imply cold-speed,
+  universal path parity or instant CLI startup acceptance.
 
-## Stage02 handoffs
+## Release sequence
 
-[STAGE02-HANDOFF.md](STAGE02-HANDOFF.md) records issue ownership, evidence,
-acceptance criteria and unresolved future budgets/contracts. The handoffs are
-accepted M0 gaps, not silently weakened tests or proof of completeness.
-
-## Documentation and retro
-
-D-50 and Q-16/Q-18 record the current disposition; architecture preserves USN and
-per-process CLI loading; roadmap and stage index distinguish delivered prototype
-from release. The retro is in [PLAN.md](PLAN.md#stage-retro). Stage02 remains a
-sketch until the separate stage planning step.
-
-## Remaining milestone audit
-
-The three accepted gaps are not blanket acceptance of every open issue. Existing
-#25 mount/GUID volume support is outside M0 and has moved to stage02. #26 borrowed
-record ingestion measurement and #29 release-enumeration CI are closed with existing
-session/CI evidence; no borrowed-record contract change was adopted.
-#50 non-finite `RasterInfo` validation is addressed by the D-51 core/catalog/indexer
-contract fix ([verification note](sessions/issue-50-raster-validation.md)). Close
-the issue only after reviewed integration into develop and green final-head CI.
-It is not an accepted gap. Audit remaining stage01 issues before closing the milestone.
-
-## Separate release sequence (not performed by this work)
-
-After final-head CI and all session/docs PRs merge into develop, open the
-develop→main release PR; merge with a merge commit after green CI; tag v0.1.0,
-create the prerelease, close the stage01 milestone, then plan stage02. No tag,
-main merge or milestone closure is authorized by this documentation-only release
-preparation. The owner's current request covers documentation, integration into
-develop and handoffs.
+The owner's release request authorizes documentation integration through develop,
+then a green develop-to-main PR merged with a merge commit, annotated v0.1.0 tag,
+GitHub prerelease and stage01 milestone closure. Stage02 detailed planning is a
+separate follow-up; it remains a sketch.
 
 ## Prepared manual cold-run helper
 `docs/benchmarks/run-owner-boot.ps1` checks elevation and reserves one measurement per boot in a local ledger. It does not reboot, schedule tasks, build, or alter a journal. Prebuild executables before the first reboot. After each separate owner-controlled reboot, before opening GIS directories or compiling, run one command in an elevated shell:
