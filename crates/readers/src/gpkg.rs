@@ -16,7 +16,7 @@ use sqlite::{Database, Table, Value, bad};
 /// Read-only, bounded GeoPackage metadata reader (stage01/3.1).
 ///
 /// Reads committed database pages without SQLite locks, `-wal`/`-shm` creation, or SQL execution.
-/// An active WAL or rollback journal is deferred as `partial`: it cannot be read consistently
+/// An active WAL or rollback journal returns a transient I/O error: it cannot be read consistently
 /// without locking. A checkpointed database works even in a directory without write permission.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GeoPackageReader;
@@ -37,10 +37,7 @@ impl FormatReader for GeoPackageReader {
         let budget = Budget::new(limits.max_bytes);
         let file = SourceFile::open(&dataset.anchor, &budget)?;
         if let Some(reason) = pending_transaction(&dataset.anchor)? {
-            return Ok(DatasetMetadata {
-                partial: vec![reason],
-                ..DatasetMetadata::default()
-            });
+            return Err(retry(&dataset.anchor, reason));
         }
         let mut db = Database::open(file, limits.time_budget)?;
         let (contents, rows) = db.rows("gpkg_contents")?;
@@ -72,12 +69,19 @@ impl FormatReader for GeoPackageReader {
         }
         md.layers.sort_by(|a, b| a.name.cmp(&b.name));
         if !db.unchanged()? || pending_transaction(&dataset.anchor)?.is_some() {
-            return Ok(DatasetMetadata {
-                partial: vec!["SQLite changed during read; retry extraction".into()],
-                ..DatasetMetadata::default()
-            });
+            return Err(retry(
+                &dataset.anchor,
+                "SQLite changed during read; retry extraction",
+            ));
         }
         Ok(md)
+    }
+}
+
+fn retry(path: &Path, reason: impl Into<String>) -> ReadError {
+    ReadError::Io {
+        path: path.into(),
+        source: std::io::Error::new(std::io::ErrorKind::WouldBlock, reason.into()),
     }
 }
 

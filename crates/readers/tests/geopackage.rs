@@ -82,9 +82,18 @@ fn active_wal_is_deferred_without_touching_files() {
     let names = listing(dir.path());
     let wal = dir.path().join("a.gpkg-wal");
     let bytes = fs::read(&wal).unwrap();
-    let md = read(&dataset(&path), &ReadLimits::default()).unwrap();
-    assert!(md.layers.is_empty());
-    assert!(md.partial[0].contains("-wal"));
+    let err = read(&dataset(&path), &ReadLimits::default()).unwrap_err();
+    match err {
+        whereabouts_core::ReadError::Io {
+            path: actual,
+            source,
+        } => {
+            assert_eq!(actual, path);
+            assert_eq!(source.kind(), std::io::ErrorKind::WouldBlock);
+            assert!(source.to_string().contains("-wal"));
+        }
+        other => panic!("expected retryable I/O error, got {other:?}"),
+    }
     assert_eq!(listing(dir.path()), names);
     assert_eq!(fs::read(&wal).unwrap(), bytes);
 }
