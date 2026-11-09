@@ -28,7 +28,7 @@ Everything here is a design sketch to guide implementation — refine it as code
 
 ## 2. Proposed Rust workspace layout
 
-Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 components are implemented through the indexing pipeline; query/inspect arrive in wave 4; `tiles`, `ipc`, `service` and `app/` are added by later stages.
+Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `whereabouts-nameindex`); the oracle harness is `tests/oracle` (D-24). Stage01 components include the indexing pipeline and query/inspect CLI; `tiles`, `ipc`, `service` and `app/` are added by later stages.
 
 | Crate | Responsibility |
 |---|---|
@@ -53,7 +53,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 ### 3.1 Initial enumeration (per NTFS volume)
 1. Open the volume handle (`\\.\C:`) — requires elevation (hence the service).
-2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. Which method is the default is Q-16 (decided in 4.3). It can also deliver sizes and timestamps from the same pass (stage02).
+2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. Which method is the default is Q-16 (owner evidence and decision carried to 5.1/#68). It can also deliver sizes and timestamps from the same pass (stage02).
 3. Build the name index: store **(FRN, parent, name)**, not full paths; reconstruct paths on demand by walking parent links to the root.
 4. Feed candidate GIS files (by extension and by folder signature, e.g. `*.gdb` directories) to the dataset grouper.
 

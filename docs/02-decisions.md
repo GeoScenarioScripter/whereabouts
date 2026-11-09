@@ -409,7 +409,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - **Sizes and timestamps** can come from the same pass at no extra I/O (`$STANDARD_INFORMATION`, the unnamed `$DATA` header); the USN API gives neither. Input to stage02.
   - **Read caps:** 4 MiB chunks, free chunks skipped through `$BITMAP`, at most 2^20 runs, 4096 extension records per file, `$ATTRIBUTE_LIST` up to 1 MiB, an extension cache of 128 MiB, deferred files capped at 64 MiB. `FILE_FLAG_NO_BUFFERING` and overlapped read-ahead were not adopted.
 - **Rationale:** On the CI runner raw reads take about 6 s cold and warm, against USN 36–62 s cold and 2.0–2.7 s warm; the record sets agree (1,355,125 identical, 17 raw-only metadata records). Strictness avoids a silently incomplete index; the margin covers metadata that is not yet on disk.
-- **Consequences:** Q-16 stays **Open** and is decided in 4.3 with the owner's D: numbers. The session proposes raw for the first (cold) index and USN for changes, with USN as the fallback. Not handled: `$BITMAP`/`$DATA` pieces in extension records, compressed or sparse `$MFT`, 4Kn hardware (#53), ReFS. Hard-link names are counted but not all reported (#52).
+- **Consequences:** Q-16 stays **Open**; the owner's D: evidence and decision originally assigned to 4.3 are carried to 5.1/#68 (D-48). The session proposes raw for the first (cold) index and USN for changes, with USN as the fallback. Not handled: `$BITMAP`/`$DATA` pieces in extension records, compressed or sparse `$MFT`, 4Kn hardware (#53), ReFS. Hard-link names are counted but not all reported (#52).
 
 ## D-44 — Bounded native GeoPackage metadata reads
 - **Status:** Proposed
