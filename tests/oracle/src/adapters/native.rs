@@ -1,21 +1,12 @@
-//! Shared adapter plumbing: build a [`ResolvedDataset`] from a corpus case and convert a native
-//! reader's result into a [`NativeRecord`]. Used by every reader adapter.
-
+//! Shared corpus adapter for the same reader/CRS pipeline used by indexing and inspect.
+use crate::adapters::ResolvedCase;
+use crate::record::{NativeLayer, NativeRaster, NativeRecord, NativeStatus, NoData};
 use std::path::{Path, PathBuf};
-
 use whereabouts_core::{
-    DatasetMetadata, ExtractionStatus, Format, LayerMetadata, MemberRole, ReadError, ReadLimits,
-    ResolvedDataset, ResolvedMember,
+    ExtractionStatus, Format, LayerRecord, MemberRole, ReadLimits, ResolvedDataset, ResolvedMember,
+    Wgs84Extent,
 };
 
-use crate::adapters::ResolvedCase;
-use crate::record::{NativeLayer, NativeRaster, NativeRecord, NativeStatus};
-
-/// Resolves `case` as a dataset of `format`: the manifest anchor is the anchor, every other file
-/// is a sidecar whose role `role_of` picks from its path (`None` = not a member).
-///
-/// The oracle does its own (trivial) grouping from the manifest instead of calling the dataset
-/// grouper, so reader agreement is measured independently of grouping.
 pub(crate) fn resolve(
     case: &ResolvedCase<'_>,
     format: Format,
@@ -35,31 +26,56 @@ pub(crate) fn resolve(
     }
 }
 
-/// Reads `dataset` through the reader registry with default limits and converts the outcome.
 pub(crate) fn read(dataset: &ResolvedDataset) -> NativeRecord {
-    from_result(whereabouts_readers::read(dataset, &ReadLimits::default()))
-}
-
-/// Converts a reader's result. Errors carry no layers; EPSG and WGS84 stay `None` until the
-/// adapters switch to `indexer::extract` (stage01/4.3).
-pub(crate) fn from_result(result: Result<DatasetMetadata, ReadError>) -> NativeRecord {
-    match result {
-        Err(e) => NativeRecord::new(match e.status() {
-            ExtractionStatus::Unsupported => NativeStatus::Unsupported,
-            _ => NativeStatus::Error,
-        }),
-        Ok(md) => NativeRecord {
-            status: if md.partial.is_empty() {
-                NativeStatus::Ok
-            } else {
-                NativeStatus::Partial
-            },
-            layers: md.layers.iter().map(layer).collect(),
-        },
+    let extracted = whereabouts_indexer::extract(dataset, &ReadLimits::default());
+    let (status, reason) = match extracted.status {
+        ExtractionStatus::Ok => (NativeStatus::Ok, None),
+        ExtractionStatus::Partial(reason) => (NativeStatus::Partial, Some(reason)),
+        ExtractionStatus::Error(reason) => (NativeStatus::Error, Some(reason)),
+        ExtractionStatus::Unsupported => (NativeStatus::Unsupported, None),
+        ExtractionStatus::Pending => (
+            NativeStatus::Error,
+            Some("unexpected pending extraction".into()),
+        ),
+    };
+    NativeRecord {
+        status,
+        reason,
+        retry: extracted.retry,
+        layers: extracted.layers.iter().map(layer).collect(),
     }
 }
 
-fn layer(l: &LayerMetadata) -> NativeLayer {
+// The oracle uses a wrapping west > east box; core uses split boxes at +/-180.
+fn bbox(extent: &Wgs84Extent) -> [f64; 4] {
+    let parts = extent.parts();
+    let south = parts
+        .iter()
+        .map(|p| p.min_y())
+        .fold(f64::INFINITY, f64::min);
+    let north = parts
+        .iter()
+        .map(|p| p.max_y())
+        .fold(f64::NEG_INFINITY, f64::max);
+    let (west, east) = if extent.is_split() {
+        (
+            parts
+                .iter()
+                .map(|p| p.min_x())
+                .fold(f64::NEG_INFINITY, f64::max),
+            parts
+                .iter()
+                .map(|p| p.max_x())
+                .fold(f64::INFINITY, f64::min),
+        )
+    } else {
+        (parts[0].min_x(), parts[0].max_x())
+    };
+    [west, south, east, north]
+}
+
+fn layer(record: &LayerRecord) -> NativeLayer {
+    let l = &record.metadata;
     NativeLayer {
         name: l.name.clone(),
         geometry_type: l.geometry_type.map(|g| g.kind.code().to_owned()),
@@ -69,56 +85,35 @@ fn layer(l: &LayerMetadata) -> NativeLayer {
         extent: l
             .native_bounds
             .map(|b| [b.min_x(), b.min_y(), b.max_x(), b.max_y()]),
-        // Size and band count only; per-band types and nodata are left for the raster adapters
-        // to fill in if their reader reports them per band.
         raster: l.raster.as_ref().map(|r| NativeRaster {
             width: r.width,
             height: r.height,
             band_count: r.bands,
             resolution: r.res_x.zip(r.res_y).map(|(x, y)| [x, y]),
-            ..NativeRaster::default()
+            data_types: Some(vec![r.dtype.code().into(); r.bands as usize]),
+            nodata: Some(vec![
+                r.nodata
+                    .as_ref()
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .map(NoData::from_f64);
+                r.bands as usize
+            ]),
         }),
-        epsg: None,
-        wgs84_extent: None,
+        epsg: record.crs.as_ref().and_then(|c| c.epsg()),
+        wgs84_extent: record.wgs84.as_ref().map(bbox),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use whereabouts_core::{Bounds, GeometryKind, GeometryType};
-
     use super::*;
-
     #[test]
-    fn converts_status_and_layers() {
-        let err = from_result(Err(ReadError::MissingMember(MemberRole::Shx)));
-        assert_eq!(err.status, NativeStatus::Error);
-        assert!(err.layers.is_empty());
-        let unsupported = from_result(Err(ReadError::Unsupported("x".into())));
-        assert_eq!(unsupported.status, NativeStatus::Unsupported);
-
-        let md = DatasetMetadata {
-            layers: vec![LayerMetadata {
-                name: "roads".into(),
-                geometry_type: Some(GeometryType {
-                    kind: GeometryKind::LineString,
-                    has_z: true,
-                    has_m: false,
-                }),
-                feature_count: Some(6),
-                native_bounds: Bounds::new(1.0, 2.0, 3.0, 4.0).ok(),
-                ..LayerMetadata::default()
-            }],
-            partial: vec!["something".into()],
-        };
-        let rec = from_result(Ok(md));
-        assert_eq!(rec.status, NativeStatus::Partial);
-        let l = &rec.layers[0];
-        assert_eq!(l.name, "roads");
-        assert_eq!(l.geometry_type.as_deref(), Some("LineString"));
-        assert!(l.has_z && !l.has_m);
-        assert_eq!(l.feature_count, Some(6));
-        assert_eq!(l.extent, Some([1.0, 2.0, 3.0, 4.0]));
-        assert_eq!(l.raster, None);
+    fn wrapping_extent_preserves_crossing_direction() {
+        let extent =
+            Wgs84Extent::from_west_south_east_north(170., -20., -175., 10.).expect("extent");
+        assert_eq!(bbox(&extent), [170., -20., -175., 10.]);
+        let world =
+            Wgs84Extent::from_west_south_east_north(-180., -90., 180., 90.).expect("extent");
+        assert_eq!(bbox(&world), [-180., -90., 180., 90.]);
     }
 }

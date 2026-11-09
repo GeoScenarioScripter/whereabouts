@@ -271,6 +271,7 @@ fn empty_registry_reports_everything_as_skipped() {
     let report = whereabouts_oracle::evaluate(&c, &[], &Default::default()).expect("evaluate");
     assert_eq!(report.cases.len(), c.cases().len());
     assert!(report.disagreements().is_empty());
+    assert!(!report.coverage_failures(&c, &[]).is_empty());
     for (format, summary) in report.by_format() {
         assert_eq!(summary.compared, 0, "{format}");
         assert!(summary.checks.is_empty(), "{format}");
@@ -290,6 +291,8 @@ fn a_perfect_reader_agrees_on_every_check() {
         let rec = c.load_expected(case).expect("golden");
         let native = NativeRecord {
             status: NativeStatus::Ok,
+            reason: None,
+            retry: false,
             layers: rec
                 .layers
                 .iter()

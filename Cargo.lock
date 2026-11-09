@@ -1464,6 +1464,7 @@ dependencies = [
 name = "whereabouts-oracle"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "serde",
  "serde_json",
  "sha2",
@@ -1473,6 +1474,9 @@ dependencies = [
  "whereabouts-core",
  "whereabouts-crs",
  "whereabouts-datasets",
+ "whereabouts-indexer",
+ "whereabouts-nameindex",
+ "whereabouts-ntfs",
  "whereabouts-readers",
 ]
 

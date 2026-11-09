@@ -161,7 +161,11 @@ pub fn compare(
         push(
             Check::Status,
             None,
-            status_verdict(case.is_corrupt(), oracle.status, native.status),
+            if native.retry {
+                Verdict::Disagree(format!("transient extraction failure: {:?}", native.reason))
+            } else {
+                status_verdict(case.is_corrupt(), oracle.status, native.status)
+            },
         );
     }
     if case.is_corrupt() || oracle.status == OracleStatus::Error {
@@ -545,6 +549,23 @@ mod tests {
                 "{corrupt} {o:?} {n:?}"
             );
         }
+    }
+
+    #[test]
+    fn transient_errors_never_count_as_corruption_detection() {
+        let o = oracle(OracleStatus::Error, vec![]);
+        let mut n = NativeRecord::new(NativeStatus::Error);
+        n.retry = true;
+        n.reason = Some("permission denied".into());
+        let results = compare(
+            &case(&["corrupt"]),
+            &o,
+            &n,
+            &Check::ALL,
+            &Tolerances::default(),
+        );
+        assert_eq!(verdicts(&results), vec![(Check::Status, false)]);
+        assert!(format!("{:?}", results[0]).contains("permission denied"));
     }
 
     #[test]

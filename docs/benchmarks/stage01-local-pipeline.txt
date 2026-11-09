@@ -1,0 +1,16 @@
+memory stage=initial working_set_bytes=4861952 private_bytes=716800 peak_working_set_bytes=4861952
+name_build entries=1000000 ms=909.632 heap_bytes=89787104 bytes_per_entry=89.79
+memory stage=name_index working_set_bytes=95236096 private_bytes=91607040 peak_working_set_bytes=189120512
+group_tree entries=1000000 ms=1466.184 (includes synthetic record regeneration)
+memory stage=name_plus_tree working_set_bytes=249786368 private_bytes=248938496 peak_working_set_bytes=290013184
+group_scan datasets=18873 ms=1670.969
+memory stage=name_plus_tree_plus_grouper working_set_bytes=274690048 private_bytes=274505728 peak_working_set_bytes=290013184
+snapshot_save bytes=45763657 ms=300.086
+snapshot_load entries=1000000 ms=389.867 cache=warm
+extraction format=geopackage fresh_thread_ms_p50_p95_p99=[0.767, 28.6624, 28.6624] warm_ms_p50_p95_p99=[0.2557, 0.7474, 1.4527999999999999]
+extraction format=geotiff fresh_thread_ms_p50_p95_p99=[0.46190000000000003, 3.176, 3.176] warm_ms_p50_p95_p99=[0.12999999999999998, 0.5966, 2.1691000000000003]
+extraction format=shapefile fresh_thread_ms_p50_p95_p99=[0.6381, 1.5321, 2.4229999999999996] warm_ms_p50_p95_p99=[0.3232, 0.9741, 2.2954]
+extraction_workers workers=1 jobs=5100 ms=2267.934 datasets_per_second=2248.7
+extraction_workers workers=2 jobs=5100 ms=983.213 datasets_per_second=5187.1
+extraction_workers workers=4 jobs=5100 ms=683.382 datasets_per_second=7462.9
+extraction_workers workers=8 jobs=5100 ms=408.679 datasets_per_second=12479.2

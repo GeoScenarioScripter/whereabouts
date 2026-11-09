@@ -1,8 +1,8 @@
 //! The adapter registry: one entry per format that has a native reader, mapping a corpus case to
 //! a [`NativeRecord`].
 //!
-//! Empty until the reader sessions land (stage01: 2.6 shapefile, 3.1 geopackage, 3.2 geotiff;
-//! 4.3 later switches them to the full `indexer::extract` path for EPSG/WGS84). Each adds **one
+//! All stage01 adapters use the shared `indexer::extract` path for native facts and CRS.
+//! Each adds one
 //! line** to [`ADAPTERS`] plus its `read` function (in its own module here), listing only the
 //! [`Check`]s it is ready to be held to.
 

@@ -11,7 +11,7 @@
 //! |---|---|
 //! | [`manifest`] | `tests/corpus/manifest.toml` → [`Corpus`] / [`Case`] (paths, tags, provenance) |
 //! | [`record`] | [`OracleRecord`] (the GDAL golden, `tests/corpus/expected/<id>.json`) and [`NativeRecord`] (what an adapter reports) |
-//! | [`compare`] | tolerance-aware comparison of one case, per [`Check`] |
+//! | [`mod@compare`] | tolerance-aware comparison of one case, per [`Check`] |
 //! | [`adapters`] | the adapter registry: `format → fn(case) -> Option<NativeRecord>` (empty until the readers land) |
 //! | [`report`] | per-format agreement tallies, markdown report |
 //! | [`baseline`] | `tests/oracle/baseline.toml`: tolerances + minimum agreement rates |

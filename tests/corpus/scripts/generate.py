@@ -721,5 +721,8 @@ def main(argv):
         sys.exit(f"files produced differ from manifest for: {failures}")
 
 
+# Keep follow-up builders in a small adjacent source file (same pinned runtime).
+exec(compile((Path(__file__).with_name('wave4_cases.py')).read_text(encoding='utf-8'), 'wave4_cases.py', 'exec'))
+
 if __name__ == "__main__":
     main(sys.argv)
