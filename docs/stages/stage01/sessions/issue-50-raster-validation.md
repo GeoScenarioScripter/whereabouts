@@ -1,5 +1,5 @@
 # stage01 follow-up — Non-finite raster validation
-Date: 2026-11-09 · Issue: #50 · Verification reached: V2 (local Windows); V3 CI pending
+Date: 2026-11-09 · Issue: #50 · [PR #74](https://github.com/GeoScenarioScripter/whereabouts/pull/74) · Local verification reached: V2; final-head CI tracked on the PR
 
 **Context:** release audit identified silent loss of non-finite raster numeric metadata. The owner requested the fix; this is an ad-hoc follow-up with core, catalog, indexer and documentation scope.
 
@@ -23,5 +23,6 @@ Date: 2026-11-09 · Issue: #50 · Verification reached: V2 (local Windows); V3 C
 ## Verification
 - Local Windows: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` passed. The workspace run passed 442 libtest/doctests, plus the standalone strict corpus agreement gate; 25 tests remain ignored under their existing prerequisites.
 - End-to-end `overflowing_raster_resolution_does_not_abort_the_indexing_batch` passed, including both sibling datasets and restart persistence. Core/catalog regressions pass for all eight numeric slots and all three non-finite values.
-- Committed corpus oracle passed against the existing baseline; no fixture, golden, threshold or reader implementation was changed.
+- Committed corpus oracle passed against the existing baseline: 63 manifest cases, 62 available datasets compared, one optional missing shapefile case explicitly skipped; all compared agreement metrics were 100%. No fixture, golden, threshold or reader implementation was changed.
 - Not verified locally: Linux, elevated NTFS/VHD acceptance and dependency-policy checks. These remain final-head CI requirements. No new owner-volume scans are necessary for this ingestion-only invariant change; no V4 claim is made.
+- Final-head Windows/Linux, elevated acceptance and dependency-policy evidence is linked by [PR #74's checks](https://github.com/GeoScenarioScripter/whereabouts/pull/74/checks). Close #50 only when these checks pass and reviewed integration is complete.
