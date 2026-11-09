@@ -284,8 +284,11 @@ def shapefile_layers(case_dir: Path, anchor: Path):
     raw = read_text(prj) if prj.exists() else None
     srs = lyr.GetSpatialRef()
     crs = crs_record(srs, "prj" if raw is not None else "none", raw)
-    minx, maxx, miny, maxy = lyr.GetExtent(force=0)
-    rec = vector_layer(lyr, "vector", crs, bbox(minx, miny, maxx, maxy))
+    if anchor.suffix.lower() == ".dbf":
+        rec = vector_layer(lyr, "attributes", crs, None)
+    else:
+        minx, maxx, miny, maxy = lyr.GetExtent(force=0)
+        rec = vector_layer(lyr, "vector", crs, bbox(minx, miny, maxx, maxy))
     md = lyr.GetMetadata("SHAPEFILE") or {}
     rec["encoding"] = {
         # What GDAL decodes the DBF with, and the two signals it chose from (.cpg wins over LDID).

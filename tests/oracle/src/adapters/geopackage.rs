@@ -1,4 +1,4 @@
-//! GeoPackage native metadata adapter; CRS normalization arrives in stage01/4.3.
+//! GeoPackage metadata and CRS through the shared extraction pipeline.
 
 use whereabouts_core::Format;
 
@@ -12,6 +12,8 @@ pub(crate) const CHECKS: &[Check] = &[
     Check::GeometryType,
     Check::FeatureCount,
     Check::NativeExtent,
+    Check::Epsg,
+    Check::Wgs84Extent,
 ];
 
 pub(crate) fn read(case: &ResolvedCase<'_>) -> Option<NativeRecord> {

@@ -41,6 +41,10 @@ fn grouper_supplies_every_corpus_tiff_member_with_its_reader_role() {
                 MemberRole::Prj
             } else if name.ends_with(".tfw") {
                 MemberRole::WorldFile
+            } else if name.ends_with(".ovr") {
+                MemberRole::Ovr
+            } else if name.ends_with(".msk") {
+                MemberRole::Msk
             } else {
                 MemberRole::Other
             };
@@ -70,6 +74,10 @@ fn all_tiff_raster_facts_match_gdal_with_bounded_io() {
                         MemberRole::WorldFile
                     } else if p.ends_with(".prj") {
                         MemberRole::Prj
+                    } else if p.ends_with(".ovr") {
+                        MemberRole::Ovr
+                    } else if p.ends_with(".msk") {
+                        MemberRole::Msk
                     } else {
                         MemberRole::Other
                     },
@@ -107,5 +115,12 @@ fn all_tiff_raster_facts_match_gdal_with_bounded_io() {
         }
         count += 1;
     }
-    assert_eq!(count, 12);
+    assert_eq!(
+        count,
+        corpus
+            .cases()
+            .iter()
+            .filter(|c| c.format == "geotiff" && !c.is_corrupt())
+            .count()
+    );
 }

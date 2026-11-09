@@ -306,6 +306,10 @@ pub struct CrsCandidate {
 pub struct NativeRecord {
     /// Extraction status.
     pub status: NativeStatus,
+    /// Full pipeline error or partial diagnostic, retained for failures.
+    pub reason: Option<String>,
+    /// Transient I/O or missing-member failure: never valid corruption detection.
+    pub retry: bool,
     /// Layers found.
     pub layers: Vec<NativeLayer>,
 }
@@ -315,6 +319,8 @@ impl NativeRecord {
     pub fn new(status: NativeStatus) -> Self {
         Self {
             status,
+            reason: None,
+            retry: false,
             layers: Vec::new(),
         }
     }

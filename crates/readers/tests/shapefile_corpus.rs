@@ -52,14 +52,29 @@ fn resolve(dir: &Path) -> ResolvedDataset {
             Some("dbf") => MemberRole::Dbf,
             Some("prj") => MemberRole::Prj,
             Some("cpg") => MemberRole::Cpg,
+            Some("sbn") => MemberRole::Sbn,
+            Some("sbx") => MemberRole::Sbx,
             _ => MemberRole::Other,
         };
         sidecars.push(ResolvedMember { role, path });
     }
-    ResolvedDataset {
-        format: Format::Shapefile,
-        anchor: anchor.unwrap(),
-        sidecars,
+    match anchor {
+        Some(anchor) => ResolvedDataset {
+            format: Format::Shapefile,
+            anchor,
+            sidecars,
+        },
+        None => {
+            let dbf = sidecars
+                .iter()
+                .position(|m| m.role == MemberRole::Dbf)
+                .expect("SHP or DBF anchor");
+            ResolvedDataset {
+                format: Format::Dbf,
+                anchor: sidecars.remove(dbf).path,
+                sidecars,
+            }
+        }
     }
 }
 
@@ -118,6 +133,45 @@ fn every_corpus_shapefile_reads_under_64_kib() {
                 assert!(layer.fields.is_empty());
                 assert_eq!(layer.feature_count, Some(9));
                 assert!(layer.native_bounds.is_some());
+            }
+            "shp_corrupt_count_mismatch" => {
+                let md = result.unwrap();
+                assert_eq!(md.partial, [".shx indexes 2 shapes but .dbf has 1 records"]);
+                assert_eq!(md.layers[0].feature_count, Some(2));
+                assert!(md.layers[0].native_bounds.is_some());
+            }
+            "shp_cp437_names" => {
+                let md = result.unwrap();
+                assert_eq!(md.partial.len(), 1);
+                assert!(md.partial[0].contains("CP437"));
+                assert!(md.partial[0].contains("Windows-1252"));
+                assert_eq!(md.layers[0].fields[1].name, "caf‚");
+            }
+            "shp_multipatch" => {
+                let md = result.unwrap();
+                assert!(md.partial.is_empty());
+                let layer = &md.layers[0];
+                assert_eq!(
+                    layer.geometry_type,
+                    Some(whereabouts_core::GeometryType::xy(
+                        whereabouts_core::GeometryKind::Geometry,
+                    ))
+                );
+                assert_eq!(layer.feature_count, Some(1));
+                assert_eq!(
+                    layer.native_bounds,
+                    whereabouts_core::Bounds::new(1., 2., 3., 4.).ok()
+                );
+                assert!(layer.crs.is_some());
+            }
+            "shp_lone_dbf" => {
+                let md = result.unwrap();
+                assert!(md.partial.is_empty());
+                let layer = &md.layers[0];
+                assert_eq!(layer.feature_count, Some(2));
+                assert!(layer.geometry_type.is_none());
+                assert!(layer.native_bounds.is_none());
+                assert!(layer.crs.is_none());
             }
             other => {
                 assert!(

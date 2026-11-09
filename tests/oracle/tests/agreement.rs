@@ -34,7 +34,14 @@ fn run() -> Result<bool, Box<dyn std::error::Error>> {
     let mut text = report.to_markdown();
     let violations = baseline.violations(&report);
     let panics = report.panics();
-    let passed = violations.is_empty() && panics.is_empty();
+    let coverage = report.coverage_failures(&corpus, adapters::registry());
+    let passed = violations.is_empty() && panics.is_empty() && coverage.is_empty();
+    if !coverage.is_empty() {
+        text.push_str("\n### Missing coverage\n\n");
+        for failure in &coverage {
+            text.push_str(&format!("- {failure}\n"));
+        }
+    }
     if !violations.is_empty() {
         text.push_str("\n### Below baseline\n\n");
         for v in &violations {

@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "case": "shp_cassini_3068",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "survey",
+      "kind": "vector",
+      "geometry_type": "Point",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 2,
+      "extent": [
+        17850.075160076,
+        8130.253159979,
+        24691.334106098,
+        19231.764773209
+      ],
+      "declared_extent": [
+        17850.075160076,
+        8130.253159979,
+        24691.334106098,
+        19231.764773209
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "id",
+          "type": "Integer64",
+          "width": 10
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "width": 32
+        }
+      ],
+      "encoding": {
+        "source_encoding": "ISO-8859-1",
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
+      },
+      "crs": {
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "PROJCS[\"DHDN_Soldner_Berlin\",GEOGCS[\"GCS_Deutsches_Hauptdreiecksnetz\",DATUM[\"D_Deutsches_Hauptdreiecksnetz\",SPHEROID[\"Bessel_1841\",6377397.155,299.1528128]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Cassini\"],PARAMETER[\"False_Easting\",40000.0],PARAMETER[\"False_Northing\",10000.0],PARAMETER[\"Central_Meridian\",13.6272036666667],PARAMETER[\"Scale_Factor\",1.0],PARAMETER[\"Latitude_Of_Origin\",52.4186482777778],UNIT[\"Meter\",1.0]]",
+        "declared_authority": null,
+        "wkt2": "PROJCRS[\"DHDN / Soldner Berlin\",BASEGEOGCRS[\"DHDN\",DATUM[\"Deutsches Hauptdreiecksnetz\",ELLIPSOID[\"Bessel 1841\",6377397.155,299.1528128,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4314]],CONVERSION[\"Soldner Berlin\",METHOD[\"Cassini-Soldner\",ID[\"EPSG\",9806]],PARAMETER[\"Latitude of natural origin\",52.4186482777778,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],PARAMETER[\"Longitude of natural origin\",13.6272036666667,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],PARAMETER[\"False easting\",40000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",10000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"northing (x)\",north,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"easting (y)\",east,ORDER[2],LENGTHUNIT[\"metre\",1]],USAGE[SCOPE[\"Cadastre, engineering survey, topographic mapping (large scale).\"],AREA[\"Germany - Berlin.\"],BBOX[52.33,13.09,52.65,13.76]],ID[\"EPSG\",3068]]",
+        "epsg": 3068,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "3068",
+            "confidence": 100
+          }
+        ]
+      },
+      "wgs84_extent": [
+        13.299261698,
+        52.4,
+        13.400511188,
+        52.5
+      ],
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

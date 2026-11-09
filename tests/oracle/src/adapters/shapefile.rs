@@ -8,18 +8,25 @@ use crate::adapters::{ResolvedCase, native};
 use crate::compare::Check;
 use crate::record::NativeRecord;
 
-/// Native-only checks: EPSG and WGS84 arrive with `indexer::extract` (stage01/4.3).
+/// Native facts and CRS checked through `indexer::extract`.
 pub(crate) const CHECKS: &[Check] = &[
     Check::Status,
     Check::Layers,
     Check::GeometryType,
     Check::FeatureCount,
     Check::NativeExtent,
+    Check::Epsg,
+    Check::Wgs84Extent,
 ];
 
 /// Reads one shapefile case.
 pub(crate) fn read(case: &ResolvedCase<'_>) -> Option<NativeRecord> {
-    let dataset = native::resolve(case, Format::Shapefile, role);
+    let format = if case.case.anchor.to_ascii_lowercase().ends_with(".dbf") {
+        Format::Dbf
+    } else {
+        Format::Shapefile
+    };
+    let dataset = native::resolve(case, format, role);
     Some(native::read(&dataset))
 }
 

@@ -96,6 +96,59 @@ impl Report {
         });
     }
 
+    /// Require every committed case and every declared check applicable to a format.
+    /// Missing optional external data is the only permitted skip in the stage01 gate.
+    pub fn coverage_failures(
+        &self,
+        corpus: &crate::Corpus,
+        adapters: &[crate::Adapter],
+    ) -> Vec<String> {
+        let mut failures = Vec::new();
+        for case in corpus.cases() {
+            let optional_absent =
+                case.location == crate::manifest::Location::External && !corpus.is_present(case);
+            if optional_absent {
+                continue;
+            }
+            if !self
+                .cases
+                .iter()
+                .any(|r| r.case == case.id && matches!(r.outcome, CaseOutcome::Compared(_)))
+            {
+                failures.push(format!("{}: required case was not compared", case.id));
+            }
+        }
+        let summaries = self.by_format();
+        for format in crate::manifest::KNOWN_FORMATS {
+            let Some(adapter) = adapters.iter().find(|a| a.format == *format) else {
+                failures.push(format!("{format}: adapter missing"));
+                continue;
+            };
+            let mut required = vec![
+                Check::Status,
+                Check::Layers,
+                Check::NativeExtent,
+                Check::Epsg,
+                Check::Wgs84Extent,
+            ];
+            if *format == "geotiff" {
+                required.push(Check::Raster);
+            } else {
+                required.extend([Check::GeometryType, Check::FeatureCount]);
+            }
+            for check in required {
+                if !adapter.checks.contains(&check)
+                    || !summaries
+                        .get(*format)
+                        .is_some_and(|s| s.checks.get(&check).is_some_and(|t| t.compared > 0))
+                {
+                    failures.push(format!("{format}: required {check} was not exercised"));
+                }
+            }
+        }
+        failures
+    }
+
     /// Per-format summaries, keyed by format name.
     pub fn by_format(&self) -> BTreeMap<String, FormatSummary> {
         let mut out: BTreeMap<String, FormatSummary> = BTreeMap::new();
