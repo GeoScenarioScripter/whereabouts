@@ -232,3 +232,41 @@ fn directory_move_updates_paths_without_extraction_and_corrupt_state_rescans() {
     assert!(indexer.catch_up(&mut source).unwrap().enumerated);
     assert_eq!(source.scans, 2);
 }
+
+#[test]
+fn persistence_events_do_not_feed_the_journal_but_regular_names_are_saved() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut source = FakeSource::new(temp.path());
+    let options = IndexOptions::new(temp.path().join("catalog.db"), temp.path());
+    let mut indexer = Indexer::open(&source, options.clone()).unwrap();
+    indexer.catch_up(&mut source).unwrap();
+    let before = indexer.catalog().checkpoint(indexer.volume()).unwrap();
+    let snapshot_before = fs::read(&options.snapshot).unwrap();
+    for (id, name) in [
+        (100, "catalog.db"),
+        (101, "catalog.db-wal"),
+        (102, "catalog.db.names.retry"),
+    ] {
+        source.push(vec![SourceEvent::Modified(record(id, 1, name, false))]);
+    }
+    let report = indexer.catch_up(&mut source).unwrap();
+    assert_eq!(report.events, 0);
+    assert_eq!(report.extracted, 0);
+    assert_eq!(
+        indexer.catalog().checkpoint(indexer.volume()).unwrap(),
+        before
+    );
+    assert_eq!(fs::read(&options.snapshot).unwrap(), snapshot_before);
+    source.push(vec![SourceEvent::Created(record(
+        103, 1, "user.txt", false,
+    ))]);
+    let report = indexer.catch_up(&mut source).unwrap();
+    assert_eq!(report.events, 1);
+    assert_eq!(report.extracted, 0);
+    assert_ne!(
+        indexer.catalog().checkpoint(indexer.volume()).unwrap(),
+        before
+    );
+    let saved = whereabouts_nameindex::NameIndex::load_snapshot(&options.snapshot).unwrap();
+    assert!(saved.index.lookup(Frn(103)).is_some());
+}

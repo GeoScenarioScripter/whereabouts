@@ -1367,7 +1367,6 @@ dependencies = [
  "anyhow",
  "clap",
  "serde_json",
- "tempfile",
  "tracing-subscriber",
  "whereabouts-catalog",
  "whereabouts-core",

@@ -4,17 +4,33 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use whereabouts_catalog::Catalog;
 use whereabouts_core::ExtractionStatus;
 use whereabouts_ntfs::testvol::TestVolume;
 
 fn index(volume: &str, db: &Path) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
         .args(["index", "--volume", volume, "--db"])
         .arg(db)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .unwrap();
+    let started = Instant::now();
+    while child.try_wait().unwrap().is_none() {
+        if started.elapsed() > Duration::from_secs(60) {
+            child.kill().unwrap();
+            let output = child.wait_with_output().unwrap();
+            panic!(
+                "index did not drain within 60s: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let output = child.wait_with_output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(output.status.success(), "{stderr}");
     eprintln!("[index-vhd] {stderr}");
@@ -24,7 +40,6 @@ fn index(volume: &str, db: &Path) -> String {
 #[test]
 #[ignore = "requires elevation; creates an isolated NTFS VHD and USN journal"]
 fn corpus_full_index_restart_and_prj_edit() {
-    let temp = tempfile::tempdir().unwrap();
     let volume = TestVolume::create(64).unwrap();
     volume.create_journal(8 << 20, 1 << 20).unwrap();
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -36,7 +51,8 @@ fn corpus_full_index_restart_and_prj_edit() {
             fs::copy(entry.path(), volume.path(dir).join(entry.file_name())).unwrap();
         }
     }
-    let db = temp.path().join("catalog.db");
+    // Persistence on the indexed volume must not make the journal drain loop feed itself.
+    let db = volume.path("catalog.db");
     assert!(index(&volume.volume(), &db).contains("Full index"));
     let catalog = Catalog::open_read_only(&db).unwrap();
     let vol = catalog.volumes().unwrap()[0].id;

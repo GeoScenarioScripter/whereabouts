@@ -128,12 +128,29 @@ pub struct Indexer {
     checkpoint: Option<Checkpoint>,
     retry: BTreeMap<DatasetId, Instant>,
     pool: rayon::ThreadPool,
+    internal_paths: Vec<PathBuf>,
 }
 
 impl Indexer {
     /// Opens persistence, restoring matching state or preparing a full scan on `catch_up`.
-    pub fn open(source: &dyn Source, options: IndexOptions) -> Result<Self, IndexError> {
+    pub fn open(source: &dyn Source, mut options: IndexOptions) -> Result<Self, IndexError> {
+        options.root_path = std::path::absolute(&options.root_path)?;
         let mut catalog = Catalog::open(&options.database)?;
+        let database = std::path::absolute(&options.database)?;
+        let snapshot = std::path::absolute(&options.snapshot)?;
+        let internal_paths = vec![
+            database.clone(),
+            suffixed(&database, "-wal"),
+            suffixed(&database, "-shm"),
+            suffixed(&database, "-journal"),
+            snapshot.clone(),
+            suffixed(&snapshot, ".tmp"),
+            suffixed(&snapshot, ".retry"),
+            suffixed(&snapshot, ".retry.tmp"),
+        ]
+        .into_iter()
+        .map(|p| canonical_location(&p))
+        .collect::<io::Result<Vec<_>>>()?;
         let identity = source.identity();
         let volume = catalog.write(|tx| tx.register_volume(&identity))?;
         let root = source.root();
@@ -166,13 +183,12 @@ impl Indexer {
             retry.extend(ids.into_iter().map(|id| (id, Instant::now())));
         }
         let tree = tree_from_names(&names);
-        let mut grouper = Grouper::new(volume);
-        grouper.full_scan(&tree, root);
+        let grouper = Grouper::new(volume);
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(options.workers.clamp(1, 64))
             .thread_name(|n| format!("whereabouts-extract-{n}"))
             .build()?;
-        Ok(Self {
+        let mut indexer = Self {
             options,
             catalog,
             volume,
@@ -184,7 +200,11 @@ impl Indexer {
             checkpoint,
             retry,
             pool,
-        })
+            internal_paths,
+        };
+        indexer.exclude_internal();
+        indexer.grouper.full_scan(&indexer.tree, root);
+        Ok(indexer)
     }
 
     /// Catalog-assigned source identifier.
@@ -225,7 +245,6 @@ impl Indexer {
                 }
                 Changes::Batch(batch) => {
                     let empty = batch.events.is_empty();
-                    progress.events += batch.events.len();
                     for event in &batch.events {
                         if let Err(error) = self.names.apply(event) {
                             if matches!(error, whereabouts_nameindex::IndexError::CapacityExceeded)
@@ -236,6 +255,14 @@ impl Indexer {
                                 return Err(error.into());
                             }
                         }
+                    }
+                    let events: Vec<_> = batch
+                        .events
+                        .into_iter()
+                        .filter(|event| !self.is_internal(event.record()))
+                        .collect();
+                    progress.events += events.len();
+                    for event in &events {
                         let record = event.record();
                         if record.is_dir() || is_relevant_name(record.name.as_wtf8()) {
                             self.tree.apply(event);
@@ -244,7 +271,17 @@ impl Indexer {
                             self.tree.remove(record.frn);
                         }
                     }
-                    let delta = self.grouper.apply_batch(&self.tree, &batch.events);
+                    // Our own persistence must not generate another persistence operation.
+                    // Keep this cursor in memory; a restart safely replays from the last saved
+                    // cursor. The next ordinary change/retry persists the accumulated cursor.
+                    if !empty
+                        && events.is_empty()
+                        && self.retry.values().all(|due| *due > Instant::now())
+                    {
+                        self.checkpoint = Some(batch.checkpoint);
+                        continue;
+                    }
+                    let delta = self.grouper.apply_batch(&self.tree, &events);
                     if self.names.needs_compaction() {
                         self.names.compact();
                     }
@@ -286,6 +323,7 @@ impl Indexer {
         names.compact();
         self.names = names;
         self.tree = tree;
+        self.exclude_internal();
         self.grouper = Grouper::new(self.volume);
         let mut delta = self.grouper.full_scan(&self.tree, self.root);
         let current: BTreeSet<_> = self.grouper.datasets().map(Dataset::id).collect();
@@ -298,6 +336,31 @@ impl Indexer {
         self.retry.retain(|id, _| current.contains(id));
         progress.enumerated = true;
         self.apply_delta(delta, checkpoint, progress)
+    }
+
+    fn exclude_internal(&mut self) {
+        let excluded: Vec<_> = self
+            .names
+            .entries()
+            .filter_map(|id| {
+                let name = self.names.name(id)?;
+                if !self.internal_name(name) {
+                    return None;
+                }
+                let frn = self.names.frn(id)?;
+                let parent = self.names.parent(id).and_then(|p| self.names.frn(p))?;
+                let record = FileRecord {
+                    frn,
+                    parent,
+                    name: FileName::from_wtf8(name).ok()?,
+                    attrs: self.names.attrs(id)?,
+                };
+                self.is_internal(&record).then_some(frn)
+            })
+            .collect();
+        for frn in excluded {
+            self.tree.remove(frn);
+        }
     }
 
     fn apply_delta(
@@ -459,26 +522,7 @@ impl Indexer {
     }
 
     fn resolve(&self, dataset: &Dataset) -> Result<ResolvedDataset, String> {
-        let path = |frn| {
-            let id = self
-                .names
-                .lookup(frn)
-                .ok_or_else(|| format!("unknown FRN {frn:?}"))?;
-            let bytes = self.names.path(id).map_err(|e| e.to_string())?;
-            let mut path = self.options.root_path.clone();
-            for component in bytes.split(|b| *b == b'\\').filter(|c| !c.is_empty()) {
-                let name = FileName::from_wtf8(component).map_err(|e| e.to_string())?;
-                // Encode lossless UTF-16 through OsString on Windows without platform APIs.
-                #[cfg(windows)]
-                path.push(name.to_os_string());
-                #[cfg(not(windows))]
-                path.push(
-                    name.as_str()
-                        .ok_or_else(|| "non-Unicode NTFS path on this platform".to_owned())?,
-                );
-            }
-            Ok::<_, String>(path)
-        };
+        let path = |frn| indexed_path(&self.names, &self.options.root_path, frn);
         Ok(ResolvedDataset {
             format: dataset.format(),
             anchor: path(dataset.anchor())?,
@@ -494,6 +538,29 @@ impl Indexer {
                 })
                 .collect::<Result<_, String>>()?,
         })
+    }
+
+    fn internal_name(&self, name: &[u8]) -> bool {
+        self.internal_paths
+            .iter()
+            .filter_map(|p| p.file_name())
+            .any(|n| {
+                n.to_str()
+                    .is_none_or(|n| n.as_bytes().eq_ignore_ascii_case(name))
+            })
+    }
+
+    fn is_internal(&self, record: &FileRecord) -> bool {
+        if !self.internal_name(record.name.as_wtf8()) {
+            return false;
+        }
+        let Ok(mut path) = indexed_path(&self.names, &self.options.root_path, record.parent) else {
+            return false;
+        };
+        if append_name(&mut path, &record.name).is_err() {
+            return false;
+        }
+        canonical_location(&path).is_ok_and(|path| self.internal_paths.contains(&path))
     }
 
     fn save_retry(&self, checkpoint: &Checkpoint) -> Result<(), IndexError> {
@@ -545,6 +612,45 @@ fn extract_job(job: Job, limits: ReadLimits) -> (DatasetRecord, bool) {
 }
 
 const MAX_RETRY_BYTES: u64 = 64 << 20;
+
+fn canonical_location(path: &Path) -> io::Result<PathBuf> {
+    // For a just-deleted temporary file, resolve its parent rather than requiring the file
+    // itself to exist. Canonical paths also handle drive casing, aliases and case-sensitive dirs.
+    fs::canonicalize(path).or_else(|_| {
+        let path = std::path::absolute(path)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| io::Error::other("state path has no parent"))?;
+        let name = path
+            .file_name()
+            .ok_or_else(|| io::Error::other("state path has no name"))?;
+        Ok(fs::canonicalize(parent)?.join(name))
+    })
+}
+
+fn indexed_path(names: &NameIndex, root: &Path, frn: Frn) -> Result<PathBuf, String> {
+    let id = names
+        .lookup(frn)
+        .ok_or_else(|| format!("unknown FRN {frn:?}"))?;
+    let bytes = names.path(id).map_err(|e| e.to_string())?;
+    let mut path = root.to_owned();
+    for component in bytes.split(|b| *b == b'\\').filter(|c| !c.is_empty()) {
+        let name = FileName::from_wtf8(component).map_err(|e| e.to_string())?;
+        append_name(&mut path, &name)?;
+    }
+    Ok(path)
+}
+
+fn append_name(path: &mut PathBuf, name: &FileName) -> Result<(), String> {
+    #[cfg(windows)]
+    path.push(name.to_os_string());
+    #[cfg(not(windows))]
+    path.push(
+        name.as_str()
+            .ok_or_else(|| "non-Unicode NTFS path on this platform".to_owned())?,
+    );
+    Ok(())
+}
 
 fn read_retry(path: &Path) -> io::Result<RetryState> {
     let mut bytes = Vec::new();
