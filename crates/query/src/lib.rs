@@ -187,9 +187,43 @@ impl QueryEngine {
 
 fn member_rank(names: &NameIndex, entry: EntryId, needle: &str) -> Option<u8> {
     names.path(entry).ok()?;
-    let name = String::from_utf8_lossy(names.name(entry)?);
-    let folded = fold_str(&name);
-    folded.contains(needle).then(|| relevance(&folded, needle))
+    let folded = fold_name(names.name(entry)?);
+    let needle = needle.as_bytes();
+    if needle.is_empty() || folded.windows(needle.len()).any(|part| part == needle) {
+        Some(if folded == needle {
+            0
+        } else if folded.starts_with(needle) {
+            1
+        } else {
+            2
+        })
+    } else {
+        None
+    }
+}
+
+// Preserve unpaired WTF-8 surrogates: lossy conversion would invent U+FFFD hits
+// on the broad planner path that the name index correctly does not match.
+fn fold_name(mut name: &[u8]) -> Vec<u8> {
+    let mut folded = Vec::with_capacity(name.len());
+    while !name.is_empty() {
+        match std::str::from_utf8(name) {
+            Ok(text) => {
+                folded.extend_from_slice(fold_str(text).as_bytes());
+                break;
+            }
+            Err(error) => {
+                let (valid, rest) = name.split_at(error.valid_up_to());
+                if let Ok(text) = std::str::from_utf8(valid) {
+                    folded.extend_from_slice(fold_str(text).as_bytes());
+                }
+                let (invalid, rest) = rest.split_at(error.error_len().unwrap_or(rest.len()));
+                folded.extend_from_slice(invalid);
+                name = rest;
+            }
+        }
+    }
+    folded
 }
 
 fn relevance(name: &str, needle: &str) -> u8 {
@@ -199,5 +233,23 @@ fn relevance(name: &str, needle: &str) -> u8 {
         1
     } else {
         2
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folding_keeps_surrogates_distinct_from_replacement_characters() {
+        assert_eq!(fold_name(b"RO\xed\xa0\x80AD"), b"ro\xed\xa0\x80ad");
+        assert_ne!(
+            fold_name(b"RO\xed\xa0\x80AD"),
+            fold_name("RO�AD".as_bytes())
+        );
+        assert_eq!(
+            fold_name("ΣTRASSE".as_bytes()),
+            fold_name("ςtrasse".as_bytes())
+        );
     }
 }
