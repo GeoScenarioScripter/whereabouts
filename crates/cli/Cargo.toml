@@ -13,6 +13,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tracing-subscriber.workspace = true
 whereabouts-core.workspace = true
 whereabouts-source.workspace = true
 whereabouts-ntfs.workspace = true
@@ -23,6 +26,10 @@ whereabouts-readers.workspace = true
 whereabouts-crs.workspace = true
 whereabouts-catalog.workspace = true
 whereabouts-query.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }
 
 [[bin]]
 name = "whereabouts"   # final CLI name is still TBD (D-02); keep in sync with docs if renamed
