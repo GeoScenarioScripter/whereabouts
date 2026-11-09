@@ -36,3 +36,9 @@ wgs84_extent = 0.0
 geometry_type = 1.0
 feature_count = 1.0
 native_extent = 1.0
+
+[format.geopackage.min_rate]
+# stage01/3.1: every committed non-corrupt layer agrees, including missing/stale bounds.
+geometry_type = 1.0
+feature_count = 1.0
+native_extent = 1.0
