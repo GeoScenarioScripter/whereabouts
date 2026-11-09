@@ -16,63 +16,68 @@ const MAX_ENTRIES: usize = 100_000;
 
 pub fn inspect(path: &Path) -> anyhow::Result<Vec<DatasetRecord>> {
     let requested = fs::canonicalize(path).context("cannot resolve inspect path")?;
-    // A file anywhere inside a GDB belongs to that folder dataset.
-    let target = requested
-        .ancestors()
-        .find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("gdb")) && p.is_dir())
-        .unwrap_or(&requested);
-    let parent = target
-        .parent()
-        .context("inspect requires a dataset path, not a volume root")?;
-    let mut tree = MemoryTree::new();
-    let mut paths = HashMap::new();
+    // Group the containing directory exactly as the indexer does. Seed its own
+    // entry too: folder datasets are anchored there (GDB, Esri Grid signatures).
+    let is_dir = requested.is_dir();
+    let directory = if is_dir {
+        requested.as_path()
+    } else {
+        requested
+            .parent()
+            .context("inspect path has no containing directory")?
+    };
     let root = Frn(1);
-    let mut pending = vec![(parent.to_path_buf(), root)];
-    let mut next = 2_u64;
-    let mut visited = 0;
-    let mut selected = None;
-    while let Some((dir, parent_id)) = pending.pop() {
-        for entry in fs::read_dir(&dir).with_context(|| format!("cannot list {}", dir.display()))? {
-            let entry = entry?;
-            ensure!(
-                visited < MAX_ENTRIES,
-                "inspect directory exceeds {MAX_ENTRIES} entries"
-            );
-            visited += 1; // Skipped symlink entries consume the discovery budget too.
-            let ty = entry.file_type()?;
-            // Never recurse through symlinks/junctions. Readers receive only ordinary entries.
-            if ty.is_symlink() {
-                continue;
-            }
-            let frn = Frn(next);
-            next += 1;
-            let entry_path = entry.path();
-            if entry_path == target {
-                selected = Some(frn);
-            }
-            let name = FileName::from_wtf8(entry.file_name().as_encoded_bytes())
-                .context("filename is not representable as WTF-8")?;
-            tree.upsert(&FileRecord {
-                frn,
-                parent: parent_id,
-                name,
-                attrs: FileAttributes(if ty.is_dir() {
-                    FileAttributes::DIRECTORY
-                } else {
-                    0
-                }),
-            });
-            // Only the selected folder (and its ordinary descendants) needs discovery.
-            if ty.is_dir() && (entry_path == target || dir.starts_with(target)) {
-                pending.push((entry_path.clone(), frn));
-            }
-            paths.insert(frn, entry_path);
+    let folder = Frn(2);
+    let mut tree = MemoryTree::new();
+    tree.upsert(&FileRecord {
+        frn: folder,
+        parent: root,
+        name: FileName::from_wtf8(directory.file_name().unwrap_or_default().as_encoded_bytes())?,
+        attrs: FileAttributes(FileAttributes::DIRECTORY),
+    });
+    let mut paths = HashMap::from([(folder, directory.to_path_buf())]);
+    let mut selected = is_dir.then_some(folder);
+    for (i, entry) in fs::read_dir(directory)
+        .with_context(|| format!("cannot list {}", directory.display()))?
+        .enumerate()
+    {
+        ensure!(
+            i < MAX_ENTRIES,
+            "inspect directory exceeds {MAX_ENTRIES} entries"
+        );
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        // Skipped symlinks still consume the discovery budget. No recursive walk.
+        if ty.is_symlink() {
+            continue;
         }
+        let frn = Frn(i as u64 + 3);
+        let entry_path = entry.path();
+        if entry_path == requested {
+            selected = Some(frn);
+        }
+        tree.upsert(&FileRecord {
+            frn,
+            parent: folder,
+            name: FileName::from_wtf8(entry.file_name().as_encoded_bytes())
+                .context("filename is not representable as WTF-8")?,
+            attrs: FileAttributes(if ty.is_dir() {
+                FileAttributes::DIRECTORY
+            } else {
+                0
+            }),
+        });
+        paths.insert(frn, entry_path);
     }
     let selected = selected.context("inspect target is not an ordinary file or folder")?;
     let mut grouper = Grouper::new(VolumeId(0));
     grouper.full_scan(&tree, root);
-    let mut ids: Vec<_> = grouper.datasets_containing(selected).collect();
+    // A recognized folder owns even an ignored internal filename. A directory
+    // merely named *.gdb without a signature keeps normal per-file grouping.
+    let mut ids: Vec<_> = grouper.datasets_containing(folder).collect();
+    if ids.is_empty() {
+        ids.extend(grouper.datasets_containing(selected));
+    }
     ids.sort();
     ensure!(
         !ids.is_empty(),

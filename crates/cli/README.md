@@ -27,8 +27,8 @@ match the same layer; west greater than east crosses the antimeridian.
 
 Inspect groups a path with its siblings and extracts through the same native
 reader/CRS pipeline as indexing. A member path can resolve to multiple datasets
-(for example a shared `.prj`). Paths inside a `.gdb` resolve to that folder dataset.
-Directory discovery is capped at 100,000 entries and does not traverse symlinks;
+(for example a shared `.prj`). Paths directly inside a recognized `.gdb` resolve to that folder dataset.
+Directory discovery is capped at 100,000 entries and does not recurse or traverse symlinks;
 readers retain their normal byte/time budgets. No index, catalog, or transaction
 sidecars are created. Inspect JSON IDs are temporary grouping IDs (volume 0),
 not catalog identities. A malformed dataset is reported with an `error` status;

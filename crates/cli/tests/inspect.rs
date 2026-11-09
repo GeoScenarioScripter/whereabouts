@@ -112,3 +112,29 @@ fn file_geodatabase_internal_path_stays_one_folder_dataset() {
     );
     assert_eq!(rows[0].status, ExtractionStatus::Unsupported);
 }
+
+#[test]
+fn unsigned_gdb_named_folder_keeps_normal_file_grouping() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("ordinary.gdb");
+    fs::create_dir(&folder).unwrap();
+    let path = folder.join("broken.shp");
+    fs::write(&path, b"bad shapefile").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
+        .arg("inspect")
+        .arg(path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rows: Vec<DatasetRecord> = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].dataset.format(),
+        whereabouts_core::Format::Shapefile
+    );
+}
