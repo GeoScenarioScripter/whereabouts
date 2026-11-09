@@ -73,6 +73,48 @@ fn bytes_mtime_and_directory_listing_unchanged_in_delete_and_wal_modes() {
 }
 
 #[test]
+fn committed_persist_journal_is_readable_and_active_journal_is_deferred() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("persist.gpkg");
+    let c = fixture(&path);
+    c.execute_batch("PRAGMA journal_mode=PERSIST; UPDATE gpkg_ogr_contents SET feature_count=3;")
+        .unwrap();
+    drop(c);
+    let journal = dir.path().join("persist.gpkg-journal");
+    let bytes = fs::read(&journal).unwrap();
+    assert!(bytes.len() > 28);
+    assert_eq!(&bytes[..28], &[0; 28]);
+    let database = fs::read(&path).unwrap();
+    let names = listing(dir.path());
+    let md = read(&dataset(&path), &ReadLimits::default()).unwrap();
+    assert!(md.partial.is_empty(), "{:?}", md.partial);
+    assert_eq!(md.layers[0].feature_count, Some(3));
+    assert_eq!(fs::read(&journal).unwrap(), bytes);
+    assert_eq!(fs::read(&path).unwrap(), database);
+    assert_eq!(listing(dir.path()), names);
+    for max_bytes in [0, 27, 28, 55, 100, 65536] {
+        let limits = ReadLimits {
+            max_bytes,
+            ..ReadLimits::default()
+        };
+        let (_, io) = measure(|| read(&dataset(&path), &limits));
+        assert!(io.bytes_read <= max_bytes, "{io:?}");
+    }
+
+    let c = Connection::open(&path).unwrap();
+    c.execute_batch(
+        "PRAGMA journal_mode=PERSIST; BEGIN; UPDATE gpkg_ogr_contents SET feature_count=4;",
+    )
+    .unwrap();
+    let active = fs::read(&journal).unwrap();
+    let err = read(&dataset(&path), &ReadLimits::default()).unwrap_err();
+    assert!(matches!(err, whereabouts_core::ReadError::Io { source, .. }
+        if source.kind() == std::io::ErrorKind::WouldBlock));
+    assert_eq!(fs::read(&journal).unwrap(), active);
+    c.execute_batch("ROLLBACK").unwrap();
+}
+
+#[test]
 fn active_wal_is_deferred_without_touching_files() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.gpkg");

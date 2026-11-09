@@ -36,7 +36,7 @@ impl FormatReader for GeoPackageReader {
     ) -> Result<DatasetMetadata, ReadError> {
         let budget = Budget::new(limits.max_bytes);
         let file = SourceFile::open(&dataset.anchor, &budget)?;
-        if let Some(reason) = pending_transaction(&dataset.anchor)? {
+        if let Some(reason) = pending_transaction(&dataset.anchor, &budget)? {
             return Err(retry(&dataset.anchor, reason));
         }
         let mut db = Database::open(file, limits.time_budget)?;
@@ -68,7 +68,7 @@ impl FormatReader for GeoPackageReader {
             md.layers.push(layer);
         }
         md.layers.sort_by(|a, b| a.name.cmp(&b.name));
-        if !db.unchanged()? || pending_transaction(&dataset.anchor)?.is_some() {
+        if !db.unchanged()? || pending_transaction(&dataset.anchor, &budget)?.is_some() {
             return Err(retry(
                 &dataset.anchor,
                 "SQLite changed during read; retry extraction",
@@ -85,12 +85,21 @@ fn retry(path: &Path, reason: impl Into<String>) -> ReadError {
     }
 }
 
-fn pending_transaction(path: &Path) -> Result<Option<String>, ReadError> {
+fn pending_transaction(path: &Path, budget: &Budget) -> Result<Option<String>, ReadError> {
     for suffix in ["-wal", "-journal"] {
         let mut name = path.as_os_str().to_owned();
         name.push(suffix);
         match std::fs::metadata(Path::new(&name)) {
             Ok(m) if m.len() > 0 => {
+                // PERSIST commits leave the journal in place with its 28-byte header zeroed.
+                // A zeroed magic alone is insufficient: an uncommitted journal can have that,
+                // while the remaining header fields are nonzero. See SQLite lockingv3.html.
+                if suffix == "-journal" && m.len() >= 28 {
+                    let mut journal = SourceFile::open(Path::new(&name), budget)?;
+                    if journal.read_at(0, 28)?.iter().all(|byte| *byte == 0) {
+                        continue;
+                    }
+                }
                 return Ok(Some(format!(
                     "active SQLite {suffix}; defer until checkpointed"
                 )));
