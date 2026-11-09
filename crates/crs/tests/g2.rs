@@ -695,7 +695,9 @@ const KNOWN_FIXTURE_WRONG_CODES: &[&str] = &[
 /// 46 layers give 40 identification cases) and 2 layers have no native or WGS84 golden extent
 /// (so 40 identification cases give 38 transform cases).
 const KNOWN_CORPUS_SKIPS: &[(&str, usize)] = &[
-    ("corpus layer without a CRS (status missing)", 6),
+    ("corpus layer with no raw CRS text and no GDAL EPSG code", 1),
+    // 4.3 adds the non-spatial lone DBF and upstream SBN point fixture without a PRJ.
+    ("corpus layer without a CRS (status missing)", 8),
     (
         "corpus layer without native extent or golden WGS84 extent",
         2,

@@ -3,6 +3,8 @@
 Status: local synthetic/component evidence; **V4 acceptance is not met**. No new owner-volume
 cold/warm enumeration or Everything comparison has been run in this session. Q-16 and Q-18
 remain Open pending those measurements and an owner decision. Q-14 is already Agreed in D-34.
+The orchestrator explicitly transferred owner V4 collection to session 5.1, preserving the
+stage-exit requirement. See the [exact preparation and run commands](stage01-v4-handoff.md).
 
 ## Reproduce
 
@@ -11,13 +13,13 @@ Do not compare debug CI times with release workstation times. The script writes 
 directory, leaves indexed datasets untouched and does not create/delete a journal or a VHD.
 
 ```powershell
-cargo build --release -p whereabouts-ntfs --example enum_volume
+pwsh -File scripts/bench/bench-vs-everything.ps1 -PrepareOnly -Output target/v4-preparation
 # Separate boots are necessary: run USN first after one reboot, raw MFT first after another.
-pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Enumeration usn -CacheState first-after-reboot -Output evidence-usn
+pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Enumeration usn -CacheState first-after-reboot -EnumerationOnly -SkipBuild -Output evidence-usn
 # Reboot before this separate run; the script never reboots the machine itself.
-pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Enumeration mft -CacheState first-after-reboot -Output evidence-mft
+pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Enumeration mft -CacheState first-after-reboot -EnumerationOnly -SkipBuild -Output evidence-mft
 # After session 4.1 has merged; use the existing owner catalog/snapshot and an idle Everything index.
-pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Database D:/bench/catalog.sqlite -Everything C:/Tools/es.exe -Output evidence-query
+pwsh -File scripts/bench/bench-vs-everything.ps1 -Volume D: -Database D:/bench/catalog.sqlite -Everything C:/Tools/es.exe -SkipBuild -SkipComponents -Output evidence-query
 ```
 
 Enumeration requires an elevated terminal and is strictly read-only. Each run retains the
@@ -67,12 +69,12 @@ Sources: session notes [1.3](../stages/stage01/sessions/1.3-ntfs-enumeration.md)
 
 ## Oracle agreement
 
-59 committed datasets, one optional unfetched external case. GDAL 3.13.3 / PROJ 9.8.1, unchanged
+62 committed datasets, one optional unfetched external case. GDAL 3.13.3 / PROJ 9.8.1, unchanged
 D-33 tolerances (native 1e-6 absolute or 1e-9 relative; WGS84 0.01 degrees with span check).
 
 | Format | status | layer sets | geometry | counts | native bbox | raster | EPSG | WGS84 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Shapefile | 28/28 | 24/24 | 24/24 | 24/24 | 24/24 | n/a | 24/24 | 24/24 |
+| Shapefile | 31/31 | 27/27 | 26/26 | 27/27 | 26/26 | n/a | 26/26 | 26/26 |
 | GeoPackage | 14/14 | 12/12 | 11/11 | 13/13 | 14/14 | not extracted | 14/14 | 14/14 |
 | GeoTIFF | 17/17 | 15/15 | n/a | n/a | 15/15 | 15/15 | 15/15 | 15/15 |
 
@@ -105,6 +107,12 @@ reproducible diagnostic measurements, not uncontended performance acceptance or 
 Raw outputs: [names](stage01-local-nameindex.txt), [pipeline](stage01-local-pipeline.txt),
 [catalog](stage01-local-catalog.txt). A sandboxed snapshot rename was denied; the recorded
 pipeline run is the successful rerun outside the sandbox using a fresh temporary directory.
+
+Historical quantile estimators are retained honestly: this stored pipeline run used sorted
+index `ceil((N-1)*p)`; stored nameindex and catalog rows used `round((N-1)*p)`. Raw individual
+samples were not retained for recalculation. New pipeline and comparison-script runs use
+nearest rank `max(0, ceil(N*p)-1)`, with 20- and 50-sample boundary tests. These historical
+rows must not be described as nearest-rank results.
 
 | Component | Observed |
 |---|---:|

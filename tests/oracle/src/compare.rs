@@ -295,18 +295,19 @@ fn raster_verdict(e: &RasterRecord, a: &NativeRaster, tol: &Tolerances) -> Verdi
     {
         problems.push(format!("nodata expected {:?}, got {nodata:?}", e.nodata));
     }
-    if let Some(res) = a.resolution {
-        let ok = e.resolution.is_some_and(|r| {
-            r.iter()
-                .zip(res)
-                .all(|(x, y)| (x - y).abs() <= tol.resolution_rel * x.abs().max(y.abs()))
-        });
-        if !ok {
-            problems.push(format!(
-                "resolution expected {:?}, got {res:?}",
-                e.resolution
-            ));
-        }
+    let resolution_agrees = match (e.resolution, a.resolution) {
+        (None, None) => true,
+        (Some(r), Some(res)) => r
+            .iter()
+            .zip(res)
+            .all(|(x, y)| (x - y).abs() <= tol.resolution_rel * x.abs().max(y.abs())),
+        _ => false,
+    };
+    if !resolution_agrees {
+        problems.push(format!(
+            "resolution expected {:?}, got {:?}",
+            e.resolution, a.resolution
+        ));
     }
     agree_if(problems.is_empty(), || problems.join("; "))
 }
@@ -622,6 +623,11 @@ mod tests {
                 .all(|c| c.check != Check::GeometryType && c.check != Check::FeatureCount)
         );
         assert!(r.iter().all(|c| c.verdict.agrees()), "{r:?}");
+
+        n.layers[0].raster.as_mut().expect("raster").resolution = None;
+        let r = compare(&case(&[]), &o, &n, &[Check::Raster], &Tolerances::default());
+        assert_eq!(verdicts(&r), vec![(Check::Raster, false)]);
+        n.layers[0].raster.as_mut().expect("raster").resolution = Some([30.0, 30.0]);
 
         if let Some(raster) = n.layers[0].raster.as_mut() {
             raster.height = 47;

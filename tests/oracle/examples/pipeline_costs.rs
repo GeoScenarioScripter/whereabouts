@@ -13,7 +13,7 @@ fn ms(d: Duration) -> f64 {
 }
 fn percentiles(mut samples: Vec<Duration>) -> [f64; 3] {
     samples.sort_unstable();
-    [0.5, 0.95, 0.99].map(|p| ms(samples[((samples.len() - 1) as f64 * p).ceil() as usize]))
+    [0.5, 0.95, 0.99].map(|p| ms(samples[(samples.len() as f64 * p).ceil() as usize - 1]))
 }
 
 fn memory(stage: &str) {
@@ -150,4 +150,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn nearest_rank_small_sample_boundaries() {
+        assert_eq!(
+            percentiles((1..=20).map(Duration::from_millis).collect()),
+            [10., 19., 20.]
+        );
+        assert_eq!(
+            percentiles((1..=50).map(Duration::from_millis).collect()),
+            [25., 48., 50.]
+        );
+    }
 }

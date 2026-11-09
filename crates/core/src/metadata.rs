@@ -47,7 +47,7 @@ code_enum! {
         Curve => "Curve",
         /// Surface (abstract).
         Surface => "Surface",
-        /// PolyhedralSurface (e.g. shapefile MultiPatch).
+        /// PolyhedralSurface. A shapefile MultiPatch layer declares unknown geometry instead.
         PolyhedralSurface => "PolyhedralSurface",
         /// TIN.
         Tin => "TIN",
@@ -80,9 +80,9 @@ impl GeometryKind {
 pub struct GeometryType {
     /// Base type.
     pub kind: GeometryKind,
-    /// Has a Z coordinate.
+    /// The declared layer type includes Z; false does not establish dimensions of unknown geometry.
     pub has_z: bool,
-    /// Has an M (measure) coordinate.
+    /// The declared layer type includes M (measure); unknown geometry is not inspected.
     pub has_m: bool,
 }
 

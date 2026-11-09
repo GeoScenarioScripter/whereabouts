@@ -1,4 +1,15 @@
 # Wave 4 additions: portable static cases. Live WAL and filesystem permissions remain runtime tests.
+@builder("shp_lone_dbf")
+def _(d):
+    shp(d, "owners", None, ogr.wkbNone,
+        [(None, {"id": 1, "name": "owner"}), (None, {"id": 2, "name": "tenant"})])
+
+@builder("shp_multipatch")
+def _(d):
+    shp(d, "surface", srs_epsg(4326), ogr.wkbUnknown,
+        named(["MULTIPOLYGON Z (((1 2 3, 3 2 3, 3 4 4, 1 2 3)))"]),
+        extra_opts=["SHPT=MULTIPATCH"])
+
 @builder("shp_undeclared_qix")
 def _(d):
     shp(d, "points", srs_epsg(4326), ogr.wkbPoint, named(["POINT (1 2)", "POINT (3 4)"]))

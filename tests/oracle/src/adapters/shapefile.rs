@@ -21,7 +21,12 @@ pub(crate) const CHECKS: &[Check] = &[
 
 /// Reads one shapefile case.
 pub(crate) fn read(case: &ResolvedCase<'_>) -> Option<NativeRecord> {
-    let dataset = native::resolve(case, Format::Shapefile, role);
+    let format = if case.case.anchor.to_ascii_lowercase().ends_with(".dbf") {
+        Format::Dbf
+    } else {
+        Format::Shapefile
+    };
+    let dataset = native::resolve(case, format, role);
     Some(native::read(&dataset))
 }
 

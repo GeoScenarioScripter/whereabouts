@@ -85,3 +85,44 @@ fn cp437_field_name_disagreement_is_explicit_partial_per_d42() {
         "{reason}"
     );
 }
+
+#[test]
+fn shapefile_indexes_are_members_and_lone_dbf_is_nonspatial() {
+    use whereabouts_core::{
+        FileAttributes, FileName, FileRecord, Format, Frn, MemberRole, VolumeId,
+    };
+    use whereabouts_datasets::{Grouper, MemoryTree};
+    let corpus = Corpus::load(corpus_dir()).expect("corpus");
+    for id in ["shp_gdal_sbn", "shp_lone_dbf"] {
+        let case = corpus.case(id).expect("case");
+        let root = Frn(5);
+        let mut tree = MemoryTree::new();
+        tree.upsert(&FileRecord {
+            frn: root,
+            parent: root,
+            name: FileName::from(""),
+            attrs: FileAttributes(FileAttributes::DIRECTORY),
+        });
+        for (i, name) in case.files.iter().enumerate() {
+            tree.upsert(&FileRecord {
+                frn: Frn(i as u64 + 100),
+                parent: root,
+                name: FileName::from(name.as_str()),
+                attrs: FileAttributes::default(),
+            });
+        }
+        let mut grouper = Grouper::new(VolumeId(1));
+        grouper.full_scan(&tree, root);
+        let datasets: Vec<_> = grouper.datasets().collect();
+        assert_eq!(datasets.len(), 1, "{id}");
+        assert_eq!(datasets[0].members().len(), case.files.len(), "{id}");
+        if id == "shp_lone_dbf" {
+            assert_eq!(datasets[0].format(), Format::Dbf);
+        } else {
+            assert_eq!(datasets[0].format(), Format::Shapefile);
+            for role in [MemberRole::Sbn, MemberRole::Sbx] {
+                assert!(datasets[0].members().iter().any(|m| m.role == role));
+            }
+        }
+    }
+}

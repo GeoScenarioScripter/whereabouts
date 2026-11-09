@@ -78,7 +78,14 @@ fn layer(record: &LayerRecord) -> NativeLayer {
     let l = &record.metadata;
     NativeLayer {
         name: l.name.clone(),
-        geometry_type: l.geometry_type.map(|g| g.kind.code().to_owned()),
+        // Core calls unconstrained/mixed geometry `Geometry`; GDAL calls it `Unknown`.
+        geometry_type: l.geometry_type.map(|g| {
+            if g.kind == whereabouts_core::GeometryKind::Geometry {
+                "Unknown".to_owned()
+            } else {
+                g.kind.code().to_owned()
+            }
+        }),
         has_z: l.geometry_type.is_some_and(|g| g.has_z),
         has_m: l.geometry_type.is_some_and(|g| g.has_m),
         feature_count: l.feature_count,
@@ -107,6 +114,25 @@ fn layer(record: &LayerRecord) -> NativeLayer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unconstrained_geometry_alias_does_not_erase_specific_types() {
+        use whereabouts_core::{GeometryKind, GeometryType, LayerMetadata};
+        for (kind, expected) in [
+            (GeometryKind::Geometry, "Unknown"),
+            (GeometryKind::Point, "Point"),
+            (GeometryKind::PolyhedralSurface, "PolyhedralSurface"),
+        ] {
+            let record = LayerRecord {
+                metadata: LayerMetadata {
+                    geometry_type: Some(GeometryType::xy(kind)),
+                    ..LayerMetadata::default()
+                },
+                crs: None,
+                wgs84: None,
+            };
+            assert_eq!(layer(&record).geometry_type.as_deref(), Some(expected));
+        }
+    }
     #[test]
     fn wrapping_extent_preserves_crossing_direction() {
         let extent =

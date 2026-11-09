@@ -1,43 +1,21 @@
-# Required corpus-consumer test updates (outside 4.3 write scope)
+# Corpus-consumer test updates — applied at wave 4 review
 
-Do not weaken the new oracle baselines. The following exact test-only updates are requested
-for merge review; 4.3 has not applied them because `crates/readers/**` and `crates/crs/**` are
-outside its assigned write scope. No frozen contract or production code needs changing.
+The orchestrator authorized these scope extensions on 2026-11-09; they are implemented in
+PR #67, with no removed read-budget assertions, rate reductions or case-specific oracle skips.
 
-1. `crates/readers/tests/shapefile_corpus.rs`, inside the existing case-name match, add:
+- `crates/readers/tests/shapefile_corpus.rs` now handles a DBF anchor when no SHP exists, records
+  exact Partial outcomes for SHX/DBF count disagreement and the documented CP437 fallback,
+  asserts MultiPatch declared-layer semantics and lone-DBF non-spatial metadata, and retains
+  the <64 KiB budget for every fixture. SBN/SBX roles are resolved explicitly.
+- `crates/crs/tests/g2.rs` adds the exact expected text-only skip for binary custom GeoKeys and
+  two missing-CRS entries (lone DBF and the upstream SBN point sample without PRJ). The full
+  extraction oracle still exercises GeoKeys; no CRS rate or disagreement assertion is weakened.
+- A separately authorized production fix changes MultiPatch's claimed PolyhedralSurface Z to
+  existing `Geometry(false,false)`, meaning unknown declared layer geometry. Individual patches
+  can contain TINs, collections and polygons. No geometry content is scanned; false Z/M flags
+  describe the unknown declared layer, not the dimensions of the patches. The generic oracle
+  alias `Geometry` -> GDAL `Unknown` applies to all formats and preserves specific types.
 
-```rust
-"shp_corrupt_count_mismatch" => {
-    let md = result.unwrap();
-    assert_eq!(md.partial, [".shx indexes 2 shapes but .dbf has 1 records"]);
-    assert_eq!(md.layers[0].feature_count, Some(2));
-    assert!(md.layers[0].native_bounds.is_some());
-},
-"shp_cp437_names" => {
-    let md = result.unwrap();
-    assert_eq!(md.partial.len(), 1);
-    assert!(md.partial[0].contains("CP437"));
-    assert!(md.partial[0].contains("Windows-1252"));
-    assert_eq!(md.layers[0].fields[1].name, "caf‚");
-},
-```
-
-The current test rejects every unlisted `corrupt` case before checking its actual outcome.
-The new data deliberately has SHX count2 and DBF count1; native extraction correctly reports
-Partial and retains SHX count2. Keep the <64KiB assertion and all existing corrupt expectations.
-The CP437 case verifies D-42/#42's existing unsupported-DOS fallback: GDAL has `café`, native
-has `caf‚` with an explicit Partial diagnostic. The focused oracle test records this known
-disagreement rather than claiming field-name agreement or changing the reader policy.
-
-2. `crates/crs/tests/g2.rs`, prepend this entry to `KNOWN_CORPUS_SKIPS`:
-
-```rust
-("corpus layer with no raw CRS text and no GDAL EPSG code", 1),
-```
-
-The new `tif_custom_lcc_geokeys` stores binary user-defined GeoKeys, so the older text-only
-G2 report has no raw text/direct EPSG to read. The shared extractor oracle **does** parse those
-GeoKeys and checks the WGS84 result successfully. Keep every other skip, disagreement and rate
-assertion unchanged. This is an explicit addition to a pinned inventory, not a CRS regression.
-
-After applying both, rerun the full workspace tests and require fresh Windows/Linux CI.
+Source: [GDAL RFC 64](https://gdal.org/en/stable/development/rfc/rfc64_triangle_polyhedralsurface_tin.html).
+The frozen enums/signatures/storage strings are unchanged. Core edits clarify rustdoc only.
+D-49 is proposed in the session note for the orchestrator to record.

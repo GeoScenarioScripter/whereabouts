@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "case": "shp_gdal_sbn",
+  "format": "shapefile",
+  "oracle": {
+    "gdal": "3.13.3",
+    "proj": "9.8.1"
+  },
+  "status": "ok",
+  "error": null,
+  "messages": [],
+  "layers": [
+    {
+      "name": "gjpoint",
+      "kind": "vector",
+      "geometry_type": "Point",
+      "has_z": false,
+      "has_m": false,
+      "feature_count": 1,
+      "extent": [
+        100.0,
+        0.0,
+        100.0,
+        0.0
+      ],
+      "declared_extent": [
+        100.0,
+        0.0,
+        100.0,
+        0.0
+      ],
+      "raster": null,
+      "fields": [
+        {
+          "name": "FID",
+          "type": "Integer64",
+          "width": 11
+        },
+        {
+          "name": "NAME",
+          "type": "String",
+          "width": 60
+        }
+      ],
+      "encoding": {
+        "source_encoding": null,
+        "cpg": null,
+        "encoding_from_cpg": null,
+        "ldid": null,
+        "encoding_from_ldid": null
+      },
+      "crs": {
+        "status": "missing",
+        "source": "none",
+        "raw_kind": null,
+        "raw": null,
+        "declared_authority": null,
+        "wkt2": null,
+        "epsg": null,
+        "epsg_method": null,
+        "epsg_confidence": null,
+        "candidates": []
+      },
+      "wgs84_extent": null,
+      "crosses_antimeridian": false,
+      "wgs84_error": null
+    }
+  ]
+}

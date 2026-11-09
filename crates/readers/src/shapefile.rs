@@ -289,7 +289,10 @@ fn read_shx_count(path: &Path, budget: &Budget) -> Result<u64, Fault> {
 }
 
 /// Layer geometry type for a shape type code, as GDAL reports it: PolyLine → `LineString`,
-/// Polygon → `Polygon` (not multi), MultiPatch → `PolyhedralSurface Z`. `None` for the Null
+/// Polygon → `Polygon` (not multi), MultiPatch → declared layer `Unknown` (GDAL RFC 64).
+/// MultiPatch features may contain TINs, collections or polygons; header-only extraction cannot
+/// assign a single surface type. Its false Z/M flags describe that unknown declared layer,
+/// not the dimensions of individual patches. `None` for the Null
 /// shape type. Z types carry M only if the header's M range is set (not 0/0 and not ESRI
 /// no-data), since writers that have no measures leave it so.
 pub(crate) fn geometry_type(
@@ -311,7 +314,7 @@ pub(crate) fn geometry_type(
         23 => (K::LineString, false, true),
         25 => (K::Polygon, false, true),
         28 => (K::MultiPoint, false, true),
-        31 => (K::PolyhedralSurface, true, false),
+        31 => (K::Geometry, false, false),
         other => return Err(format!("unknown shape type {other}")),
     };
     let has_m = declared_m || (has_z && header_has_measures(m_range));
@@ -487,7 +490,7 @@ mod tests {
             (23, none, Some((K::LineString, false, true))),
             (25, none, Some((K::Polygon, false, true))),
             (28, none, Some((K::MultiPoint, false, true))),
-            (31, none, Some((K::PolyhedralSurface, true, false))),
+            (31, none, Some((K::Geometry, false, false))),
         ];
         for &(code, m, expected) in cases {
             let expected = expected.map(|(kind, has_z, has_m)| GeometryType { kind, has_z, has_m });
