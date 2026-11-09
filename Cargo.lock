@@ -1413,6 +1413,7 @@ name = "whereabouts-indexer"
 version = "0.1.0"
 dependencies = [
  "rayon",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

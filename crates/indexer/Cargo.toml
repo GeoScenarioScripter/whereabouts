@@ -28,5 +28,6 @@ whereabouts-readers.workspace = true
 whereabouts-source.workspace = true
 
 [dev-dependencies]
+rusqlite.workspace = true
 tempfile.workspace = true
 whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }

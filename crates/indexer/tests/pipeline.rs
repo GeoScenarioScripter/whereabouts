@@ -270,3 +270,65 @@ fn persistence_events_do_not_feed_the_journal_but_regular_names_are_saved() {
     let saved = whereabouts_nameindex::NameIndex::load_snapshot(&options.snapshot).unwrap();
     assert!(saved.index.lookup(Frn(103)).is_some());
 }
+
+#[test]
+fn checkpoint_commit_failure_rolls_back_rows_and_reopen_replays_durable_jobs() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut source = FakeSource::new(temp.path());
+    let options = IndexOptions::new(temp.path().join("catalog.db"), temp.path());
+    let mut indexer = Indexer::open(&source, options.clone()).unwrap();
+    indexer.catch_up(&mut source).unwrap();
+    let before: Vec<_> = ids(&indexer)
+        .iter()
+        .map(|id| indexer.catalog().get_dataset(*id).unwrap().unwrap())
+        .collect();
+    let cp = indexer.catalog().checkpoint(indexer.volume()).unwrap();
+    let snapshot = fs::read(&options.snapshot).unwrap();
+    // Fail at the final checkpoint update, after the dataset upserts in the same transaction.
+    let injection = rusqlite::Connection::open(&options.database).unwrap();
+    injection.execute_batch("CREATE TRIGGER fail_checkpoint BEFORE UPDATE OF checkpoint ON volumes BEGIN SELECT RAISE(ABORT, 'resilience injection'); END;").unwrap();
+    let path = temp.path().join("a/points.prj");
+    let mut text = fs::read_to_string(&path).unwrap();
+    text.push('\n');
+    fs::write(path, text).unwrap();
+    source.push(vec![SourceEvent::Modified(source.named(10, "points.prj"))]);
+    assert!(matches!(
+        indexer.catch_up(&mut source),
+        Err(whereabouts_indexer::IndexError::Catalog(_))
+    ));
+    assert_eq!(indexer.catalog().checkpoint(indexer.volume()).unwrap(), cp);
+    assert_eq!(fs::read(&options.snapshot).unwrap(), snapshot);
+    for old in &before {
+        assert_eq!(
+            indexer
+                .catalog()
+                .get_dataset(old.dataset.id())
+                .unwrap()
+                .unwrap(),
+            *old
+        );
+    }
+    drop(indexer);
+    injection
+        .execute_batch("DROP TRIGGER fail_checkpoint")
+        .unwrap();
+    drop(injection);
+    let mut indexer = Indexer::open(&source, options.clone()).unwrap();
+    assert!(indexer.catch_up(&mut source).unwrap().enumerated);
+    for old in before {
+        assert_eq!(
+            indexer
+                .catalog()
+                .get_dataset(old.dataset.id())
+                .unwrap()
+                .unwrap()
+                .layers,
+            old.layers
+        );
+    }
+    drop(indexer);
+    let mut indexer = Indexer::open(&source, options).unwrap();
+    let report = indexer.catch_up(&mut source).unwrap();
+    assert!(!report.enumerated);
+    assert_eq!(report.extracted, 0);
+}

@@ -565,6 +565,47 @@ fn foreign_or_garbage_checkpoints_require_rescan() {
 }
 
 #[test]
+#[ignore = "needs an elevated shell: creates hard links only on an isolated VHD"]
+fn hard_links_keep_one_enumerated_name_and_last_unlink_deletes() {
+    let mut f = fixture(8 << 20, 1 << 20);
+    std::fs::create_dir(f.vol.path("links")).unwrap();
+    std::fs::write(f.vol.path("links/original.tif"), b"test").unwrap();
+    let (records, cp) = enumerate(&mut f.source);
+    let frn = records
+        .iter()
+        .find(|r| r.name == name("original.tif"))
+        .unwrap()
+        .frn;
+    std::fs::hard_link(
+        f.vol.path("links/original.tif"),
+        f.vol.path("links/alias.tif"),
+    )
+    .unwrap();
+    let added = batch(&mut f.source, &cp);
+    assert!(events_of(&added, frn).is_empty(), "{added:?}");
+    let (records, _) = enumerate(&mut f.source);
+    let names: Vec<_> = records
+        .iter()
+        .filter(|r| r.frn == frn)
+        .map(|r| &r.name)
+        .collect();
+    assert_eq!(names.len(), 1, "M0 enumerates one name per FRN: {names:?}");
+    assert!(names[0] == &name("original.tif") || names[0] == &name("alias.tif"));
+    report(&format!(
+        "hard-linked FRN {frn:?}: one enumerated name {names:?}"
+    ));
+    std::fs::remove_file(f.vol.path("links/alias.tif")).unwrap();
+    let removed = batch(&mut f.source, &added.checkpoint);
+    assert!(events_of(&removed, frn).is_empty(), "{removed:?}");
+    std::fs::remove_file(f.vol.path("links/original.tif")).unwrap();
+    let last = batch(&mut f.source, &removed.checkpoint);
+    assert!(
+        matches!(events_of(&last, frn).as_slice(), [SourceEvent::Deleted(_)]),
+        "{last:?}"
+    );
+}
+
+#[test]
 #[ignore = "needs an elevated shell: creates and mounts a VHD test volume"]
 fn raw_mft_enumeration_matches_usn_and_replays_a_margin() {
     use whereabouts_ntfs::EnumerationMethod;
