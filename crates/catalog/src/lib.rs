@@ -58,7 +58,7 @@ mod schema;
 mod write;
 
 pub use error::{CatalogError, Result};
-pub use read::{CatalogStats, DatasetFilter, VolumeInfo};
+pub use read::{CatalogStats, DatasetFilter, DatasetSummary, VolumeInfo};
 pub use schema::SCHEMA_VERSION;
 
 /// How long a connection waits for a lock held by another connection before failing.
@@ -108,6 +108,16 @@ macro_rules! read_methods {
         /// layers by ordinal.
         pub fn get_dataset(&self, id: DatasetId) -> Result<Option<DatasetRecord>> {
             read::get_dataset(self.conn(), id)
+        }
+
+        /// Lightweight ranking facts for every dataset on a volume, without layer hydration.
+        pub fn dataset_summaries(&self, volume: VolumeId) -> Result<Vec<DatasetSummary>> {
+            read::dataset_summaries(self.conn(), volume, None)
+        }
+
+        /// Lightweight ranking facts for one dataset, without layer hydration.
+        pub fn dataset_summary(&self, id: DatasetId) -> Result<Option<DatasetSummary>> {
+            Ok(read::dataset_summaries(self.conn(), id.volume, Some(id.anchor))?.pop())
         }
 
         /// The datasets that have `frn` as a member on `volume` (normally at most one), with the
@@ -173,6 +183,32 @@ impl Catalog {
         conn.busy_timeout(BUSY_TIMEOUT)?;
         schema::check_version(&conn)?;
         Ok(Catalog { conn })
+    }
+
+    /// Runs related reads against one SQLite snapshot, including on read-only connections.
+    ///
+    /// The first read pins the view until `f` returns. Concurrent WAL commits remain invisible
+    /// to that view, even when a writer leaves the source checkpoint unchanged. Nested calls
+    /// reuse the outer snapshot. The transaction is released on success, error or panic;
+    /// this does not block a WAL writer or change any catalog data.
+    pub fn read_snapshot<T, E>(&self, f: impl FnOnce(&Catalog) -> Result<T, E>) -> Result<T, E>
+    where
+        E: From<CatalogError>,
+    {
+        let transaction = if self.conn.is_autocommit() {
+            Some(
+                self.conn
+                    .unchecked_transaction()
+                    .map_err(CatalogError::from)?,
+            )
+        } else {
+            None
+        };
+        let value = f(self)?;
+        if let Some(transaction) = transaction {
+            transaction.rollback().map_err(CatalogError::from)?;
+        }
+        Ok(value)
     }
 
     /// Starts a write transaction (`BEGIN IMMEDIATE`, so it never fails half-way on a lock

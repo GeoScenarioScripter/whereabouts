@@ -1366,7 +1366,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "rusqlite",
  "serde_json",
+ "tempfile",
  "tracing-subscriber",
  "whereabouts-catalog",
  "whereabouts-core",
@@ -1478,6 +1480,7 @@ dependencies = [
 name = "whereabouts-query"
 version = "0.1.0"
 dependencies = [
+ "rayon",
  "whereabouts-catalog",
  "whereabouts-core",
  "whereabouts-nameindex",
