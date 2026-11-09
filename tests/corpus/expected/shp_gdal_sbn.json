@@ -11,57 +11,98 @@
   "messages": [],
   "layers": [
     {
-      "name": "gjpoint",
+      "name": "CoHI_GCS12",
       "kind": "vector",
-      "geometry_type": "Point",
+      "geometry_type": "Polygon",
       "has_z": false,
       "has_m": false,
-      "feature_count": 1,
+      "feature_count": 4,
       "extent": [
-        100.0,
-        0.0,
-        100.0,
-        0.0
+        -160.555770874,
+        18.917466137,
+        -154.809379,
+        22.23317
       ],
       "declared_extent": [
-        100.0,
-        0.0,
-        100.0,
-        0.0
+        -160.555770874,
+        18.917466137,
+        -154.809379,
+        22.23317
       ],
       "raster": null,
       "fields": [
         {
-          "name": "FID",
-          "type": "Integer64",
-          "width": 11
+          "name": "atlas_stco",
+          "type": "String",
+          "width": 5
         },
         {
-          "name": "NAME",
+          "name": "atlas_name",
           "type": "String",
-          "width": 60
+          "width": 21
+        },
+        {
+          "name": "atlas_caps",
+          "type": "String",
+          "width": 21
+        },
+        {
+          "name": "atlas_area",
+          "type": "Real",
+          "width": 19
+        },
+        {
+          "name": "atlas_acre",
+          "type": "Real",
+          "width": 19
+        },
+        {
+          "name": "entity",
+          "type": "String",
+          "width": 26
+        },
+        {
+          "name": "cntya",
+          "type": "String",
+          "width": 3
+        },
+        {
+          "name": "cntyn",
+          "type": "Integer",
+          "width": 3
         }
       ],
       "encoding": {
-        "source_encoding": null,
+        "source_encoding": "ISO-8859-1",
         "cpg": null,
         "encoding_from_cpg": null,
-        "ldid": null,
-        "encoding_from_ldid": null
+        "ldid": 87,
+        "encoding_from_ldid": "ISO-8859-1"
       },
       "crs": {
-        "status": "missing",
-        "source": "none",
-        "raw_kind": null,
-        "raw": null,
+        "status": "identified",
+        "source": "prj",
+        "raw_kind": "wkt1_esri",
+        "raw": "GEOGCS[\"GCS_North_American_1983\",DATUM[\"D_North_American_1983\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]",
         "declared_authority": null,
-        "wkt2": null,
-        "epsg": null,
-        "epsg_method": null,
-        "epsg_confidence": null,
-        "candidates": []
+        "wkt2": "GEOGCRS[\"NAD83\",DATUM[\"North American Datum 1983\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],CS[ellipsoidal,2],AXIS[\"latitude\",north,ORDER[1],ANGLEUNIT[\"degree\",0.0174532925199433]],AXIS[\"longitude\",east,ORDER[2],ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4269]]",
+        "epsg": 4269,
+        "epsg_method": "find_matches",
+        "epsg_confidence": 100,
+        "candidates": [
+          {
+            "authority": "EPSG",
+            "code": "4269",
+            "confidence": 100
+          }
+        ]
       },
-      "wgs84_extent": null,
+      "wgs84_extent": [
+        -160.555776792,
+        18.917461327,
+        -154.80938355,
+        22.233166186
+      ],
       "crosses_antimeridian": false,
       "wgs84_error": null
     }

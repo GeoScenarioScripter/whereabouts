@@ -6,7 +6,7 @@ revision and SHA256 in the manifest, with its licence retained under `licences/`
 
 | Follow-up | Committed coverage | Remaining limitation |
 |---|---|---|
-| #28 | LDID 0 without CPG, GDAL-created QIX, upstream GDAL SBN/SBX, external TIFF OVR and MSK | SBN/SBX are grouped members, not native spatial-index inputs; the fixture checks metadata and grouping. |
+| #28 | LDID 0 without CPG, GDAL-created QIX, genuine upstream SBN/SBX county fixture, external TIFF OVR and MSK | Indexes are grouped sidecars; native metadata reads SHP/SHX/DBF/PRJ, not index payloads. |
 | #43 | PointZ without M, CP437 attribute names, DBF/SHX count mismatch, lone DBF, MultiPatch | CP437 retains the explicit D-42 fallback disagreement below; no field-name agreement is claimed. |
 | #44 | Cassini EPSG:3068, Krovak EPSG:5514, NZMG EPSG:27200 | Requested 2–3 families supplied. Hotine and world projections remain covered by CRS fixtures, not new corpus datasets. |
 | #61 | WKT2-preference GPKG, optional Z/M GPKG, 2d-gridded coverage, custom LCC GeoKeys, signed raster placement | Active WAL and read-only directory are runtime state, not portable committed files; existing `crates/readers/tests/geopackage.rs` covers them with temporary databases and Linux permissions. Signed-scale native byte tests also remain in `readers/src/tiff.rs`; GDAL may serialize a flipped affine as a transformation matrix. |
@@ -16,9 +16,15 @@ remain in `.tif.ovr`, and the full-size `.tif.msk` is a supplied dataset member.
 listing is learned from native output. Case membership is declared by the manifest, and the
 separate grouper test verifies TIFF sidecar roles.
 
-The SBN/SBX fixture comes from OSGeo/GDAL `autotest/ogr/data/shp/gjpoint.*`, revision
-`15c79ff06cbc32a6631bdf303b956aa7210c7ad3`; `licences/GDAL-LICENSE.TXT` retains its upstream
-MIT-style licence. It is third-party regression data, not a newly generated Esri index.
+The genuine SBN/SBX fixture comes from OSGeo/GDAL `autotest/ogr/data/shp/CoHI_GCS12.*`, revision
+`15c79ff06cbc32a6631bdf303b956aa7210c7ad3`. It contains four county polygons; SBN/SBX magic,
+word lengths, record counts and bounds match the SHP/SHX/DBF. Upstream `ogr_shape_sbn.py`
+tests actual spatial-index queries. This replaces an initially considered dummy `gjpoint` pair.
+The dataset is public-domain U.S. government data: acknowledgment to USDA National Agricultural
+Statistics Service (NASS), 2012 Census of Agriculture, with boundaries derived from the 2012
+U.S. Census Bureau. The upstream provenance is retained in `licences/CoHI_GCS12_README.txt`;
+[USDA NASS citation policy](https://www.nass.usda.gov/Data_and_Statistics/Citation_Request/)
+permits reproduction and requests acknowledgment. The manifest pins every file's SHA256.
 The lone DBF is an attribute-only dataset with two records and no invented spatial metadata.
 
 MultiPatch reports the declared layer as unconstrained `Geometry`, normalized to GDAL's

@@ -691,13 +691,12 @@ const KNOWN_FIXTURE_WRONG_CODES: &[&str] = &[
     "handwritten/wkt2_2019-escaped-quotes.txt",
 ];
 
-/// Inputs the corpus run cannot compare: 6 layers have no CRS at all (never identified, so the
-/// 46 layers give 40 identification cases) and 2 layers have no native or WGS84 golden extent
-/// (so 40 identification cases give 38 transform cases).
+/// Exact unidentifiable/untransformable inventory; shared extraction separately covers custom
+/// GeoKeys that this legacy raw-CRS consumer cannot reconstruct. No success-rate exemption.
 const KNOWN_CORPUS_SKIPS: &[(&str, usize)] = &[
     ("corpus layer with no raw CRS text and no GDAL EPSG code", 1),
-    // 4.3 adds the non-spatial lone DBF and upstream SBN point fixture without a PRJ.
-    ("corpus layer without a CRS (status missing)", 8),
+    // 4.3 adds the non-spatial lone DBF; the genuine SBN county fixture supplies its PRJ.
+    ("corpus layer without a CRS (status missing)", 7),
     (
         "corpus layer without native extent or golden WGS84 extent",
         2,
