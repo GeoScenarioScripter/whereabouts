@@ -1,0 +1,32 @@
+{
+  "date_utc": "2026-11-09T07:17:32.8126875Z",
+  "boot_utc": "2026-10-09T07:09:45.3826470Z",
+  "commit": "23e987ad0cae9be9c2e100b12a63b531ce6d861a",
+  "dirty": false,
+  "os": "Microsoft Windows NT 10.0.19045.0",
+  "cpu": "13th Gen Intel(R) Core(TM) i5-13490F",
+  "ram_bytes": 34164101120,
+  "volume": "D:",
+  "enumeration": "none",
+  "cache_label": "uncontrolled",
+  "entries": 1000000,
+  "runs": 50,
+  "terms": [
+    "a",
+    "ro",
+    "map",
+    "road",
+    "river",
+    "parcel",
+    "imagery",
+    "elevation"
+  ],
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "everything": "D:/Softwares/es/es.exe",
+  "quantile": "nearest-rank ceil(N*p)-1",
+  "binary_sha256": {
+    "target/release/whereabouts.exe": "BE8D87EF76F9C311EFF68A9127AD486C56B69CBCDC802AB7ABDB72ACE4753C14",
+    "D:\\Softwares\\es\\es.exe": "F7378761CF6E01F51C4123A485E628D70E3FEA147D341F473CE2820844E5CEE5"
+  },
+  "everything_file_version": "1.1.0.38"
+}
