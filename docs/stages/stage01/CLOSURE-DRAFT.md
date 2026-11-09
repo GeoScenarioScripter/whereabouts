@@ -1,42 +1,72 @@
-# Stage01 closure draft — pending owner decisions
+# Stage01 closure record — owner-accepted gaps; release pending
 
-This is reviewable closure preparation, not a claim that stage01 is closed.
+Updated 2026-11-09. The historical filename is retained for existing links. Owner
+acceptance is recorded in D-50; this record does not claim the release is complete.
 
-## Evidence ready
-- Session 5.1 and raw benchmark evidence demonstrate real-volume index/restart, native metadata status reporting and measured CLI behavior.
-- PR #70 head 23e987a passed Windows/Linux tests, elevated NTFS/VHD acceptance, fmt and dependency policy: https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42576242490
-- Corpus strict agreement remains 100% over 62 committed datasets; optional external case excluded explicitly.
-- Existing architecture doc already describes implemented catalog-first checkpoint recovery, extraction retry ledger and per-process query snapshot load.
+## Accepted disposition
 
-## Decisions needed before close
-1. Q-16: retain USN as current default and carry boot-separated USN/raw selection experiments into stage02 (#68), or collect six owner-coordinated boot runs before closure. Current evidence is uncontrolled, not cold.
-2. Q-18: accept CLI startup latency as a known M0 gap and require resident service/IPC measurements in M1, with budgets chosen explicitly; or keep M0 open until the instant-search criterion is met. Existing #48 tracks snapshot/path performance; #47 tracks catalog costs.
-3. Coverage: Everything paths and Whereabouts file records are not equal sets. D: directory counts are close but file-path counts differ substantially; raw scan identifies many hard-linked records. Hard-link completeness is already M1 scope (#52), but this run does not quantitatively reconcile every path. Accept explicit path-parity investigation as a carry-forward or investigate before closure.
+1. **Q-16:** retain USN as the current default. Defer six owner-coordinated
+   boot-separated scans (three USN, three raw MFT, with warm repeats) to stage02/#68.
+   Current timings are uncontrolled/warm diagnostics, not cold evidence.
+2. **Q-18:** accept one-shot CLI startup as a known M0 gap. Stage02/#72 owns
+   resident-service/IPC latency and explicit numeric budgets, with #48/#47 covering
+   snapshot/name and catalog optimization. The instant-search criterion remains
+   unmet; D-48's proposed budgets are not approved by this disposition.
+3. **Path coverage:** the requested investigation explains the large numerical gap
+   predominantly through additional hard-link paths to already indexed identities.
+   Complete multi-name support remains stage02/#52; exact simultaneous path parity
+   is not claimed. Raw MFT also keeps one name per FRN and is not a fix for this gap.
 
-No gap above is accepted merely by this draft. Q-14 stays resolved; Q-16/Q-18 remain Open until owner response.
+## Evidence and integration
 
-## Prepared documentation changes after decision
-- PLAN: attach evidence checklist, mark 5.1 completed only after PR merge, append retro below; label accepted gaps individually.
-- Decisions/questions: record owner's Q-16/Q-18 choices, with actual measurement caveats; avoid declaring unmet speed target passed.
-- Architecture: preserve USN default unless a separate implementation PR changes it; emphasize resident service is M1 and CLI reloads snapshot per invocation.
-- Roadmap: check M0 implementation deliverables, annotate accepted performance/completeness gaps separately.
-- Stage index/README: mark M0 complete with accepted gaps only after explicit acceptance and release; activate stage02 sketch.
-- Discussion log: record owner decision, evidence links, accepted gaps and next-stage remediation.
+- Owner index/restart: approximately 2.866M names and 5,209 datasets, no restart
+  rescan or extractions; [session 5.1 checklist](sessions/5.1-exit-verification.md).
+- PR #70 head `0440a41` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42579220164), including Windows/Linux, elevated VHD/NTFS acceptance, fmt and dependency policy. It merged into develop as `6cd518a`.
+- Strict corpus agreement: 100% over 62 committed datasets; optional external case
+  excluded explicitly. Private owner datasets were not independently GDAL-validated.
+- [Query timing and path investigation](sessions/m0-query-timings-followup.md):
+  approximately 500 ms snapshot load/reconstruction and 5 ms search. Opt-in
+  `query --timings` keeps results on stdout and emits phase JSON on stderr.
+- Path reconciliation: 2,410,863 matching paths; 1,454,226 extra paths with known
+  identities (1,454,224 currently multi-link, two possible renames); 1,836 absent
+  identities all with post-snapshot creation times; three deleted snapshot paths;
+  four orphaned NTFS transaction metadata records. Live observations are non-atomic.
+- Timing PR #71 head `f0dfb15` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42582146914), including Windows/Linux and elevated tests, and merged as `8f14a45`.
+- This documentation update completes the closure sync and handoffs when merged
+  after final-head CI. Release audit and the separate release sequence remain;
+  the evidence and timing implementation are already integrated into develop.
 
-## Retro ready to apply
-**Keep:** contracts and crate boundaries; bounded readers and immutable data access; explicit V1–V4 levels; elevated isolated VHD resilience tests; raw benchmark outputs.
+## Stage02 handoffs
 
-**Change:** prepare Rust, release executables and Everything/ES before owner V4; allocate reboot windows ahead of closure; benchmark while builds are idle; distinguish file records, hard-link paths and datasets; separate resident query and CLI startup targets.
+[STAGE02-HANDOFF.md](STAGE02-HANDOFF.md) records issue ownership, evidence,
+acceptance criteria and unresolved future budgets/contracts. The handoffs are
+accepted M0 gaps, not silently weakened tests or proof of completeness.
 
-**Plan deltas:** G1 added 2.7 raw MFT exploration; wave 4 transferred owner V4 to 5.1 without waiving exit criteria; 5.1 surfaced real CLI startup cost and incomplete path parity.
+## Documentation and retro
 
-**Carried over (pending acceptance):** #68 boot-separated enumeration and Q-16; #48/#47 service-era performance work for Q-18; #52 hard-link completeness. Other already-open CRS/reader follow-ups remain unchanged.
+D-50 and Q-16/Q-18 record the current disposition; architecture preserves USN and
+per-process CLI loading; roadmap and stage index distinguish delivered prototype
+from release. The retro is in [PLAN.md](PLAN.md#stage-retro). Stage02 remains a
+sketch until the separate stage planning step.
 
-**Numbers:** 18 numbered implementation/verification sessions across waves 1–5 plus bootstrap; Oct 19–Nov 9 (21 calendar days elapsed, not continuous work); total CI minutes unknown. Actual owner index: 2.866M names, 5,209 datasets. Oracle 62 committed cases. Benchmark tables contain actual samples rather than extrapolated performance claims.
+## Remaining milestone audit
 
-## Release sequence after decisions
-Finish docs sync on `docs/s01-close`, require CI, merge session/docs PRs into develop; open develop→main release PR, merge with merge commit after green CI; tag v0.1.0, create prerelease, close stage01 milestone; run plan-stage for stage02. Do not release while acceptance remains unresolved.
+The three accepted gaps are not blanket acceptance of every open issue. Existing
+#25 mount/GUID volume support is outside M0 and has moved to stage02. #26 borrowed
+record ingestion measurement and #29 release-enumeration CI are closed with existing
+session/CI evidence; no borrowed-record contract change was adopted.
+#50 non-finite `RasterInfo` validation remains explicitly outstanding for the
+release audit; this docs sync neither fixes it nor accepts it away. Audit remaining
+stage01 issues before closing the milestone.
 
+## Separate release sequence (not performed by this work)
+
+After final-head CI and all session/docs PRs merge into develop, open the
+develop→main release PR; merge with a merge commit after green CI; tag v0.1.0,
+create the prerelease, close the stage01 milestone, then plan stage02. No tag,
+main merge or milestone closure is authorized by this documentation-only release
+preparation. The owner's current request covers documentation, integration into
+develop and handoffs.
 
 ## Prepared manual cold-run helper
 `docs/benchmarks/run-owner-boot.ps1` checks elevation and reserves one measurement per boot in a local ledger. It does not reboot, schedule tasks, build, or alter a journal. Prebuild executables before the first reboot. After each separate owner-controlled reboot, before opening GIS directories or compiling, run one command in an elevated shell:
@@ -51,4 +81,4 @@ Finish docs sync on `docs/s01-close`, require CI, merge session/docs PRs into de
 ./docs/benchmarks/run-owner-boot.ps1 -Method mft -Repeat 3
 ```
 
-Each call saves first/repeat outputs to a unique `target/v4-boot-<method>-<repeat>` directory. The helper checks boot uniqueness, not actual absence of earlier disk activity; the operator must record that condition. Failed attempts reserve the boot too. This is ready if the owner chooses evidence completion rather than explicit carry-forward.
+Each call saves first/repeat outputs to a unique `target/v4-boot-<method>-<repeat>` directory. The helper checks boot uniqueness, not actual absence of earlier disk activity; the operator must record that condition. Failed attempts reserve the boot too. The owner deferred these runs to stage02/#68; the helper is retained for that work. It is not an M0 closure prerequisite under D-50.

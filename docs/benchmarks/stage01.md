@@ -1,5 +1,13 @@
 # Stage01 benchmark evidence
 
+> **Current closure disposition (2026-11-09):** D-50 records owner-accepted M0
+> gaps: retain USN; defer six cold scans to stage02/#68; carry resident performance
+> to #72 with #48/#47 and all-link coverage to #52. The later path investigation
+> explains the aggregate file-count difference predominantly through hard links,
+> without claiming atomic parity. See [follow-up evidence](../stages/stage01/sessions/m0-query-timings-followup.md)
+> and [closure record](../stages/stage01/CLOSURE-DRAFT.md). Earlier session statements
+> below are historical; numeric M1 budgets and future cold-method selection remain open.
+
 Status: local synthetic/component evidence; **V4 acceptance is not met**. No new owner-volume
 cold/warm enumeration or Everything comparison has been run in this session. Q-16 and Q-18
 remain Open pending those measurements and an owner decision. Q-14 is already Agreed in D-34.

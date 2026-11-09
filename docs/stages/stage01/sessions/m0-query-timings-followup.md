@@ -102,8 +102,11 @@ explicitly ignored elevated/measurement tests), `cargo fmt --all -- --check`,
 `cargo build --release -p whereabouts-cli`. The new process-level regression
 checks unchanged JSON stdout, opt-in stderr diagnostics, finite nonnegative
 durations and phase-total consistency for both zero and normal result limits.
-Independent code review found no actionable issues. No Linux/CI or elevated VHD
-run was performed for this follow-up.
+Independent code review found no actionable issues. Initial local verification
+did not include Linux or elevated VHD tests. Subsequently, rebased PR #71 head
+`f0dfb15` passed [Windows/Linux and elevated final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42582146914)
+and merged into develop as `8f14a45`; the final PR verification reaches V3, alongside
+the targeted V4 warm diagnostics below.
 
 Targeted V4 warm diagnostics used the existing 120,295,918-byte owner snapshot,
 without enumeration. After one discarded warmup per mode, ten samples per mode
