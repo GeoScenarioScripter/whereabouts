@@ -57,12 +57,40 @@ fn rows(indexer: &Indexer) -> Vec<DatasetRecord> {
 fn consistent(indexer: &Indexer, options: &IndexOptions, expected: usize) {
     let rows = rows(indexer);
     assert_eq!(rows.len(), expected);
+    let stats = indexer.catalog().stats().unwrap();
+    assert_eq!(
+        stats.files,
+        rows.iter()
+            .map(|r| r.dataset.members().len() as u64)
+            .sum::<u64>()
+    );
+    assert_eq!(
+        stats.layers,
+        rows.iter().map(|r| r.layers.len() as u64).sum::<u64>()
+    );
+    assert_eq!(
+        stats.extents,
+        rows.iter()
+            .flat_map(|r| &r.layers)
+            .map(|l| l.wgs84.as_ref().map_or(0, |b| b.parts().len() as u64))
+            .sum::<u64>()
+    );
     for row in rows {
         row.validate().unwrap();
         assert_eq!(row.status, ExtractionStatus::Ok, "{}", row.primary_path);
         assert!(!row.layers.is_empty());
         assert!(row.layers.iter().all(|layer| layer.wgs84.is_some()));
         assert!(indexer.names().lookup(row.dataset.anchor()).is_some());
+        // Also exercise the persisted R*Tree, not just layer JSON reconstructed by get_dataset.
+        let found = indexer
+            .catalog()
+            .find_datasets(&whereabouts_catalog::DatasetFilter {
+                volume: Some(indexer.volume()),
+                bbox: row.layers[0].wgs84.clone(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(found.contains(&row.dataset.id()));
     }
     let cp = indexer
         .catalog()
