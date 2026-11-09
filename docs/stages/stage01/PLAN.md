@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Wave 3 merged and closed (2026-11-08); next: wave 4.
+**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Wave 3 merged and closed (2026-11-08). Wave 4 engineering work merged and closed (2026-11-09); next: 5.1 exit verification, including pending owner V4 evidence (#68).
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -27,7 +27,7 @@ Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`
 
 1. **Indexes a real volume (V4):** `whereabouts index --volume <X:>` completes on the owner's GIS workstation volume; the catalog holds the SHP/GPKG/GeoTIFF datasets found there, each with status `ok`/`partial`/`error:<reason>` — no panics.
 2. **Stays live and survives restarts (V3):** after a restart it resumes from the saved checkpoint without a full rescan; journal wrap and journal re-creation trigger a correct full rescan. Proven in CI on a VHD test volume.
-3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets set in session 4.3, measured on the owner's volume alongside Everything.
+3. **Instant name search (V4):** query latency and index memory meet the Q-18 targets proposed in session 4.3 and finalized with the owner in 5.1, measured on the owner's volume alongside Everything.
 4. **Correct metadata (V2):** on the committed corpus, oracle agreement meets the committed baseline: native bbox, geometry type and counts agree on ≥ 98% of cases; EPSG identification and WGS84 bbox agreement meet the targets recorded for Q-14. Enforced in CI.
 5. **Clean build (V1):** CI green on Windows + Linux; `cargo deny` green (no GDAL).
 6. **Docs:** Q-14, Q-16, Q-18 resolved in `02-decisions.md`; architecture doc matches the code; retro written; stage02 sketch updated.
@@ -85,7 +85,7 @@ Wave 2 has six sessions; with the 4-concurrent cap, start **2.2, 2.4, 2.1, 2.6**
 - **Wave 1:** disjoint crates. Each session may add `[workspace.dependencies]` lines → trivial conflicts; merge order 1.1 → 1.4 → 1.3 → 1.2. *Actual (2026-10-19): 1.1 → 1.3 → 1.2 → 1.4 — 1.4 was still in review fixes, and the only shared file was `Cargo.lock` (first committed by 1.1), so the order made no difference.*
 - **Wave 2:** 2.6 adds the reader registry in `readers/src/lib.rs` and the oracle adapter registry in `tests/oracle` — nobody else in wave 2 touches them. 2.2 is the only `ntfs` writer while it runs (2.7 starts after it merges), 2.4 the only `crs` writer. Merge order: 2.5 → 2.3 → 2.1 → 2.4 → 2.2 → 2.6, then 2.7. *Actual (2026-10-27): 2.1 → 2.2 → 2.6 → 2.3 → 2.5 → 2.4 → 2.7 — merged as each became ready; the only shared files were `Cargo.lock` and (2.7) a small `ci.yml` change, so the order made no difference.*
 - **Wave 3:** 3.1 and 3.2 both add one line to the reader registry and one to the oracle adapter registry → merge 3.1 first, rebase 3.2. 3.2 adds `crs/src/geokeys.rs` (+ one `mod` line). 3.3 owns `indexer` and `cli`. Actual (2026-11-08): 3.1 (#57) → 3.2 (#59) → 3.3 (#58), with rebases and fresh green CI between merges.
-- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3.
+- **Wave 4:** 4.1 owns `query` and `cli`; 4.2 owns `indexer` (+ `ntfs` tests); 4.3 owns `tests/oracle`, `benches/`, `docs/benchmarks/` and only *reads* `indexer`. If 4.2 needs a CLI flag, it goes to 4.1 as a follow-up. Merge order: 4.2 → 4.1 → 4.3. Completed in that order on 2026-11-09: #65 → #66 → #67, with final-head CI after each rebase.
 
 ---
 
@@ -255,7 +255,7 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Scope clarification:** 4.3 may also edit `tests/corpus/**` for the previously assigned #28/#43/#44 cases and wave 3 reader follow-ups; corpus changes require the oracle-golden drift check. This resolves the earlier hand-off/write-scope mismatch. 4.2 may update the existing CI elevated invocation only if its new test harness needs it, coordinated with 4.1; 4.1 owns every CLI change.
 
 #### 4.1 — query-and-inspect-cli
-- **Write scope:** `crates/query/**`, `crates/cli/**`.
+- **Write scope:** `crates/query/**`, `crates/cli/**`; at wave 4 review, minimal additive `crates/catalog/**` read-snapshot and lightweight ranking-summary APIs/tests authorized to prevent mixed query results during metadata-only retries and pre-limit full-layer hydration (D-47).
 - **Deliverables:** `whereabouts inspect <path>` (group + extract a single path without an index — the debugging tool); `whereabouts query "<text>" [--bbox minx,miny,maxx,maxy] [--format …] [--epsg N] [--limit N] [--json]`: name scan → member FRN → dataset, ∩ R*Tree bbox, simple ordering (exact > prefix > substring, then mtime); loads the snapshot instead of re-enumerating; table and JSON output.
 - **Acceptance (V3):** CLI integration tests on the VHD volume; startup-to-first-result time recorded.
 
@@ -264,16 +264,16 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Deliverables + acceptance (V3), each as a CI test on the VHD volume:** journal wrap (tiny journal via `fsutil usn createjournal m=… a=…` plus file churn) → full rescan, catalog consistent; journal deleted/recreated → rescan; process killed mid-index → restart converges; corrupt snapshot → detected → rescan; catalog/snapshot checkpoint mismatch → reconcile; Whereabouts' own reads produce no USN events for indexed files; hard-link behaviour documented.
 
 #### 4.3 — benchmarks-and-coverage
-- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
+- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`. Wave 4 review also authorizes test-only corpus expectation updates in `crates/readers/tests/shapefile_corpus.rs` and `crates/crs/tests/g2.rs`; also authorizes the narrow MultiPatch declared-layer mapping/regression in `crates/readers/src/shapefile.rs` and core rustdoc clarification (D-49), plus fixture attribution. Production CRS and core type contracts remain unchanged.
 - **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; enforcement of Q-14 targets already agreed in D-34; **proposed answers** to Q-16 and Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
-- **Acceptance (V2 in CI + V4 numbers from the owner's run).**
+- **Acceptance:** software/oracle delivery requires V2 in CI. **Explicit wave-close handoff (2026-11-09):** the originally required V4 owner-volume/Everything measurements are unverified and move to 5.1 stage-exit verification. The owner confirmed no existing logs; the session is not OS-elevated and no Everything CLI/catalog was found in the checked locations. This permits engineering wave closure, not a V4 pass or stage completion. Q-16/Q-18 stay Open (D-48).
 
 ### Wave 5 — exit
 
 #### 5.1 — exit-verification
 - **Write scope:** `docs/stages/stage01/**`, `docs/benchmarks/**`, small fixes anywhere (each listed in the note; anything larger becomes a follow-up).
 - **Deliverables:** an exit-criteria checklist with evidence links (CI runs, benchmark doc, the owner's V4 run output); a proposed docs sync (architecture deltas, decisions, open questions) for the orchestrator to apply; a retro draft (what worked, what to change for stage02).
-- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy.
+- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy. **Wave 4 carry-forward:** collect V4 owner-volume USN/raw cold and warm measurements, a populated real-data catalog/snapshot and Everything comparison using `scripts/bench/bench-vs-everything.ps1`; record raw evidence, resolve Q-16/Q-18 with the owner and verify real-volume indexing/query exit criteria. V1–V3 and synthetic benchmarks do not satisfy these requirements. Stage closure cannot claim completion until they are evidenced.
 
 Then the orchestrator runs `/close-stage` (retro, docs sync, `develop → main`, tag `v0.1.0`) and `/plan-stage` for stage02.
 
@@ -286,7 +286,7 @@ Then the orchestrator runs `/close-stage` (retro, docs sync, `develop → main`,
 | Core contracts turn out wrong after the fan-out | Wave 1 freezes them deliberately; G1 review before wave 2; flagged contract-change process |
 | USN enumeration too slow / memory-heavy | Measured in 1.3 at G1; raw `$MFT` parsing kept as a planned fallback (Q-16) |
 | Pure-Rust CRS coverage insufficient | Measured in 2.4 at G2; PROJ via `proj` crate is the documented fallback (D-09) |
-| No local Rust toolchain on the owner's machine yet | CI is the verification source (V1–V3); V4 waits for the toolchain — the owner installs it before wave 4 |
+| Owner-volume / Everything evidence is missing; the agent shell is not Windows-elevated | Local Rust component tests and elevated CI establish V1–V3 only; 5.1/#68 must collect the real-volume, separate-boot and Everything evidence before stage closure |
 | Elevated tests are hard to run safely | Isolated VHD test volumes in CI; tests never write outside their own volume/temp dir |
 | Our own reads dirty the user's files (SQLite `-wal`, mtime) and trigger re-index loops | Read-only opens + explicit tests in 3.1 and 4.2 |
 | Corpus licensing | Synthetic data generated by us; real-world samples only with recorded provenance and a redistributable licence, large ones not committed |
@@ -313,9 +313,9 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 3.1 | reader-geopackage | #11 | ✅ done (2026-11-08, V2, PR #57) | [note](sessions/3.1-reader-geopackage.md) |
 | 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
 | 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
-| 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
-| 4.2 | resilience | #15 | ⏳ planned | |
-| 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |
+| 4.1 | query-and-inspect-cli | #14 | ✅ merged (2026-11-09, V3, PR #66) | [note](sessions/4.1-query-and-inspect-cli.md) |
+| 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
+| 4.3 | benchmarks-and-coverage | #16 | ✅ merged (2026-11-09, V2, PR #67); V4 carried to 5.1/#68 | [note](sessions/4.3-benchmarks-and-coverage.md) |
 | 5.1 | exit-verification | #17 | ⏳ planned | |
 
 ## Stage retro
