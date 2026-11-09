@@ -9,6 +9,7 @@ use clap::{Parser, Subcommand};
 use whereabouts_core::{DatasetRecord, Format, VolumeId, Wgs84Extent};
 
 mod inspect;
+mod timings;
 
 #[derive(Debug, clap::Args)]
 struct QueryArgs {
@@ -35,6 +36,10 @@ struct QueryArgs {
     /// Catalog volume ID; required when more than one volume has the same checkpoint.
     #[arg(long)]
     volume_id: Option<u32>,
+    /// Emit query phase timings as one JSON line on stderr after a successful query.
+    /// Excludes process launch, argument parsing, and diagnostic emission.
+    #[arg(long)]
+    timings: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -145,13 +150,16 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
     use whereabouts_catalog::Catalog;
     use whereabouts_nameindex::NameIndex;
     use whereabouts_query::{QueryEngine, Request};
+    let mut timings = timings::QueryTimings::new(args.timings);
     let snapshot = NameIndex::load_snapshot(
         &args
             .snapshot
             .unwrap_or_else(|| inspect::snapshot_path(&args.db)),
     )
     .context("cannot load name snapshot; run index first")?;
+    timings.mark("snapshot_load");
     let catalog = Catalog::open_read_only(&args.db)?;
+    timings.mark("catalog_open");
     let checkpoint = snapshot
         .checkpoint
         .as_ref()
@@ -172,7 +180,9 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
         volumes.len()
     );
     let volume: VolumeId = volumes[0];
+    timings.mark("checkpoint_validation");
     let engine = QueryEngine::new(0)?;
+    timings.mark("pool_init");
     let records = engine.search(
         &snapshot.index,
         catalog,
@@ -185,9 +195,17 @@ fn query(args: QueryArgs) -> anyhow::Result<()> {
             limit: args.limit,
         },
     )?;
+    timings.mark("search");
     Ok(records)
     })?;
-    output(&records, args.json)
+    timings.mark("query_cleanup");
+    output(&records, args.json)?;
+    timings.mark("output");
+    drop(records);
+    drop(catalog);
+    drop(snapshot);
+    timings.mark("teardown");
+    timings.finish()
 }
 
 fn output(records: &[DatasetRecord], json: bool) -> anyhow::Result<()> {

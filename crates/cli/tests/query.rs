@@ -6,6 +6,46 @@ use whereabouts_catalog::Catalog;
 use whereabouts_source::Checkpoint;
 
 #[test]
+fn timings_are_opt_in_and_preserve_json_results() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("catalog.db");
+    fixture(&db, 300);
+    for limit in ["0", "100"] {
+        let plain = run(&["query", "road", "--json", "--limit", limit], &db);
+        let timed = run(
+            &["query", "road", "--json", "--limit", limit, "--timings"],
+            &db,
+        );
+        assert!(plain.status.success());
+        assert!(
+            timed.status.success(),
+            "{}",
+            String::from_utf8_lossy(&timed.stderr)
+        );
+        assert_eq!(plain.stdout, timed.stdout);
+        assert!(plain.stderr.is_empty());
+        let report: serde_json::Value = serde_json::from_slice(&timed.stderr).unwrap();
+        assert_eq!(report["kind"], "query_timings");
+        let phases = report["phases_ms"].as_object().unwrap();
+        for phase in [
+            "snapshot_load",
+            "catalog_open",
+            "checkpoint_validation",
+            "pool_init",
+            "search",
+            "query_cleanup",
+            "output",
+            "teardown",
+        ] {
+            let value = phases[phase].as_f64().unwrap();
+            assert!(value.is_finite() && value >= 0., "{phase}: {value}");
+        }
+        let sum: f64 = phases.values().map(|v| v.as_f64().unwrap()).sum();
+        assert!((sum - report["query_total_ms"].as_f64().unwrap()).abs() < 0.001);
+    }
+}
+
+#[test]
 fn only_the_ranked_page_hydrates_layer_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("catalog.db");
