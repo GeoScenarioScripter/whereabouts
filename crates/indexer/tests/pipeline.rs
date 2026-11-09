@@ -114,6 +114,78 @@ fn ids(indexer: &Indexer) -> Vec<DatasetId> {
 }
 
 #[test]
+fn overflowing_raster_resolution_does_not_abort_the_indexing_batch() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut source = FakeSource::new(temp.path());
+    // A 1x1 TIFF with finite affine coefficients and finite corners, but a column norm
+    // exceeding f64::MAX. This exercises a derived overflow through the real reader.
+    let mut tiff = b"II\x2a\x00\x08\x00\x00\x00".to_vec();
+    tiff.extend(3u16.to_le_bytes());
+    for (tag, kind, count, value) in [
+        (256u16, 4u16, 1u32, 1u32),
+        (257, 4, 1, 1),
+        (34264, 12, 16, 50),
+    ] {
+        tiff.extend(tag.to_le_bytes());
+        tiff.extend(kind.to_le_bytes());
+        tiff.extend(count.to_le_bytes());
+        tiff.extend(value.to_le_bytes());
+    }
+    tiff.extend(0u32.to_le_bytes());
+    for value in [
+        1.3e308_f64,
+        -1.2e308,
+        0.0,
+        0.0,
+        1.3e308,
+        -1.1e308,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ] {
+        tiff.extend(value.to_le_bytes());
+    }
+    fs::write(temp.path().join("overflow.tif"), tiff).unwrap();
+    source
+        .records
+        .insert(Frn(50), record(50, 1, "overflow.tif", false));
+    let options = IndexOptions::new(temp.path().join("catalog.db"), temp.path());
+    let mut indexer = Indexer::open(&source, options.clone()).unwrap();
+    let report = indexer.catch_up(&mut source).unwrap();
+    assert_eq!(
+        (report.extracted, report.datasets, report.retries),
+        (3, 3, 0)
+    );
+    let bad_id = DatasetId::new(indexer.volume(), Frn(50));
+    let bad = indexer.catalog().get_dataset(bad_id).unwrap().unwrap();
+    assert!(
+        matches!(&bad.status, whereabouts_core::ExtractionStatus::Error(reason)
+        if reason.contains("res_x must be finite"))
+    );
+    assert!(bad.layers.is_empty());
+    bad.validate().unwrap();
+    for parent in [10, 20] {
+        let id = DatasetId::new(indexer.volume(), source.named(parent, "points.shp").frn);
+        let row = indexer.catalog().get_dataset(id).unwrap().unwrap();
+        assert_eq!(row.status, whereabouts_core::ExtractionStatus::Ok);
+        row.validate().unwrap();
+    }
+    drop(indexer);
+    let mut indexer = Indexer::open(&source, options).unwrap();
+    let report = indexer.catch_up(&mut source).unwrap();
+    assert!(!report.enumerated);
+    assert_eq!(report.extracted, 0);
+    assert_eq!(indexer.catalog().get_dataset(bad_id).unwrap().unwrap(), bad);
+}
+
+#[test]
 fn full_index_restart_drain_and_member_edits_are_scoped() {
     let temp = tempfile::tempdir().unwrap();
     let mut source = FakeSource::new(temp.path());

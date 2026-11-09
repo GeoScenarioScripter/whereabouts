@@ -792,17 +792,44 @@ fn raster_round_trip() {
         "bit-exact floats"
     );
 
-    // Non-finite values can't be stored faithfully: they come back as absent.
-    let mut nan = rec.clone();
-    let r = nan.layers[0].metadata.raster.as_mut().unwrap();
-    r.res_x = Some(f64::NAN);
-    r.geotransform = Some([f64::INFINITY, 1.0, 0.0, 0.0, 0.0, -1.0]);
-    upsert(&mut d.cat, &nan);
-    let back = d.cat.get_dataset(id).unwrap().unwrap();
-    let r = back.layers[0].metadata.raster.as_ref().unwrap();
-    assert_eq!((r.res_x, r.geotransform), (None, None));
-    assert_eq!(r.res_y, raster.res_y);
-    assert_eq!(d.cat.stats().unwrap().layers, 1);
+    // An invalid replacement must neither lose metadata nor poison the surrounding batch.
+    let other = shapefile(v, 60, vector_layer("other", 4326, wsen(1.0, 1.0, 2.0, 2.0)));
+    upsert(&mut d.cat, &other);
+    let stats = d.cat.stats().unwrap();
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        for field in 0..8 {
+            let mut invalid = rec.clone();
+            invalid.name = "must not be saved".into();
+            let r = invalid.layers[0].metadata.raster.as_mut().unwrap();
+            match field {
+                0 => r.res_x = Some(value),
+                1 => r.res_y = Some(value),
+                i => r.geotransform.as_mut().unwrap()[i - 2] = value,
+            }
+            d.cat
+                .write(|tx| {
+                    let err = tx.upsert_dataset(&invalid).unwrap_err();
+                    assert!(matches!(err, CatalogError::InvalidRecord(_)), "{err:?}");
+                    tx.upsert_dataset(&other)
+                })
+                .unwrap();
+            assert_eq!(d.cat.get_dataset(id).unwrap().unwrap(), rec);
+            assert_eq!(
+                d.cat.get_dataset(other.dataset.id()).unwrap().unwrap(),
+                other
+            );
+            assert_eq!(d.cat.stats().unwrap(), stats);
+        }
+    }
+    let mut text_nodata = rec.clone();
+    text_nodata.layers[0]
+        .metadata
+        .raster
+        .as_mut()
+        .unwrap()
+        .nodata = Some("nan".into());
+    upsert(&mut d.cat, &text_nodata);
+    assert_eq!(d.cat.get_dataset(id).unwrap().unwrap(), text_nodata);
 }
 
 #[test]

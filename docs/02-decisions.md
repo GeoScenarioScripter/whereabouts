@@ -61,6 +61,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-48 | Separate name-index performance budgets from process startup and total pipeline memory | Proposed |
 | D-49 | MultiPatch reports an unknown declared layer geometry, without scanning patches | Proposed |
 | D-50 | M0 closure with accepted startup/path gaps; retain USN and defer cold scans | Agreed (2026-11-09, owner) |
+| D-51 | Reject non-finite raster numeric metadata before persistence | Proposed |
 
 ---
 
@@ -378,7 +379,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
   - **`epsg` and `bbox` in `DatasetFilter` must hold for the same layer.**
   - **`set_status` keeps stored records valid:** `pending`, `unsupported` and `error` drop the dataset's layers (the `DatasetRecord` invariant). D-36 keeps 3.3 from using it on transient failures.
   - **`synchronous = NORMAL` in WAL mode.** Commits stay atomic, but the last commits can be lost on power failure. The plan reconciles a catalog/snapshot checkpoint mismatch (3.3, 4.2). Also `temp_store = MEMORY`, `foreign_keys = ON`, writers `BEGIN IMMEDIATE`.
-  - **Non-finite raster floats are stored as absent** (#50 proposes rejecting them in core). An out-of-range integer is an `OutOfRange` error.
+  - **Raster floats must be finite before persistence** (D-51 / #50 supersedes the original store-as-absent behavior). An out-of-range integer is an `OutOfRange` error.
   - Writes (`upsert_dataset`, `delete_dataset`, `delete_volume`, `set_status`) are atomic through a savepoint; `volumes.id` is `AUTOINCREMENT`, so ids are never reused.
 - **Rationale:** Rowid arithmetic avoids a scan on delete. Exact f64 edges avoid f32 false positives and negatives at box boundaries. A stable hash is needed because `std::hash` changes between Rust releases.
 - **Consequences:** Re-upsert costs about 2x a first insert, and planner statistics need `PRAGMA optimize` (#47). Benchmarks (100k datasets): first insert 7.9 s, bbox p50 62 µs, member lookup 12 µs.
@@ -460,3 +461,10 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Decision:** Retain USN as the default and defer the six boot-separated USN/raw scans to stage02 (#68). Accept CLI startup performance as an explicit M0 gap and carry resident service/IPC performance into stage02 (#72; #48/#47 supporting work). Accept the documented one-name-per-FRN limitation and carry complete hard-link path coverage into stage02 (#52). The owner authorized updating closure records, integrating the reviewed work, and finalizing these handoffs; release to main/tag/milestone closure is a separate remaining step.
 - **Evidence boundary:** Q-16's current-default choice and Q-18's M0 disposition are resolved. The cold-method comparison and numeric M1/end-to-end performance budgets remain open. The instant-search criterion is not passed by this acceptance; proposed D-48 budgets are not promoted to agreed targets. The live-volume path investigation is not an atomic parity proof.
 - **Consequences:** This supersedes the earlier requirement in D-43/D-48 and the stage01 plan to finish cold scans and approve numeric Q-18 budgets before M0 closure. Real-volume indexing/restart, corpus correctness, clean final-head CI and recorded accepted gaps remain required. [Stage02 handoff](stages/stage01/STAGE02-HANDOFF.md) supplies acceptance criteria without silently choosing future contracts or budgets.
+
+## D-51 — Reject non-finite raster numeric metadata before persistence
+- **Status:** Proposed (2026-11-09); implementation requested by the owner for #50.
+- **Context:** The original D-41 catalog behavior silently discarded non-finite raster resolutions and geotransforms. #50 requests a flagged core contract change to reject them instead.
+- **Decision:** `LayerRecord::validate` rejects present non-finite `RasterInfo.res_x`, `res_y`, or any of the six geotransform components with `CoreError::InvalidRecord`. `DatasetRecord::validate` preserves the layer index in the error; catalog upserts validate before writing and no longer filter values. The shared extractor turns invalid layer facts into a non-retryable dataset error with no layers, allowing unrelated datasets in the batch to commit. Nodata remains verbatim text, including `"nan"`; no positivity, dimension, invertibility, or additional numeric-range rule is introduced.
+- **Rationale:** A validated record should round-trip without silently losing numeric metadata. Derived values can overflow even when file coefficients and computed corners are finite, so validation must precede the catalog batch.
+- **Consequences:** This tightens the frozen core validation contract and supersedes D-41's store-as-absent rule. Core, catalog and indexer dependants/tests are updated together. No schema migration, dependency, reader signature, or query-path change is needed. Previously discarded metadata remains absent until re-extraction. See [the fix note](stages/stage01/sessions/issue-50-raster-validation.md).

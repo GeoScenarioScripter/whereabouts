@@ -125,6 +125,15 @@ fn enrich(metadata: DatasetMetadata) -> ExtractedMetadata {
         } else if layer.metadata.native_bounds.is_some() {
             problems.push(format!("{}: missing CRS", layer.metadata.name));
         }
+        // Derived reader values can overflow even when input numbers are finite. Report a
+        // dataset-local error before the catalog transaction so the batch can continue.
+        if let Err(error) = layer.validate() {
+            return ExtractedMetadata {
+                status: ExtractionStatus::Error(format!("{}: {error}", layer.metadata.name)),
+                layers: Vec::new(),
+                retry: false,
+            };
+        }
         layers.push(layer);
     }
     problems.sort();
@@ -154,6 +163,47 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     use whereabouts_core::{Bounds, CrsDefinitionKind, LayerMetadata};
+
+    #[test]
+    fn invalid_reader_facts_become_a_dataset_error() {
+        let good = LayerMetadata {
+            name: "good".into(),
+            ..Default::default()
+        };
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let result = enrich(DatasetMetadata {
+                layers: vec![
+                    good.clone(),
+                    LayerMetadata {
+                        name: "bad".into(),
+                        raster: Some(whereabouts_core::RasterInfo {
+                            width: 1,
+                            height: 1,
+                            bands: 1,
+                            dtype: whereabouts_core::RasterDataType::Float64,
+                            res_x: Some(value),
+                            res_y: None,
+                            geotransform: None,
+                            nodata: Some("nan".into()),
+                            overview_count: 0,
+                        }),
+                        ..Default::default()
+                    },
+                ],
+                partial: Vec::new(),
+            });
+            assert!(matches!(result.status, ExtractionStatus::Error(ref reason)
+                if reason.contains("bad: ") && reason.contains("res_x must be finite")));
+            assert!(result.layers.is_empty());
+            assert!(!result.retry);
+        }
+        let next = enrich(DatasetMetadata {
+            layers: vec![good],
+            partial: Vec::new(),
+        });
+        assert_eq!(next.status, ExtractionStatus::Ok);
+        next.layers[0].validate().unwrap();
+    }
 
     #[test]
     fn resolves_transforms_and_preserves_unusable_definitions() {

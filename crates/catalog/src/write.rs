@@ -7,7 +7,7 @@ use whereabouts_core::{
 };
 use whereabouts_source::{Checkpoint, SourceIdentity};
 
-use crate::convert::{crs_hash, finite, frn_to_sql, u64_to_sql, volume_from_sql};
+use crate::convert::{crs_hash, frn_to_sql, u64_to_sql, volume_from_sql};
 use crate::error::{CatalogError, Result};
 use crate::schema::EXTENT_STRIDE;
 
@@ -130,7 +130,6 @@ fn prepare_layer(ordinal: usize, layer: &LayerRecord) -> Result<PreparedLayer<'_
                 height: u64_to_sql(r.height, "raster height")?,
                 geotransform: r
                     .geotransform
-                    .filter(|gt| gt.iter().all(|v| v.is_finite()))
                     .map(|gt| serde_json::to_string(&gt))
                     .transpose()
                     .map_err(|e| CatalogError::OutOfRange(format!("geotransform: {e}")))?,
@@ -398,8 +397,8 @@ fn insert_layer(conn: &Connection, dataset_row: i64, layer: &PreparedLayer<'_>) 
             prepared.height,
             r.bands,
             r.dtype.code(),
-            finite(r.res_x),
-            finite(r.res_y),
+            r.res_x,
+            r.res_y,
             r.nodata,
             r.overview_count,
             prepared.geotransform,
