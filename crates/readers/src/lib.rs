@@ -22,6 +22,7 @@
 
 mod dbf;
 mod encoding;
+mod gpkg;
 mod io;
 mod prj;
 mod shapefile;
@@ -33,12 +34,13 @@ use whereabouts_core::{
 };
 
 pub use dbf::DbfReader;
+pub use gpkg::GeoPackageReader;
 pub use io::{IoStats, measure};
 pub use shapefile::ShapefileReader;
 
 /// The reader registry: **one line per reader**, sorted by reader name. Sessions adding a reader
 /// add exactly one line here (3.1: GeoPackage, 3.2: GeoTIFF).
-static READERS: &[&dyn FormatReader] = &[&DbfReader, &ShapefileReader];
+static READERS: &[&dyn FormatReader] = &[&DbfReader, &GeoPackageReader, &ShapefileReader];
 
 /// Every registered reader, in registry order.
 pub fn readers() -> &'static [&'static dyn FormatReader] {

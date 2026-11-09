@@ -6,6 +6,7 @@
 //! line** to [`ADAPTERS`] plus its `read` function (in its own module here), listing only the
 //! [`Check`]s it is ready to be held to.
 
+mod geopackage;
 mod native;
 mod shapefile;
 
@@ -72,7 +73,11 @@ pub struct Adapter {
 
 /// The registry. One line per format; keep sorted by format.
 pub static ADAPTERS: &[Adapter] = &[
-    // 3.1: Adapter { format: "geopackage", checks: &[...], read: geopackage::read },
+    Adapter {
+        format: "geopackage",
+        checks: geopackage::CHECKS,
+        read: geopackage::read,
+    },
     // 3.2: Adapter { format: "geotiff", checks: &[...], read: geotiff::read },
     Adapter {
         format: "shapefile",
