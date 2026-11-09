@@ -274,7 +274,7 @@ fn affine(tags: &Tags, l: Layout, point: bool) -> Result<Option<[f64; 6]>, ReadE
         if scale.len() != 3
             || tie.len() < 6
             || tie.len() % 6 != 0
-            || scale[0] <= 0.0
+            || scale[0] == 0.0
             || scale[1] == 0.0
         {
             return Err(bad("invalid scale/tiepoint"));
@@ -283,9 +283,9 @@ fn affine(tags: &Tags, l: Layout, point: bool) -> Result<Option<[f64; 6]>, ReadE
             tie[3] - tie[0] * scale[0],
             scale[0],
             0.0,
-            tie[4] + tie[1] * scale[1].abs(),
+            tie[4] + tie[1] * scale[1],
             0.0,
-            -scale[1].abs(),
+            -scale[1],
         ]
     } else if !m.is_empty() {
         if m.len() != 16 || m[12..16] != [0.0, 0.0, 0.0, 1.0] {
@@ -673,6 +673,49 @@ mod tests {
             }
         }
     }
+    #[test]
+    fn pixel_scale_signs_preserve_horizontal_and_vertical_flips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("flipped.tif");
+        let doubles = |v: &[f64]| v.iter().flat_map(|v| v.to_le_bytes()).collect();
+        for sx in [-2.0, 2.0] {
+            for sy in [-3.0, 3.0] {
+                std::fs::write(
+                    &path,
+                    fixture(
+                        false,
+                        true,
+                        &[
+                            (33550, 12, 3, doubles(&[sx, sy, 0.0])),
+                            (33922, 12, 6, doubles(&[4.0, 5.0, 0.0, 100.0, 200.0, 0.0])),
+                        ],
+                    ),
+                )
+                .unwrap();
+                let md = TiffReader
+                    .read(&dataset(&path), &ReadLimits::default())
+                    .unwrap();
+                let r = md.layers[0].raster.as_ref().unwrap();
+                assert_eq!(
+                    r.geotransform,
+                    Some([100.0 - 4.0 * sx, sx, 0.0, 200.0 + 5.0 * sy, 0.0, -sy])
+                );
+                let b = md.layers[0].native_bounds.unwrap();
+                let xs = [100.0 - 4.0 * sx, 100.0 + 16.0 * sx];
+                let ys = [200.0 + 5.0 * sy, 200.0 - 5.0 * sy];
+                assert_eq!(
+                    [b.min_x(), b.min_y(), b.max_x(), b.max_y()],
+                    [
+                        xs[0].min(xs[1]),
+                        ys[0].min(ys[1]),
+                        xs[0].max(xs[1]),
+                        ys[0].max(ys[1])
+                    ]
+                );
+            }
+        }
+    }
+
     #[test]
     fn rotations_point_shift_and_world_file_centres() {
         let g = world("2\n1\n-1\n-2\n10\n20").unwrap();

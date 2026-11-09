@@ -38,13 +38,10 @@ pub(crate) fn read(case: &ResolvedCase<'_>) -> Option<NativeRecord> {
     let mut rec = native::from_result(Ok(md.clone()));
     {
         for (layer, raw) in rec.layers.iter_mut().zip(&md.layers) {
-            layer.epsg = raw.crs.as_ref().and_then(|d| {
-                if d.kind == whereabouts_core::CrsDefinitionKind::GeoKeys {
-                    whereabouts_crs::geokeys::resolve(&d.text).resolved.epsg()
-                } else {
-                    whereabouts_crs::resolve(d).resolved.epsg()
-                }
-            });
+            layer.epsg = raw
+                .crs
+                .as_ref()
+                .and_then(|d| whereabouts_crs::resolve(d).resolved.epsg());
             if let (Some(r), Some(n)) = (&raw.raster, &mut layer.raster) {
                 n.data_types = Some(vec![r.dtype.code().into(); r.bands as usize]);
                 let value = r
