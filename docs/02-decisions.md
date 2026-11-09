@@ -60,6 +60,7 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-47 | Queries use one catalog read snapshot; inspect identities are temporary | Proposed |
 | D-48 | Separate name-index performance budgets from process startup and total pipeline memory | Proposed |
 | D-49 | MultiPatch reports an unknown declared layer geometry, without scanning patches | Proposed |
+| D-50 | M0 closure with accepted startup/path gaps; retain USN and defer cold scans | Agreed (2026-11-09, owner) |
 
 ---
 
@@ -452,3 +453,10 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Decision:** For shapefile shape type 31, metadata reports the unconstrained `Geometry` declared layer type (normalized to GDAL's `Unknown` name by the oracle), with the dimensional flags of that declaration. These flags do not assert that the underlying patches lack Z. Preserve the header's native bounds, feature count and CRS; do not scan patch geometry solely to infer a more specific layer type.
 - **Rationale:** A MultiPatch header cannot justify declaring every feature a polyhedral surface. Matching the declared-layer convention corrects an overclaim while keeping extraction bounded; the oracle's strict geometry baseline does not need an exemption or lower threshold.
 - **Consequences:** This changes the reader's metadata convention for MultiPatch, with a focused regression and pinned GDAL fixture. It adds no core enum variant, changes no signature and does not implement full geometry decoding. Future preview/geometry readers may report richer per-feature types.
+
+## D-50 — M0 closure disposition and stage02 handoffs
+- **Status:** Agreed (2026-11-09, owner).
+- **Context:** Session 5.1 supplies owner-volume indexing/restart and Everything comparisons. Follow-up diagnostics isolate approximately 500 ms of snapshot load/reconstruction versus 5 ms of search, and account for the large file-path count gap predominantly through hard links. See [closure record](stages/stage01/CLOSURE-DRAFT.md) and [timing/path investigation](stages/stage01/sessions/m0-query-timings-followup.md).
+- **Decision:** Retain USN as the default and defer the six boot-separated USN/raw scans to stage02 (#68). Accept CLI startup performance as an explicit M0 gap and carry resident service/IPC performance into stage02 (#72; #48/#47 supporting work). Accept the documented one-name-per-FRN limitation and carry complete hard-link path coverage into stage02 (#52). The owner authorized updating closure records, integrating the reviewed work, and finalizing these handoffs; release to main/tag/milestone closure is a separate remaining step.
+- **Evidence boundary:** Q-16's current-default choice and Q-18's M0 disposition are resolved. The cold-method comparison and numeric M1/end-to-end performance budgets remain open. The instant-search criterion is not passed by this acceptance; proposed D-48 budgets are not promoted to agreed targets. The live-volume path investigation is not an atomic parity proof.
+- **Consequences:** This supersedes the earlier requirement in D-43/D-48 and the stage01 plan to finish cold scans and approve numeric Q-18 budgets before M0 closure. Real-volume indexing/restart, corpus correctness, clean final-head CI and recorded accepted gaps remain required. [Stage02 handoff](stages/stage01/STAGE02-HANDOFF.md) supplies acceptance criteria without silently choosing future contracts or budgets.

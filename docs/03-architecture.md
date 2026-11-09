@@ -53,7 +53,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 ### 3.1 Initial enumeration (per NTFS volume)
 1. Open the volume handle (`\\.\C:`) — requires elevation (hence the service).
-2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. Which method is the default is Q-16 (owner evidence and decision carried to 5.1/#68). It can also deliver sizes and timestamps from the same pass (stage02).
+2. Enumerate all records with `FSCTL_ENUM_USN_DATA` → `(FRN, parent FRN, name, attributes)`. A raw `$MFT` reader (stage01/2.7, D-43) yields the same raw records from large sequential reads of `$MFT` itself; it is selected by the internal `SourceOptions::enumeration` option (`EnumerationMethod::{UsnApi (default), RawMft}`) and is strict: any loss returns an error and the caller falls back to the USN API. D-50 retains USN as the default; six boot-separated comparisons are deferred to stage02/#68 before reconsidering raw-first selection. It can also deliver sizes and timestamps from the same pass (stage02).
 3. Build the name index: store **(FRN, parent, name)**, not full paths; reconstruct paths on demand by walking parent links to the root.
 4. Feed candidate GIS files (by extension and by folder signature, e.g. `*.gdb` directories) to the dataset grouper.
 
@@ -161,6 +161,12 @@ CREATE VIRTUAL TABLE layer_extents USING rtree(id, minx, maxx, miny, maxy);
 Connection settings: `journal_mode = WAL`, `foreign_keys = ON`, `synchronous = NORMAL`, `temp_store = MEMORY`, `busy_timeout = 5 s`; writers use `BEGIN IMMEDIATE`. Migrations are an append-only list keyed by `PRAGMA user_version`, and a newer version is refused.
 
 Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_mtime, z, x, y, format, data)`.
+
+## M0 closure and resident-service handoff
+
+The implemented CLI reloads and validates the name snapshot and constructs a query pool for every process. Opt-in `query --timings` reports phase durations on stderr while preserving stdout results. Owner warm diagnostics measured approximately 500 ms in snapshot loading/reconstruction and 5 ms in search; this does not satisfy the instant-search target (D-50).
+
+Stage02 #72 must reuse the loaded index, catalog access and dedicated pool across requests, while preserving a fresh consistent catalog read view per query (D-47); a service-long SQLite read transaction is not intended. IPC/concurrency contracts and numeric budgets remain stage02 decisions. Both USN and raw-MFT enumeration currently keep one name per FRN; complete hard-link enumeration, journal updates, name persistence and dataset grouping remain #52. See [handoff acceptance criteria](stages/stage01/STAGE02-HANDOFF.md).
 
 ## 5. Query pipeline
 

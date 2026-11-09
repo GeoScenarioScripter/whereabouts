@@ -1,5 +1,11 @@
 # Stage01 owner V4 handoff to session 5.1
 
+> **Historical wave-4 handoff; current disposition:** owner-volume index/restart and
+> Everything comparisons were subsequently collected by 5.1. D-50 now defers the
+> six cold-boot scans to stage02/#68 and retains USN. The procedures below remain
+> available for that follow-up; they are not current M0 closure prerequisites.
+> See [stage02 acceptance criteria](../stages/stage01/STAGE02-HANDOFF.md).
+
 Software verification in 4.3 is V2. V4 remains a stage-exit requirement. On 2026-11-09 the
 orchestrator found no supplied owner logs, no elevated shell, no running Everything/es.exe,
 and no existing owner benchmark catalog. The workstation last booted on November 4, so no

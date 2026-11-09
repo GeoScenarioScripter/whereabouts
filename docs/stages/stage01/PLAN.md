@@ -2,7 +2,7 @@
 
 **Objective:** prove the risky core before any UI (D-20). A command-line `whereabouts` that enumerates an NTFS volume, keeps up with the USN journal, groups files into datasets, extracts extent/CRS metadata for Shapefile, GeoPackage and GeoTIFF with native readers, stores it in a SQLite catalog with an R*Tree, and answers name + bbox queries — with correctness measured against GDAL as an oracle and speed measured against Everything.
 
-**Status:** planned (2026-10-19). Wave 0 (bootstrap + this plan) done; milestone [`stage01`](https://github.com/GeoScenarioScripter/whereabouts/milestone/1) with issues #1–#17. Wave 1 merged (2026-10-19). Gate G1: go (2026-10-20), with session 2.7 added. Wave 2 merged (2026-10-27). Gate G2: go (2026-10-27). Wave 3 merged and closed (2026-11-08). Wave 4 engineering work merged and closed (2026-11-09); next: 5.1 exit verification, including pending owner V4 evidence (#68).
+**Status:** M0 closure prepared with accepted gaps (2026-11-09, D-50); release audit and release pending. Waves 1–4 and session 5.1 (PR #70, `6cd518a`) are merged. Owner evidence and the timing/path investigation support the closure disposition. Stage02 handoffs are recorded in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md).
 
 Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`, `docs/08-development-workflow.md`.
 
@@ -31,6 +31,10 @@ Read first: `AGENTS.md`, `docs/03-architecture.md`, `docs/04-formats-and-crs.md`
 4. **Correct metadata (V2):** on the committed corpus, oracle agreement meets the committed baseline: native bbox, geometry type and counts agree on ≥ 98% of cases; EPSG identification and WGS84 bbox agreement meet the targets recorded for Q-14. Enforced in CI.
 5. **Clean build (V1):** CI green on Windows + Linux; `cargo deny` green (no GDAL).
 6. **Docs:** Q-14, Q-16, Q-18 resolved in `02-decisions.md`; architecture doc matches the code; retro written; stage02 sketch updated.
+
+### Owner-approved exit disposition (2026-11-09)
+
+D-50 explicitly amends criteria 3 and 6 above: instant CLI startup remains an accepted gap, and numeric M1 budgets remain Open; USN is retained and six cold-boot scans move to stage02. This is acceptance of named gaps, not a passing speed/cold-performance result. Real-volume index/restart and corpus/CI evidence are retained in [5.1](sessions/5.1-exit-verification.md). Final-head CI and integration remain necessary before the separate release step. Earlier wave handoffs below describe their historical requirements; D-50 governs current closure.
 
 ## Gates
 
@@ -316,8 +320,16 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 4.1 | query-and-inspect-cli | #14 | ✅ merged (2026-11-09, V3, PR #66) | [note](sessions/4.1-query-and-inspect-cli.md) |
 | 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
 | 4.3 | benchmarks-and-coverage | #16 | ✅ merged (2026-11-09, V2, PR #67); V4 carried to 5.1/#68 | [note](sessions/4.3-benchmarks-and-coverage.md) |
-| 5.1 | exit-verification | #17 | ⏳ planned | |
+| 5.1 | exit-verification | #17 | ✅ merged (2026-11-09, PR #70); accepted gaps D-50 | [note](sessions/5.1-exit-verification.md) |
 
 ## Stage retro
 
-_(written at stage close)_
+**Keep:** frozen contracts and crate boundaries; bounded native readers and immutable input access; explicit V1–V4 evidence; isolated elevated VHD resilience tests; raw benchmark samples.
+
+**Improve:** prepare Rust/release binaries and Everything before owner measurements, reserve reboot windows in advance, avoid builds during performance runs, distinguish file records from hard-link paths and datasets, and separate resident latency from one-shot CLI startup.
+
+**Plan deltas:** G1 added raw-MFT session 2.7; wave 4 moved owner evidence to 5.1 without waiving it; 5.1 and follow-up measurements exposed startup and path-coverage limits. The owner explicitly accepted these named M0 gaps and deferred cold scans (D-50).
+
+**Carry-forward:** #68 boot-separated enumeration; #72 resident service performance/budgets with #48/#47 optimization; #52 all-link path coverage. Acceptance criteria and evidence are in [STAGE02-HANDOFF.md](STAGE02-HANDOFF.md). No numeric M1 budget or future hard-link contract is selected here.
+
+**Evidence:** 2.866M names and 5,209 datasets in the owner index; 62 committed oracle cases at strict 100% agreement. Warm timing diagnostics isolate approximately 500 ms snapshot load/reconstruction and 5 ms search. CI minutes are unknown; calendar duration is not a work-effort measure. Release/tag/milestone closure remains a separate action.

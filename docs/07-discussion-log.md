@@ -137,7 +137,19 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 15 — M0 closure disposition and stage02 handoffs (2026-11-09)
+
+- **Owner direction:** defer six cold-boot scans, retain USN, carry CLI startup performance into resident-service work, and investigate the file-path count difference. After investigation and timing implementation, the owner requested closure-doc sync, reviewed integration and finalized handoffs; release is a separate step.
+- **Evidence:** 5.1 owner index/restart and Everything comparison are recorded. PR #70 head `0440a41` passed [final-head Windows/Linux, elevated acceptance and policy checks](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42579220164), then merged as `6cd518a`. The timing follow-up isolates approximately 500 ms snapshot load/reconstruction versus 5 ms search.
+- **Count investigation:** 1,454,226 additional Everything paths resolve to snapshot identities; 1,454,224 have multiple current hard links, two may be renames. All 1,836 absent identities have post-snapshot creation times; three snapshot paths are now deleted and four entries are NTFS metadata orphans. Live observations account for the aggregate gap but do not prove atomic parity.
+- **Decision:** D-50 records owner-accepted M0 gaps. Q-16's current default and Q-18's M0 disposition are resolved; future method selection and numeric M1 budgets remain Open. Stage02 #68/#72/#48/#47/#52 retain concrete acceptance criteria in [the handoff](stages/stage01/STAGE02-HANDOFF.md).
+- **Boundary:** final integration/CI is tracked separately from owner acceptance. No main merge, release tag, prerelease or stage milestone closure is claimed by this docs sync.
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).
 - Run name availability checks for Whereabouts.
+
+- **Integration and issue reconciliation:** PR #71 head `f0dfb15` passed [final-head CI](https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42582146914) and merged as `8f14a45`, following PR #70 (`6cd518a`). #26 (ingestion measurement) and #29 (release-enumeration CI) closed with existing evidence; #25 moved to its original stage02 scope. #50 remains an outstanding release-audit item, outside the three accepted gaps. This documentation PR is the final closure-sync integration gate; no main merge, tag, release or stage-milestone closure was performed.
