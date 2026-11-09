@@ -13,11 +13,21 @@ outside its assigned write scope. No frozen contract or production code needs ch
     assert_eq!(md.layers[0].feature_count, Some(2));
     assert!(md.layers[0].native_bounds.is_some());
 },
+"shp_cp437_names" => {
+    let md = result.unwrap();
+    assert_eq!(md.partial.len(), 1);
+    assert!(md.partial[0].contains("CP437"));
+    assert!(md.partial[0].contains("Windows-1252"));
+    assert_eq!(md.layers[0].fields[1].name, "caf‚");
+},
 ```
 
 The current test rejects every unlisted `corrupt` case before checking its actual outcome.
 The new data deliberately has SHX count2 and DBF count1; native extraction correctly reports
 Partial and retains SHX count2. Keep the <64KiB assertion and all existing corrupt expectations.
+The CP437 case verifies D-42/#42's existing unsupported-DOS fallback: GDAL has `café`, native
+has `caf‚` with an explicit Partial diagnostic. The focused oracle test records this known
+disagreement rather than claiming field-name agreement or changing the reader policy.
 
 2. `crates/crs/tests/g2.rs`, prepend this entry to `KNOWN_CORPUS_SKIPS`:
 

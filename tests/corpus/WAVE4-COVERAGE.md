@@ -26,3 +26,7 @@ The stricter 100% native baselines remain in force. CRS defaults enforce D-34's 
 and measured per-format overrides lock in the current 100%. Coverage checks reject missing
 committed data, missing adapters and omitted native-extent/EPSG/WGS84 checks. Only the unfetched
 optional Natural Earth external sample may be skipped.
+
+CP437 field names are an explicit known disagreement under D-42/#42: GDAL decodes `café`,
+native reports `caf‚` with a Partial fallback diagnostic. A focused comparison asserts both
+values and the diagnostic; generic native/CRS rates do not claim field-name agreement.

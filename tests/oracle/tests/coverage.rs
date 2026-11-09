@@ -35,3 +35,53 @@ fn extraction_preserves_transient_and_malformed_diagnostics() {
         assert!(malformed.reason.is_some(), "{}", case.id);
     }
 }
+
+#[test]
+fn cp437_field_name_disagreement_is_explicit_partial_per_d42() {
+    use whereabouts_core::{Format, MemberRole, ReadLimits, ResolvedDataset, ResolvedMember};
+    let corpus = Corpus::load(corpus_dir()).expect("corpus");
+    let case = corpus.case("shp_cp437_names").expect("case");
+    let dir = corpus.case_dir(case);
+    let dataset = ResolvedDataset {
+        format: Format::Shapefile,
+        anchor: dir.join(&case.anchor),
+        sidecars: [
+            ("places.dbf", MemberRole::Dbf),
+            ("places.shx", MemberRole::Shx),
+            ("places.prj", MemberRole::Prj),
+            ("places.cpg", MemberRole::Cpg),
+        ]
+        .into_iter()
+        .map(|(name, role)| ResolvedMember {
+            role,
+            path: dir.join(name),
+        })
+        .collect(),
+    };
+    let extracted = whereabouts_indexer::extract(&dataset, &ReadLimits::default());
+    let golden = corpus.load_expected(case).expect("golden");
+    let actual: Vec<_> = extracted.layers[0]
+        .metadata
+        .fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    let expected: Vec<_> = golden.layers[0]
+        .fields
+        .as_ref()
+        .expect("fields")
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    // D-42/#42 explicitly retain this unsupported DOS-code-page fallback. Do not
+    // count the discrepancy as field-name agreement with GDAL.
+    assert_eq!(expected, ["id", "café"]);
+    assert_eq!(actual, ["id", "caf‚"]);
+    let whereabouts_core::ExtractionStatus::Partial(reason) = extracted.status else {
+        panic!("unsupported non-ASCII encoding must be partial");
+    };
+    assert!(
+        reason.contains("CP437") && reason.contains("Windows-1252"),
+        "{reason}"
+    );
+}
