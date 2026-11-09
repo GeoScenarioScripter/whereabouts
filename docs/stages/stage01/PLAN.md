@@ -311,7 +311,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 2.6 | reader-shapefile | #10 | ✅ done (2026-10-27, V2, PR #33) | [note](sessions/2.6-reader-shapefile.md) |
 | 2.7 | ntfs-mft-reader (added at G1) | #31 | ✅ done (2026-10-27, V3, PR #39; owner V4 on D: requested) | [note](sessions/2.7-ntfs-mft-reader.md) |
 | 3.1 | reader-geopackage | #11 | ✅ done (2026-11-08, V2, PR #57) | [note](sessions/3.1-reader-geopackage.md) |
-| 3.2 | reader-geotiff | #12 | ⏳ planned | |
+| 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
 | 3.3 | index-pipeline | #13 | ⏳ planned | |
 | 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
 | 4.2 | resilience | #15 | ⏳ planned | |
