@@ -48,3 +48,10 @@ separate follow-up; it remains a sketch.
 ```
 
 Each call saves first/repeat outputs to a unique `target/v4-boot-<method>-<repeat>` directory. The helper checks boot uniqueness, not actual absence of earlier disk activity; the operator must record that condition. Failed attempts reserve the boot too. The owner deferred these runs to stage02/#68; the helper is retained for that work. It is not an M0 closure prerequisite under D-50.
+
+## Release integration
+
+The develop-to-main release PR exposed main's historical CLI-stub formatting
+commit (#18). The reconciliation preserves the completed develop CLI verbatim
+and merges the main ancestry through a separate integration PR. Production
+code and packaged binary inputs remain identical to the audited 8c74046 tree.
