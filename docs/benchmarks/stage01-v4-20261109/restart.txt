@@ -1,0 +1,3 @@
+Opening D:; restoring snapshot or enumerating the volume…
+Resumed: 2865961 names, 5209 datasets; 2 events, 0 extractions, 0 retries pending
+exit=0

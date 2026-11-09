@@ -1,0 +1,44 @@
+   Compiling serde v1.0.229
+   Compiling tracing-core v0.1.36
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling either v1.19.0
+   Compiling getrandom v0.4.3
+   Compiling windows-sys v0.61.2
+   Compiling rayon v1.12.0
+   Compiling tempfile v3.27.0
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling thiserror v2.0.21
+   Compiling proj4rs v0.2.1
+   Compiling windows-interface v0.59.3
+   Compiling windows-implement v0.60.2
+   Compiling tracing-attributes v0.1.31
+   Compiling windows-core v0.62.2
+   Compiling tracing v0.1.44
+   Compiling windows-numerics v0.3.1
+   Compiling windows-future v0.3.2
+   Compiling windows-collections v0.3.2
+   Compiling whereabouts-core v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\core)
+   Compiling windows v0.62.2
+   Compiling whereabouts-source v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\source)
+   Compiling whereabouts-crs v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\crs)
+   Compiling whereabouts-catalog v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\catalog)
+   Compiling whereabouts-nameindex v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\nameindex)
+   Compiling whereabouts-datasets v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\datasets)
+   Compiling whereabouts-readers v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\readers)
+   Compiling whereabouts-ntfs v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\ntfs)
+   Compiling whereabouts-indexer v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\crates\indexer)
+   Compiling whereabouts-oracle v0.1.0 (D:\code\whereabouts\.worktrees\exit-verification\tests\oracle)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.03s
+     Running tests\agreement.rs (target\debug\deps\agreement-db63bbfb16626f24.exe)
+## Oracle agreement
+
+| format | cases | compared | skipped | status | layers | geometry_type | feature_count | native_extent | raster | epsg | wgs84_extent |
+|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| geopackage | 14 | 14 | 0 | 14/14 (100.0%) | 12/12 (100.0%) | 11/11 (100.0%) | 13/13 (100.0%) | 14/14 (100.0%) | — | 14/14 (100.0%) | 14/14 (100.0%) |
+| geotiff | 17 | 17 | 0 | 17/17 (100.0%) | 15/15 (100.0%) | — | — | 15/15 (100.0%) | 15/15 (100.0%) | 15/15 (100.0%) | 15/15 (100.0%) |
+| shapefile | 32 | 31 | 1 data missing | 31/31 (100.0%) | 27/27 (100.0%) | 26/26 (100.0%) | 27/27 (100.0%) | 26/26 (100.0%) | — | 26/26 (100.0%) | 26/26 (100.0%) |
+
+result: PASS (63 cases, 3 adapters registered)
+
