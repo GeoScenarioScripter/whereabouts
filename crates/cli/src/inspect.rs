@@ -29,14 +29,16 @@ pub fn inspect(path: &Path) -> anyhow::Result<Vec<DatasetRecord>> {
     let root = Frn(1);
     let mut pending = vec![(parent.to_path_buf(), root)];
     let mut next = 2_u64;
+    let mut visited = 0;
     let mut selected = None;
     while let Some((dir, parent_id)) = pending.pop() {
         for entry in fs::read_dir(&dir).with_context(|| format!("cannot list {}", dir.display()))? {
             let entry = entry?;
             ensure!(
-                paths.len() < MAX_ENTRIES,
+                visited < MAX_ENTRIES,
                 "inspect directory exceeds {MAX_ENTRIES} entries"
             );
+            visited += 1; // Skipped symlink entries consume the discovery budget too.
             let ty = entry.file_type()?;
             // Never recurse through symlinks/junctions. Readers receive only ordinary entries.
             if ty.is_symlink() {
