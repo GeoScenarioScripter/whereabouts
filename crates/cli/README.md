@@ -11,7 +11,7 @@ whereabouts query roads --db catalog.db --format shp --epsg 4326 --bbox 170,-20,
 volume access or elevation. Query reads the catalog and `<db>.names`; it does not
 refresh the index. Run `index` again to pick up changes. A snapshot with a missing,
 corrupt, ambiguous, or mismatched checkpoint fails with a diagnostic rather than
-mixing states. If the indexer commits while a query runs, retry after it catches up.
+mixing states. If the source checkpoint advances while a query runs, retry after it catches up.
 For a catalog with multiple sources, provide each source's distinct `--snapshot`
 and, if checkpoint matching is ambiguous, `--volume-id` (the catalog's numeric ID).
 
