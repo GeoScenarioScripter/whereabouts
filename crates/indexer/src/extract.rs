@@ -80,12 +80,14 @@ fn enrich(metadata: DatasetMetadata) -> ExtractedMetadata {
         if let Some(definition) = &layer.metadata.crs {
             CACHE.with_borrow_mut(|cache| {
                 if !cache.contains_key(definition) {
-                    let bytes: usize = cache.keys().map(|d| d.text.len()).sum();
-                    if cache.len() >= 128 || bytes.saturating_add(definition.text.len()) > 1 << 20 {
+                    let bytes: usize = cache.keys().map(definition_bytes).sum();
+                    if cache.len() >= 128
+                        || bytes.saturating_add(definition_bytes(definition)) > 1 << 20
+                    {
                         cache.clear();
                     }
                     // Oversized definitions are processed, but never retained in the cache.
-                    if definition.text.len() <= 1 << 20 {
+                    if definition_bytes(definition) <= 1 << 20 {
                         cache.insert(definition.clone(), prepare(definition));
                     }
                 }
@@ -136,6 +138,15 @@ fn enrich(metadata: DatasetMetadata) -> ExtractedMetadata {
         layers,
         retry: false,
     }
+}
+
+fn definition_bytes(definition: &CrsDefinition) -> usize {
+    definition.text.len().saturating_add(
+        definition
+            .authority
+            .as_ref()
+            .map_or(0, |a| a.authority.len().saturating_add(a.code.len())),
+    )
 }
 
 #[cfg(test)]
