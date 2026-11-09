@@ -255,7 +255,7 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Scope clarification:** 4.3 may also edit `tests/corpus/**` for the previously assigned #28/#43/#44 cases and wave 3 reader follow-ups; corpus changes require the oracle-golden drift check. This resolves the earlier hand-off/write-scope mismatch. 4.2 may update the existing CI elevated invocation only if its new test harness needs it, coordinated with 4.1; 4.1 owns every CLI change.
 
 #### 4.1 — query-and-inspect-cli
-- **Write scope:** `crates/query/**`, `crates/cli/**`.
+- **Write scope:** `crates/query/**`, `crates/cli/**`; at wave 4 review, minimal additive `crates/catalog/**` read-snapshot and lightweight ranking-summary APIs/tests authorized to prevent mixed query results during metadata-only retries and pre-limit full-layer hydration (D-47).
 - **Deliverables:** `whereabouts inspect <path>` (group + extract a single path without an index — the debugging tool); `whereabouts query "<text>" [--bbox minx,miny,maxx,maxy] [--format …] [--epsg N] [--limit N] [--json]`: name scan → member FRN → dataset, ∩ R*Tree bbox, simple ordering (exact > prefix > substring, then mtime); loads the snapshot instead of re-enumerating; table and JSON output.
 - **Acceptance (V3):** CLI integration tests on the VHD volume; startup-to-first-result time recorded.
 
@@ -264,16 +264,16 @@ Each spec gives: **Reads**, **Write scope**, **Deliverables**, **Acceptance** (w
 - **Deliverables + acceptance (V3), each as a CI test on the VHD volume:** journal wrap (tiny journal via `fsutil usn createjournal m=… a=…` plus file churn) → full rescan, catalog consistent; journal deleted/recreated → rescan; process killed mid-index → restart converges; corrupt snapshot → detected → rescan; catalog/snapshot checkpoint mismatch → reconcile; Whereabouts' own reads produce no USN events for indexed files; hard-link behaviour documented.
 
 #### 4.3 — benchmarks-and-coverage
-- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`.
+- **Write scope:** `tests/oracle/**`, `tests/corpus/**` (hand-off fixtures; oracle-golden check required), `benches/**` (new, if needed), `docs/benchmarks/**`, `scripts/bench/**`. Wave 4 review also authorizes test-only corpus expectation updates in `crates/readers/tests/shapefile_corpus.rs` and `crates/crs/tests/g2.rs`; also authorizes the narrow MultiPatch declared-layer mapping/regression in `crates/readers/src/shapefile.rs` and core rustdoc clarification (D-49), plus fixture attribution. Production CRS and core type contracts remain unchanged.
 - **Deliverables:** oracle switched to the full `indexer::extract` path (EPSG + WGS84 comparisons), with `baseline.toml` raised to the measured numbers; `scripts/bench/bench-vs-everything.ps1` (uses `es.exe` if installed) for the owner's machine; `docs/benchmarks/stage01.md` with enumeration time, index memory per million entries, query latency p50/p95/p99 by term length, catalog throughput, oracle agreement per format; enforcement of Q-14 targets already agreed in D-34; **proposed answers** to Q-16 and Q-18 (as *Decisions proposed*). Q-16 compares USN enumeration against 2.7's raw `$MFT` reader, cold and warm.
-- **Acceptance (V2 in CI + V4 numbers from the owner's run).**
+- **Acceptance:** software/oracle delivery requires V2 in CI. **Explicit wave-close handoff (2026-11-09):** the originally required V4 owner-volume/Everything measurements are unverified and move to 5.1 stage-exit verification. The owner confirmed no existing logs; the session is not OS-elevated and no Everything CLI/catalog was found in the checked locations. This permits engineering wave closure, not a V4 pass or stage completion. Q-16/Q-18 stay Open (D-48).
 
 ### Wave 5 — exit
 
 #### 5.1 — exit-verification
 - **Write scope:** `docs/stages/stage01/**`, `docs/benchmarks/**`, small fixes anywhere (each listed in the note; anything larger becomes a follow-up).
 - **Deliverables:** an exit-criteria checklist with evidence links (CI runs, benchmark doc, the owner's V4 run output); a proposed docs sync (architecture deltas, decisions, open questions) for the orchestrator to apply; a retro draft (what worked, what to change for stage02).
-- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy.
+- **Acceptance:** every exit criterion is evidenced, or explicitly marked failed with a proposed remedy. **Wave 4 carry-forward:** collect V4 owner-volume USN/raw cold and warm measurements, a populated real-data catalog/snapshot and Everything comparison using `scripts/bench/bench-vs-everything.ps1`; record raw evidence, resolve Q-16/Q-18 with the owner and verify real-volume indexing/query exit criteria. V1–V3 and synthetic benchmarks do not satisfy these requirements. Stage closure cannot claim completion until they are evidenced.
 
 Then the orchestrator runs `/close-stage` (retro, docs sync, `develop → main`, tag `v0.1.0`) and `/plan-stage` for stage02.
 
@@ -314,7 +314,7 @@ Session status is tracked in GitHub (milestone `stage01`, one issue per session)
 | 3.2 | reader-geotiff | #12 | ✅ done (2026-11-08, V2, PR #59) | [note](sessions/3.2-reader-geotiff.md) |
 | 3.3 | index-pipeline | #13 | ✅ done (2026-11-08, V3, PR #58) | [note](sessions/3.3-index-pipeline.md) |
 | 4.1 | query-and-inspect-cli | #14 | ⏳ planned | |
-| 4.2 | resilience | #15 | ⏳ planned | |
+| 4.2 | resilience | #15 | ✅ merged (2026-11-09, V3, PR #65) | [note](sessions/4.2-resilience.md) |
 | 4.3 | benchmarks-and-coverage | #16 | ⏳ planned | |
 | 5.1 | exit-verification | #17 | ⏳ planned | |
 

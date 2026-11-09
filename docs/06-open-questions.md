@@ -6,6 +6,9 @@ When resolved, record the answer in `02-decisions.md` and remove or strike it he
 ## Wave 3 close (2026-11-08)
 
 The reader and pipeline implementation conventions are recorded as Proposed in D-44–D-46. No Open product question is silently resolved by these changes. Q-14 remains resolved by D-34; wave 4.3 is tasked with enforcing its EPSG/WGS84 targets through the shared extraction path. Q-16 (default enumeration method) and Q-18 (performance targets) remain Open until the wave 4.3 evidence and owner decision. Wave 3 adds GeoPackage/GeoTIFF bounded-read and full-pipeline validation, not owner-volume performance evidence.
+## Wave 4 engineering close (2026-11-09)
+
+D-47 records consistent query snapshots and temporary inspect identities. D-48 records proposed performance budgets without resolving Q-16/Q-18; D-49 corrects the MultiPatch declared-layer convention. Q-14 is enforced through the common extractor, with strict measured per-format baselines. The owner confirmed there are no existing V4 logs. Required owner-volume cold/warm enumeration and Everything comparisons are carried explicitly to 5.1 / [#68](https://github.com/GeoScenarioScripter/whereabouts/issues/68); stage exit criteria remain unchanged and V4 is **not verified**. CI and synthetic component results are not substitutes.
 ## Product & business
 
 | # | Question | Notes / default |

@@ -40,7 +40,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 | `whereabouts-readers` | Reader registry `READERS` (`read`, `reader_for`), bounded `io::SourceFile` with a per-dataset budget, `measure` meter, Shapefile/lone-DBF (D-42), bounded native SQLite GeoPackage (D-44), and TIFF/BigTIFF/COG readers (D-45); later full-geometry reads for previews |
 | `whereabouts-crs` | WKT1/ESRI WKT/WKT2/PROJJSON/GeoKeys parsing (D-45), embedded EPSG table generated from `proj.db`, `identify`, `resolve`, `transform_bounds`/`Transformer` (proj4rs without default features plus native inverses) (D-40) |
 | `whereabouts-catalog` | SQLite (WAL, bundled build, D-35) schema v1 with `PRAGMA user_version` migrations, R*Tree of WGS84 parts, `volumes` with checkpoints, atomic dataset upsert/delete, `find_datasets` filters (D-41) |
-| `whereabouts-query` | Search syntax parser → name-index scan + catalog query plan |
+| `whereabouts-query` | Dedicated rayon query pool; literal folded name scan → member FRNs → datasets, catalog format/EPSG/R*Tree filters, exact/prefix/substring ranking, orphan suppression and limit after deduplication; shared catalog read snapshot (D-47) |
 | `whereabouts-tiles` | MVT encoder, raster warping, tile cache |
 | `whereabouts-ipc` | Named-pipe protocol (serde messages) |
 | `whereabouts-service` | The elevated indexer service binary |
@@ -89,7 +89,7 @@ Crates live in `crates/<short-name>` (e.g. `crates/nameindex` → package `where
 
 Transient extraction failures retain the stored record and enter a durable retry queue (D-36/D-46). Catalog records and checkpoint commit before the name snapshot; a checkpoint-bound `.retry` ledger is synced first and shrunk last. Restart resumes matching state, or rescans on corrupt/mismatched state. Catalog/snapshot output paths are excluded from grouping, and output-only journal batches advance the in-memory cursor without another output write. Journal creation remains explicit; unavailable history is an error rather than a rescan loop.
 
-The CLI supports `index --volume X: [--db PATH] [--watch]`, with progress on stderr; query and inspect are wave 4.1. Windows CI invokes ignored CLI/indexer VHD acceptance tests as well as the NTFS tests. This is a CLI pipeline; the service process shown above comes later.
+The CLI supports `index --volume X: [--db PATH] [--watch]`, with progress on stderr; query and inspect are implemented in wave 4.1 (D-47). Windows CI invokes ignored CLI/indexer VHD acceptance tests as well as the NTFS tests. This is a CLI pipeline; the service process shown above comes later.
 
 ## 4. Catalog schema (sketch)
 
@@ -169,6 +169,12 @@ Tile cache lives in a separate SQLite file: `tiles(dataset_id, layer_id, source_
 3. Spatial term (map extent, drawn box, or gazetteer place) → `layer_extents` R*Tree filter → exact intersection against `footprint` with the `geo` crate (D-16).
 4. Attribute filters → SQL on `datasets`/`layers`/`rasters`/`crs`.
 5. Intersect, rank (name relevance, spatial relevance such as overlap ratio, recency), page, stream to UI.
+
+**Stage01 implementation (wave 4):** CLI `query` loads a checksummed name snapshot and a read-only catalog, requires an unambiguous matching volume/checkpoint, and uses one catalog read view for checkpoint selection, filtering and record materialization. Metadata-only retries cannot change the rows halfway through that view (D-47). Literal case-insensitive names map through member FRNs to datasets; format, EPSG and bbox constraints retain same-layer semantics and antimeridian handling. Selective searches use indexed member lookup; broad searches work from lightweight catalog summaries. Full layer metadata is hydrated only for the final selected IDs. Ranking is exact > prefix > substring, then newest mtime and stable ID, with limit applied after deduplication. Orphan/cyclic anchors and matching orphan members are hidden.
+
+`inspect <path>` builds a bounded directory view, uses the same grouper and `indexer::extract`, and creates no catalog or input sidecars. Folder signatures determine containers; a `.gdb` suffix alone is insufficient. Discovery IDs are temporary. Query and inspect emit table or JSON output; query syntax (Q-11), spatial ranking (Q-17), footprints and the resident service remain later work.
+
+Wave 4.2 verifies journal wrap/recreation, process death, persistence faults and corrupt/mismatched state on isolated VHDs, including catalog/R*Tree consistency and preservation of metadata during transient GeoPackage transactions. It also checks raw USN records to prove reads do not write indexed files. M0 hard-link alias completeness remains limited (D-38/#52).
 
 Goal: typing feels instant; spatial queries should not noticeably slow the result list.
 

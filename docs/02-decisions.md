@@ -57,6 +57,9 @@ New decisions are appended with status **Proposed**. Do not renumber.
 | D-44 | GeoPackage metadata uses bounded native SQLite page reads; active transactions defer extraction | Proposed |
 | D-45 | GeoTIFF metadata limits and raw GeoKeys JSON representation | Proposed |
 | D-46 | Pipeline retries persist separately; inconsistent restart state triggers a rescan | Proposed |
+| D-47 | Queries use one catalog read snapshot; inspect identities are temporary | Proposed |
+| D-48 | Separate name-index performance budgets from process startup and total pipeline memory | Proposed |
+| D-49 | MultiPatch reports an unknown declared layer geometry, without scanning patches | Proposed |
 
 ---
 
@@ -428,3 +431,24 @@ New decisions are appended with status **Proposed**. Do not renumber.
 - **Decision:** Persist retry IDs in a versioned, checkpoint-bound `<snapshot>.retry` ledger, bounded to 64 MiB and tied to source/volume/root identity. Write and sync the ledger before catalog changes, commit catalog records and checkpoint atomically, persist the name snapshot, then shrink the ledger. A catalog/snapshot/retry-state disagreement triggers a full rescan. Transient failures preserve stored records; new failures remain visible with error status and queued retry. No journal is created implicitly; unavailable history after enumeration is reported explicitly.
 - **Rationale:** A separate durable queue preserves the frozen dataset/layer invariants and survives restart. Conservative rescan is simpler to validate than replaying inconsistent persistent generations.
 - **Consequences:** Crashes between persistence steps can cost a rescan. Wave 4.2 tests crash and mismatch paths, and 4.3 measures persistence/queue overhead. Query consumers use the catalog plus the name snapshot; callers sharing a catalog across sources need distinct snapshot paths. Q-16 remains Open; this does not select raw MFT as the default.
+
+## D-47 — Consistent catalog queries and temporary inspect identities
+- **Status:** Proposed
+- **Context:** stage01/4.1 ([note](stages/stage01/sessions/4.1-query-and-inspect-cli.md)). A metadata retry can commit new layer facts without changing the source checkpoint, so checking the checkpoint alone cannot detect a mixed catalog view.
+- **Decision:** Execute volume/checkpoint selection and all catalog query reads inside one read snapshot. The additive `Catalog::read_snapshot` API keeps existing method signatures intact and nested calls share the same view. Lightweight catalog summaries supply identity, name, mtime and member FRNs for ranking; full layer metadata is loaded only after the result limit. Reject name snapshots that match no catalog volume or ambiguously match several unless the caller selects a volume explicitly. Queries rank exact names before prefixes and substrings, then mtime and dataset identity; this does not choose the deferred Q-17 spatial ranking model. Inspect uses temporary volume/discovery identities rather than pretending its records have persistent catalog IDs; extraction errors are status-bearing records, while setup/command failures use a nonzero exit status.
+- **Rationale:** A consistent read view prevents a row selected by one EPSG/bbox from being returned with different metadata after a concurrent retry. Explicit snapshot selection avoids mixing sources. Temporary inspect IDs allow reuse of shared extraction without creating a catalog.
+- **Consequences:** The read view may hold a WAL reader while a query runs, and concurrent commits appear on the next query. Core/source contracts and stored schemas remain unchanged; the catalog helper is an explicitly reviewed API addition. Q-11 syntax and Q-17 spatial relevance remain deferred. Snapshot loading and summary scanning remain separate performance costs; pre-limit full-layer hydration is eliminated, with large-catalog measurements recorded in the session note.
+
+## D-48 — Performance evidence and proposed component budgets
+- **Status:** Proposed
+- **Context:** stage01/4.1 and 4.3 ([benchmark evidence](benchmarks/stage01.md)); Q-18 requires targets grounded in measurements, and Q-16 still needs owner-volume cold/warm comparison.
+- **Decision:** Report compact name-index heap, total pipeline memory, reused query latency and process-to-first-result latency separately. Candidate name-only budgets are about 100 B per entry and p95 below 50 ms for terms of at least two characters at five million entries. These remain proposals, not accepted product targets. Keep the current USN enumeration default while evaluating D-43's raw-first-cold/USN-fallback candidate; do not choose it from synthetic or cloud-disk timings.
+- **Rationale:** A compact index does not include the grouping tree, extraction caches or catalog. A resident Everything process and a fresh Whereabouts CLI have different startup work and result units. Shared-host component runs cannot establish uncontended owner-workstation acceptance.
+- **Consequences:** Q-16 and Q-18 stay Open. Missing owner-machine cold/warm and Everything evidence remains an explicit stage-exit requirement in 5.1; no V4 pass is inferred from CI or synthetic measurements. The benchmark script retains raw samples, environment and cache-state labels for reproducible review. Stage completion still requires the owner evidence and decisions.
+
+## D-49 — MultiPatch declared layer geometry
+- **Status:** Proposed
+- **Context:** The new stage01/4.3 pinned-GDAL MultiPatch fixture exposed the reader's unconditional `PolyhedralSurface Z` label. [GDAL RFC 64](https://gdal.org/en/stable/development/rfc/rfc64_triangle_polyhedralsurface_tin.html) specifies an Unknown layer type; individual patches can become TINs, collections and other surface representations.
+- **Decision:** For shapefile shape type 31, metadata reports the unconstrained `Geometry` declared layer type (normalized to GDAL's `Unknown` name by the oracle), with the dimensional flags of that declaration. These flags do not assert that the underlying patches lack Z. Preserve the header's native bounds, feature count and CRS; do not scan patch geometry solely to infer a more specific layer type.
+- **Rationale:** A MultiPatch header cannot justify declaring every feature a polyhedral surface. Matching the declared-layer convention corrects an overclaim while keeping extraction bounded; the oracle's strict geometry baseline does not need an exemption or lower threshold.
+- **Consequences:** This changes the reader's metadata convention for MultiPatch, with a focused regression and pinned GDAL fixture. It adds no core enum variant, changes no signature and does not implement full geometry decoding. Future preview/geometry readers may report richer per-feature types.

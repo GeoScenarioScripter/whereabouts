@@ -80,6 +80,8 @@ Unidentified/unsupported CRS: keep native bounds, mark `crs_status = unknown`, e
 - Track a per-format agreement rate; regressions fail the build.
 - GDAL is **dev/CI-only** here — it is never linked into the core binary.
 
+**Wave 4 verification:** every native adapter uses the pipeline's `indexer::extract` path for CRS/EPSG/WGS84 as well as native metadata. Committed cases must be present and compared by registered adapters. Retryable I/O errors cannot count as successful corrupt-input handling, and a missing native raster resolution cannot pass against a present golden value. Per-format native/CRS baselines retain measured 1.0 rates, above D-34's global 0.98 CRS floor. Known CP437 field-name fallback remains explicitly Partial (D-42/#42), separately tested rather than hidden in generic geometry/bounds rates. MultiPatch reports the unknown declared layer type rather than assuming PolyhedralSurface (D-49).
+
 ## 6. Preview readiness by format (for the roadmap)
 
 | Format | Full read for previews (native) |

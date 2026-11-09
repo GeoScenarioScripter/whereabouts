@@ -124,6 +124,17 @@ First session: 2026-10-19.
 
 ---
 
+## Thread 14 — stage01 wave 4 engineering close (2026-11-09)
+- **Request (owner):** close the gaps, merge 4.2 → 4.1 → 4.3 and finish wave 4. The orchestrator continued independent reviews and authorized the narrow cross-crate fixes needed for complete integration.
+- **Resilience:** PR #65 independently reviewed with no remaining findings; real tiny-journal wrap/recreation, synchronized killed-child scenarios, nine persistent-state faults, retry preservation, raw-USN no-write checks and hard-link behavior are evidenced at V3. Merge `43d35e6`; final-head CI: <https://github.com/GeoScenarioScripter/whereabouts/actions/runs/42563077533>.
+- **Query review:** checking the source checkpoint alone cannot detect metadata-only retry commits. The additive catalog read-snapshot API keeps checkpoint matching, filter selection and returned rows in one view; nested/error/panic cleanup and concurrent-writer regressions cover it (D-47). A larger 100k-dataset benchmark exposed seconds of work from full layer hydration before limit; lightweight summaries now support ranking first and loading only selected records. Baseline and updated measurements are recorded separately in the 4.1 note.
+- **Oracle/corpus review:** authorized explicit corpus-expectation updates rather than weakening tests. Review also corrected nearest-rank quantile indexing and a raster check that could overlook missing native resolution. Lone DBF, MultiPatch and SBN coverage close the previously reported fixture gaps. MultiPatch's over-specific PolyhedralSurface label is corrected to the unknown declared-layer convention, with semantic Geometry/Unknown naming normalization and unchanged strict geometry gates (D-49).
+- **Decisions:** D-47 (query consistency/identity conventions), D-48 (separate component budgets and unverified owner targets), D-49 (MultiPatch declared layer) are Proposed. Existing core/source type signatures and storage schema are unchanged; catalog read-snapshot/summary methods are explicitly flagged API additions. Q-11/Q-17 remain deferred and Q-16/Q-18 remain Open; Q-14's agreed thresholds are enforced through shared extraction.
+- **Verification boundary:** the owner confirmed no existing V4 logs. The session is not Windows-elevated and found no Everything CLI/process or populated benchmark catalog in checked locations; boot-separated cold scans cannot be inferred from current runs. The original 4.3 V4 obligation is explicitly carried to 5.1 / [#68](https://github.com/GeoScenarioScripter/whereabouts/issues/68). This closes software delivery, not real-machine acceptance. Stage exit requirements are unchanged; no V4 pass, enumeration-default decision or Q-18 target approval is claimed.
+- **Next:** stage01/5.1 verifies the full exit checklist, collects owner evidence, resolves Q-16/Q-18 with the owner and prepares the stage retro. No additional owner gate is defined immediately after wave 4. `main` and the stage release remain untouched until stage closure.
+
+---
+
 ## Suggested next steps (from the discussion — superseded by the stage01 plan)
 - Scaffold the Rust workspace and M0 CLI indexer (ntfs, nameindex, datasets, readers for SHP/GPKG/GeoTIFF, crs, catalog, GDAL-diff harness).
 - Sketch the local tile server (Tauri custom protocol, MVT encoder, tile cache schema).
