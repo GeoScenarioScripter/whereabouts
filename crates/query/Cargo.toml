@@ -16,3 +16,4 @@ workspace = true
 whereabouts-core.workspace = true
 whereabouts-nameindex.workspace = true
 whereabouts-catalog.workspace = true
+rayon.workspace = true

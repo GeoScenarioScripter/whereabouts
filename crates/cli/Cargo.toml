@@ -14,6 +14,7 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+serde_json.workspace = true
 clap.workspace = true
 tracing-subscriber.workspace = true
 whereabouts-core.workspace = true
@@ -28,6 +29,7 @@ whereabouts-catalog.workspace = true
 whereabouts-query.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 serde_json.workspace = true
 whereabouts-ntfs = { workspace = true, features = ["test-fixtures"] }
 

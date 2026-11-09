@@ -110,6 +110,77 @@ fn corpus_full_index_restart_and_prj_edit() {
         .map(|id| catalog.get_dataset(*id).unwrap().unwrap())
         .collect();
     drop(catalog);
+    // Each command is a fresh unprivileged-style process consuming persisted state.
+    // Query does not enumerate; member-only names must return their owning datasets.
+    let query = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
+            .arg("query")
+            .args(args)
+            .arg("--json")
+            .arg("--db")
+            .arg(&db)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<Vec<whereabouts_core::DatasetRecord>>(&output.stdout).unwrap()
+    };
+    assert_eq!(query(&[""]).len(), 4);
+    let sidecars = query(&["points.prj"]);
+    assert_eq!(sidecars.len(), 2);
+    assert!(
+        sidecars
+            .iter()
+            .all(|r| r.dataset.format() == whereabouts_core::Format::Shapefile)
+    );
+    assert_eq!(query(&["", "--format", "gpkg"]).len(), 1);
+    assert_eq!(query(&["", "--format", "gtiff"]).len(), 1);
+    assert_eq!(query(&["", "--limit", "1"]).len(), 1);
+    assert!(query(&["", "--bbox", "170,-5,-170,5"]).is_empty());
+    for row in &before {
+        let output = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
+            .arg("inspect")
+            .arg(&row.primary_path)
+            .arg("--json")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let inspected: Vec<whereabouts_core::DatasetRecord> =
+            serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(inspected.len(), 1);
+        assert_eq!(inspected[0].layers, row.layers);
+        assert_eq!(inspected[0].status, row.status);
+    }
+    {
+        use std::io::{BufRead, Read};
+        let started = Instant::now();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_whereabouts"))
+            .args(["query", "points", "--db"])
+            .arg(&db)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        stdout.read_line(&mut line).unwrap(); // Header is not a result.
+        line.clear();
+        assert!(stdout.read_line(&mut line).unwrap() > 0);
+        let first = started.elapsed();
+        stdout.read_to_end(&mut Vec::new()).unwrap();
+        assert!(child.wait_with_output().unwrap().status.success());
+        eprintln!(
+            "[query-vhd] process startup to first dataset row: {:.3} ms (debug, 4 corpus datasets)",
+            first.as_secs_f64() * 1000.
+        );
+    }
     // The first process is stopped: a sidecar changes while no indexer is running.
     let path = volume.path("a/points.prj");
     let mut prj = fs::read_to_string(&path).unwrap();
