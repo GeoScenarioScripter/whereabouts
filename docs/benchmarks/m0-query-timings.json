@@ -1,0 +1,482 @@
+{
+  "date": "2026-11-09",
+  "base_commit": "dffec7c",
+  "binary_sha256": "7f1017ac6dd29ba6a21174f1453c29f2642a908a5ffbd26910177ece71736661",
+  "snapshot_bytes": 120295918,
+  "method": "Release, road, JSON; one discarded warmup per mode; 10 samples per mode, alternating timed/plain order, zero-limit after each pair; subprocess capture includes process exit; background activity uncontrolled; no cold-boot claim. stdout bytes agree for every timed/plain pair.",
+  "summary": {
+    "limit_0_timings_True": {
+      "wall_median_ms": 556.3263001386076,
+      "query_total_median_ms": 529.7192,
+      "phase_medians_ms": {
+        "catalog_open": 0.97565,
+        "checkpoint_validation": 0.2974,
+        "output": 0.03925,
+        "pool_init": 0.33144999999999997,
+        "query_cleanup": 0.016,
+        "search": 0.004,
+        "snapshot_load": 509.47444999999993,
+        "teardown": 19.29325
+      }
+    },
+    "limit_100_timings_True": {
+      "wall_median_ms": 551.9534000195563,
+      "query_total_median_ms": 525.5500999999999,
+      "phase_medians_ms": {
+        "catalog_open": 0.9767000000000001,
+        "checkpoint_validation": 0.29885,
+        "output": 0.35455000000000003,
+        "pool_init": 0.32185,
+        "query_cleanup": 0.0401,
+        "search": 5.17365,
+        "snapshot_load": 499.5893,
+        "teardown": 18.9164
+      }
+    },
+    "limit_100_timings_False": {
+      "wall_median_ms": 549.9330500606447
+    }
+  },
+  "samples": [
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 565.8215000294149,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9403,
+          "checkpoint_validation": 0.2984,
+          "output": 0.3501,
+          "pool_init": 0.3024,
+          "query_cleanup": 0.0386,
+          "search": 5.6480999999999995,
+          "snapshot_load": 510.54869999999994,
+          "teardown": 19.803
+        },
+        "query_total_ms": 537.9296
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 542.1254998072982,
+      "report": null
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 566.5131998248398,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9839,
+          "checkpoint_validation": 0.2956,
+          "output": 0.0405,
+          "pool_init": 0.3279,
+          "query_cleanup": 0.0524,
+          "search": 0.0033,
+          "snapshot_load": 518.4674,
+          "teardown": 20.303600000000003
+        },
+        "query_total_ms": 540.4746
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 538.9978000894189,
+      "report": null
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 572.9022999294102,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9625,
+          "checkpoint_validation": 0.2993,
+          "output": 0.36860000000000004,
+          "pool_init": 0.3435,
+          "query_cleanup": 0.0384,
+          "search": 5.5287,
+          "snapshot_load": 518.1841000000001,
+          "teardown": 21.765
+        },
+        "query_total_ms": 547.4901
+      }
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 565.4838001355529,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9359999999999999,
+          "checkpoint_validation": 0.3497,
+          "output": 0.0571,
+          "pool_init": 0.5,
+          "query_cleanup": 0.034999999999999996,
+          "search": 0.0049,
+          "snapshot_load": 516.9498,
+          "teardown": 19.1619
+        },
+        "query_total_ms": 537.9943999999999
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 551.1137000285089,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9375,
+          "checkpoint_validation": 0.4041,
+          "output": 0.41100000000000003,
+          "pool_init": 0.33290000000000003,
+          "query_cleanup": 0.0435,
+          "search": 4.931299999999999,
+          "snapshot_load": 498.6589,
+          "teardown": 18.865199999999998
+        },
+        "query_total_ms": 524.5844
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 567.0396001078188,
+      "report": null
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 533.8336997665465,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9008,
+          "checkpoint_validation": 0.27490000000000003,
+          "output": 0.041,
+          "pool_init": 0.3029,
+          "query_cleanup": 0.0129,
+          "search": 0.003,
+          "snapshot_load": 486.4987,
+          "teardown": 18.4476
+        },
+        "query_total_ms": 506.48179999999996
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 526.3077998533845,
+      "report": null
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 539.8577000014484,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.0245,
+          "checkpoint_validation": 0.2941,
+          "output": 0.2886,
+          "pool_init": 0.2961,
+          "query_cleanup": 0.0414,
+          "search": 5.3759999999999994,
+          "snapshot_load": 487.4805,
+          "teardown": 18.116600000000002
+        },
+        "query_total_ms": 512.9177999999999
+      }
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 555.2872000262141,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.0276,
+          "checkpoint_validation": 0.3033,
+          "output": 0.032100000000000004,
+          "pool_init": 0.33149999999999996,
+          "query_cleanup": 0.016900000000000002,
+          "search": 0.0782,
+          "snapshot_load": 508.2329,
+          "teardown": 18.9662
+        },
+        "query_total_ms": 528.9887
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 583.8713003322482,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.8949,
+          "checkpoint_validation": 0.2922,
+          "output": 0.3071,
+          "pool_init": 0.3108,
+          "query_cleanup": 0.036199999999999996,
+          "search": 4.851,
+          "snapshot_load": 531.7138,
+          "teardown": 18.590200000000003
+        },
+        "query_total_ms": 556.9962
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 556.5667999908328,
+      "report": null
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 557.3654002510011,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9043,
+          "checkpoint_validation": 0.2985,
+          "output": 0.0322,
+          "pool_init": 0.294,
+          "query_cleanup": 0.013,
+          "search": 0.0035,
+          "snapshot_load": 510.71599999999995,
+          "teardown": 18.188200000000002
+        },
+        "query_total_ms": 530.4497
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 562.7475003711879,
+      "report": null
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 549.8354998417199,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9909000000000001,
+          "checkpoint_validation": 0.3024,
+          "output": 0.4009,
+          "pool_init": 0.3359,
+          "query_cleanup": 0.0388,
+          "search": 5.4552000000000005,
+          "snapshot_load": 487.9019,
+          "teardown": 27.3275
+        },
+        "query_total_ms": 522.7535
+      }
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 554.9576999619603,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.1261,
+          "checkpoint_validation": 0.2943,
+          "output": 0.0475,
+          "pool_init": 0.3314,
+          "query_cleanup": 0.015099999999999999,
+          "search": 0.0033,
+          "snapshot_load": 505.8804,
+          "teardown": 19.7514
+        },
+        "query_total_ms": 527.4495000000001
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 552.7931000106037,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.0008000000000001,
+          "checkpoint_validation": 0.289,
+          "output": 0.3431,
+          "pool_init": 0.30019999999999997,
+          "query_cleanup": 0.043000000000000003,
+          "search": 5.0524000000000004,
+          "snapshot_load": 500.5197,
+          "teardown": 18.9676
+        },
+        "query_total_ms": 526.5158
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 546.1389999836683,
+      "report": null
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 561.376600060612,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9674,
+          "checkpoint_validation": 0.29510000000000003,
+          "output": 0.038,
+          "pool_init": 0.3367,
+          "query_cleanup": 0.0472,
+          "search": 0.004,
+          "snapshot_load": 514.3835,
+          "teardown": 19.080099999999998
+        },
+        "query_total_ms": 535.1519999999999
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 546.1057000793517,
+      "report": null
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 579.1644002310932,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9046,
+          "checkpoint_validation": 0.2969,
+          "output": 0.3966,
+          "pool_init": 0.3918,
+          "query_cleanup": 0.0524,
+          "search": 5.2949,
+          "snapshot_load": 524.3588,
+          "teardown": 20.7819
+        },
+        "query_total_ms": 552.4779
+      }
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 576.0706998407841,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9924000000000001,
+          "checkpoint_validation": 0.2963,
+          "output": 0.016900000000000002,
+          "pool_init": 0.3587,
+          "query_cleanup": 0.014,
+          "search": 0.004,
+          "snapshot_load": 527.9439,
+          "teardown": 19.7168
+        },
+        "query_total_ms": 549.3430000000001
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 544.244599994272,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.0504,
+          "checkpoint_validation": 0.30870000000000003,
+          "output": 0.359,
+          "pool_init": 0.306,
+          "query_cleanup": 0.0354,
+          "search": 4.913,
+          "snapshot_load": 493.05159999999995,
+          "teardown": 18.320800000000002
+        },
+        "query_total_ms": 518.3449
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 553.7271001376212,
+      "report": null
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 533.0113000236452,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9863000000000001,
+          "checkpoint_validation": 0.3004,
+          "output": 0.0159,
+          "pool_init": 0.2925,
+          "query_cleanup": 0.0118,
+          "search": 0.0042,
+          "snapshot_load": 482.68149999999997,
+          "teardown": 19.7716
+        },
+        "query_total_ms": 504.06419999999997
+      }
+    },
+    {
+      "limit": 100,
+      "timings_enabled": false,
+      "wall_ms": 571.2919002398849,
+      "report": null
+    },
+    {
+      "limit": 100,
+      "timings_enabled": true,
+      "wall_ms": 537.9991997033358,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 1.0267,
+          "checkpoint_validation": 0.3121,
+          "output": 0.26449999999999996,
+          "pool_init": 0.356,
+          "query_cleanup": 0.045599999999999995,
+          "search": 4.9096,
+          "snapshot_load": 486.5144,
+          "teardown": 17.7773
+        },
+        "query_total_ms": 511.2062000000001
+      }
+    },
+    {
+      "limit": 0,
+      "timings_enabled": true,
+      "wall_ms": 533.4770996123552,
+      "report": {
+        "kind": "query_timings",
+        "phases_ms": {
+          "catalog_open": 0.9068,
+          "checkpoint_validation": 0.3072,
+          "output": 0.0621,
+          "pool_init": 0.3609,
+          "query_cleanup": 0.0177,
+          "search": 0.0040999999999999995,
+          "snapshot_load": 486.8311,
+          "teardown": 19.4246
+        },
+        "query_total_ms": 507.91450000000003
+      }
+    }
+  ]
+}
