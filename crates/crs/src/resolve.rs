@@ -30,7 +30,7 @@ pub struct Resolution {
 ///   [`CrsDefinition::authority`] (`EPSG`) is used when the text cites no authority, the text
 ///   itself does not identify, and the code is a table CRS of the same kind (geographic vs
 ///   projected).
-/// - `geokeys`: not handled yet (stage01 session 3.2 adds it) → `Unparsed`.
+/// - `geokeys`: decoded by [`crate::geokeys`] and identified using the same EPSG model.
 pub fn resolve(definition: &CrsDefinition) -> Resolution {
     let unparsed = |error| Resolution {
         resolved: ResolvedCrs::Unparsed,
@@ -76,7 +76,7 @@ pub fn resolve(definition: &CrsDefinition) -> Resolution {
                 error: None,
             }
         }
-        CrsDefinitionKind::GeoKeys => unparsed(None),
+        CrsDefinitionKind::GeoKeys => crate::geokeys::resolve(&definition.text),
         CrsDefinitionKind::Wkt1Esri
         | CrsDefinitionKind::Wkt1
         | CrsDefinitionKind::Wkt2
@@ -139,6 +139,21 @@ mod tests {
 
     use super::*;
     use whereabouts_core::{AuthorityCode, CrsStatus};
+
+    #[test]
+    fn geokeys_use_the_common_resolution_entry_point() {
+        let definition = CrsDefinition::new(
+            CrsDefinitionKind::GeoKeys,
+            r#"{"directory":[1,1,0,2,1024,0,1,1,3072,0,1,32633],"doubles":[],"ascii":""}"#,
+        );
+        let result = resolve(&definition);
+        assert_eq!(result.resolved.epsg(), Some(32633));
+        assert!(result.crs.is_some());
+        assert!(result.error.is_none());
+        let malformed = resolve(&CrsDefinition::new(CrsDefinitionKind::GeoKeys, "{}"));
+        assert_eq!(malformed.resolved, ResolvedCrs::Unparsed);
+        assert!(malformed.error.is_some());
+    }
 
     #[test]
     fn bare_codes_and_text() {

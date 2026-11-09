@@ -42,3 +42,9 @@ native_extent = 1.0
 geometry_type = 1.0
 feature_count = 1.0
 native_extent = 1.0
+
+[format.geotiff.min_rate]
+# stage01/3.2: every non-corrupt committed case agrees, including PAM/worldfile georeferencing.
+native_extent = 1.0
+raster = 1.0
+epsg = 1.0

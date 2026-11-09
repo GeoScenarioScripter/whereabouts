@@ -63,6 +63,7 @@
 
 mod epsg;
 mod error;
+pub mod geokeys;
 mod helmert;
 mod identify;
 mod model;
